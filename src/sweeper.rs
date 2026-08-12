@@ -9,11 +9,13 @@
 //! decisions live in the engine (AR1).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use tokio::task::JoinHandle;
 
 use crate::engine::Engine;
+use crate::engine::clock::Millis;
 
 /// How often the sweeper looks. AR5 caps this at one second: it is the
 /// worst-case delay before an expired lease becomes visible again.
@@ -24,13 +26,47 @@ pub const TICK: Duration = Duration::from_secs(1);
 /// mid-sweep has almost nothing to roll back (AR5, K12).
 pub const BATCH_LIMIT: usize = 500;
 
+/// When the sweeper last completed a pass.
+///
+/// Shared with the health endpoint (W6): a hub whose sweeper has stopped
+/// still answers every request, but leases stop expiring and messages stop
+/// coming back — a failure that is invisible from the outside unless
+/// something watches for it.
+#[derive(Debug, Clone)]
+pub struct Heartbeat(Arc<AtomicI64>);
+
+impl Heartbeat {
+    pub fn starting_at(now_ms: Millis) -> Self {
+        Self(Arc::new(AtomicI64::new(now_ms)))
+    }
+
+    pub fn beat(&self, now_ms: Millis) {
+        self.0.store(now_ms, Ordering::Relaxed);
+    }
+
+    pub fn last_beat_ms(&self) -> Millis {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    /// A sweeper that has missed several ticks is reported unhealthy. The
+    /// margin is generous: a busy backlog can make one pass take a while,
+    /// and a false alarm every restart would teach you to ignore it.
+    pub fn is_alive(&self, now_ms: Millis) -> bool {
+        now_ms.saturating_sub(self.last_beat_ms()) < STALE_AFTER_MS
+    }
+}
+
+/// How far behind the heartbeat may fall before the hub calls itself
+/// unhealthy: five ticks.
+pub const STALE_AFTER_MS: Millis = 5_000;
+
 /// Runs until the returned handle is dropped or aborted.
 ///
 /// `wake` is called with the subscriptions that gained a message again, so
 /// a waiting long poll answers at once instead of sitting out its timeout.
 /// It is a callback rather than a direct dependency on the notifier so this
 /// module stays independent of the HTTP layer.
-pub fn spawn<F>(engine: Arc<Engine>, wake: F) -> JoinHandle<()>
+pub fn spawn<F>(engine: Arc<Engine>, heartbeat: Heartbeat, wake: F) -> JoinHandle<()>
 where
     F: Fn(&[(String, String)]) + Send + 'static,
 {
@@ -40,6 +76,7 @@ where
 
         loop {
             ticker.tick().await;
+            heartbeat.beat(engine.now_ms());
 
             // Keep going while batches come back full: the tick paces idle
             // polling, not the draining of a backlog.

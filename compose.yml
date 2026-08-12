@@ -15,10 +15,9 @@ services:
       MAILBOX_LISTEN: 0.0.0.0:8080
       MAILBOX_DATA_DIR: /data
       MAILBOX_LOG: info
-    # The healthcheck arrives in L5 together with the binary's
-    # --healthcheck flag: this image has no shell, so `curl` and `sh`
-    # are not available to probe with. Its start-period must exceed
-    # worst-case migration time (AR10).
+    # The healthcheck is defined in the Dockerfile and inherited here:
+    # the binary probes itself, because this image has no shell to run
+    # curl from (W6, T9).
 
 volumes:
   mailbox-data:

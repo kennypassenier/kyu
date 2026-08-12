@@ -8,10 +8,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use mailbox::engine::Engine;
-use mailbox::engine::clock::SystemClock;
+use mailbox::engine::clock::{Clock, SystemClock};
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
 use mailbox::sweeper;
+use mailbox::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -39,6 +40,7 @@ impl Hub {
 async fn spawn_at(data_dir: &Path) -> Hub {
     let store = Arc::new(Store::open(data_dir).expect("the store must open"));
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
+    let heartbeat = Heartbeat::starting_at(SystemClock.now_ms());
     let state = AppState::new(
         engine.clone(),
         Limits {
@@ -47,10 +49,11 @@ async fn spawn_at(data_dir: &Path) -> Hub {
             max_wait_s: 300,
             recheck_interval: Duration::from_millis(200),
         },
+        heartbeat.clone(),
     );
 
     let notifiers = state.notifiers.clone();
-    let sweeper = sweeper::spawn(engine, move |woken| {
+    let sweeper = sweeper::spawn(engine, heartbeat, move |woken| {
         for (topic, subscription) in woken {
             notifiers.wake(topic, std::slice::from_ref(subscription));
         }

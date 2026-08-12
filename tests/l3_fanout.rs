@@ -16,6 +16,7 @@ use mailbox::engine::Engine;
 use mailbox::engine::clock::SystemClock;
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
+use mailbox::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -35,6 +36,7 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("a temp dir");
     let store = Arc::new(Store::open(dir.path()).expect("the store must open"));
     let engine = Arc::new(Engine::new(store.clone(), Arc::new(SystemClock)));
+    let heartbeat = Heartbeat::starting_at(i64::MAX / 2);
     let state = AppState::new(
         engine,
         Limits {
@@ -43,6 +45,7 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
             max_wait_s: 300,
             recheck_interval: Duration::from_millis(200),
         },
+        heartbeat.clone(),
     );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")

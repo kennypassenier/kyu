@@ -36,6 +36,36 @@ const BUSY_TIMEOUT_MS: u32 = 5_000;
 ///
 /// The reader pool AR5 also calls for arrives with L7, the first
 /// read-heavy consumer; the verbs are all writes.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn l5_the_write_probe_passes_on_a_healthy_store() {
+        let store = Store::open_in_memory().expect("a store");
+        store.probe_writable().expect("a fresh store is writable");
+    }
+
+    #[test]
+    fn l5_the_write_probe_fails_when_writes_are_refused() {
+        let store = Store::open_in_memory().expect("a store");
+        // query_only makes SQLite refuse writes on this connection, which is
+        // how it behaves on a read-only store.
+        store.with_conn(|conn| {
+            conn.pragma_update(None, "query_only", "ON")
+                .expect("the pragma")
+        });
+
+        let error = store
+            .probe_writable()
+            .expect_err("a store that refuses writes must not pass the probe");
+        assert!(
+            format!("{error:#}").contains("not writable"),
+            "and it must say so plainly: {error:#}"
+        );
+    }
+}
+
 #[derive(Debug)]
 pub struct Store {
     writer: Mutex<Connection>,
@@ -130,6 +160,31 @@ impl Store {
     /// `None` for an in-memory store.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    /// Probes write access without writing anything (W6).
+    ///
+    /// `BEGIN IMMEDIATE` takes SQLite's reserved lock, which fails at once
+    /// on a read-only store; rolling it straight back leaves no trace. A
+    /// health check that only read would keep answering "fine" while every
+    /// publish failed.
+    ///
+    /// What it catches: a store opened read-only, a read-only filesystem, a
+    /// missing or unwritable data directory, and a lock another process
+    /// refuses to release. What it does not: a disk that is full but
+    /// writable — that surfaces at commit, so it shows up as failing
+    /// publishes rather than here — and permissions changed *after* the file
+    /// was opened, which POSIX checks only at open time.
+    pub fn probe_writable(&self) -> Result<()> {
+        let mut conn = self
+            .writer
+            .lock()
+            .expect("the writer lock is never poisoned");
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .context("the store is not writable")?;
+        tx.rollback().context("cannot release the write probe")?;
+        Ok(())
     }
 }
 

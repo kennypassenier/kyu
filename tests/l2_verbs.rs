@@ -17,6 +17,7 @@ use mailbox::engine::Engine;
 use mailbox::engine::clock::SystemClock;
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
+use mailbox::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -52,7 +53,10 @@ fn test_limits(max_body_bytes: usize) -> Limits {
 async fn spawn_at(data_dir: &Path, limits: Limits) -> Hub {
     let store = Arc::new(Store::open(data_dir).expect("the store must open"));
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
-    let state = AppState::new(engine, limits);
+    // Far in the future, so the health endpoint never calls the sweeper
+    // stalled in tests that do not run one.
+    let heartbeat = Heartbeat::starting_at(i64::MAX / 2);
+    let state = AppState::new(engine, limits, heartbeat);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await

@@ -13,6 +13,7 @@ use axum::routing::{get, post};
 
 use crate::config::Config;
 use crate::engine::Engine;
+use crate::sweeper::Heartbeat;
 
 use notify::Notifiers;
 
@@ -48,14 +49,18 @@ pub struct AppState {
     pub engine: Arc<Engine>,
     pub notifiers: Arc<Notifiers>,
     pub limits: Limits,
+    /// Shared with the sweeper so the health endpoint can tell whether the
+    /// background work is still happening (W6).
+    pub heartbeat: Heartbeat,
 }
 
 impl AppState {
-    pub fn new(engine: Arc<Engine>, limits: Limits) -> Self {
+    pub fn new(engine: Arc<Engine>, limits: Limits, heartbeat: Heartbeat) -> Self {
         Self {
             engine,
             notifiers: Arc::new(Notifiers::new()),
             limits,
+            heartbeat,
         }
     }
 }

@@ -8,12 +8,14 @@ use mailbox::engine::Engine;
 use mailbox::engine::clock::SystemClock;
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
+use mailbox::sweeper::Heartbeat;
 
 /// Starts the router on an ephemeral port and returns its address. The
 /// task is left running; the test process exiting cleans it up.
 async fn spawn_server() -> SocketAddr {
     let store = Arc::new(Store::open_in_memory().expect("an in-memory store"));
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
+    let heartbeat = Heartbeat::starting_at(i64::MAX / 2);
     let state = AppState::new(
         engine,
         Limits {
@@ -22,6 +24,7 @@ async fn spawn_server() -> SocketAddr {
             max_wait_s: 300,
             recheck_interval: std::time::Duration::from_secs(5),
         },
+        heartbeat,
     );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -56,7 +59,11 @@ async fn l0_healthz_returns_200_json() {
             .and_then(|value| value.to_str().ok()),
         Some("application/json")
     );
-    assert_eq!(response.text().await.expect("a body"), r#"{"status":"ok"}"#);
+    // L5 grew this body into a real report (store writable, sweeper alive);
+    // what L0 promised, and still promises, is a 200 with a JSON status.
+    let body: serde_json::Value =
+        serde_json::from_str(&response.text().await.expect("a body")).expect("JSON");
+    assert_eq!(body["status"], "ok");
 }
 
 #[tokio::test]

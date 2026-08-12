@@ -27,4 +27,10 @@ EXPOSE 8080
 VOLUME ["/data"]
 USER nonroot:nonroot
 
+# The image has no shell and no curl, so the binary probes itself (W6).
+# start-period must exceed the worst-case migration, or a restart loop could
+# kill a migration mid-flight (AR10).
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
+    CMD ["/usr/local/bin/mailbox", "--healthcheck"]
+
 ENTRYPOINT ["/usr/local/bin/mailbox"]

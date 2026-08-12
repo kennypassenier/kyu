@@ -6,14 +6,20 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use mailbox::config::Config;
 use mailbox::engine::Engine;
-use mailbox::engine::clock::SystemClock;
+use mailbox::engine::clock::{Clock, SystemClock};
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
-use mailbox::sweeper;
+use mailbox::sweeper::{self, Heartbeat};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // The runtime image has no shell, so the container healthcheck cannot
+    // call curl: the binary probes itself instead (W6, T9).
+    if std::env::args().any(|argument| argument == "--healthcheck") {
+        return healthcheck();
+    }
+
     init_tracing();
 
     let config = Config::from_env()?;
@@ -28,13 +34,19 @@ async fn main() -> Result<()> {
         "store ready"
     );
 
-    let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
-    let state = AppState::new(engine.clone(), Limits::from_config(&config));
+    let clock = SystemClock;
+    let heartbeat = Heartbeat::starting_at(clock.now_ms());
+    let engine = Arc::new(Engine::new(store, Arc::new(clock)));
+    let state = AppState::new(
+        engine.clone(),
+        Limits::from_config(&config),
+        heartbeat.clone(),
+    );
 
     // The sweeper is what makes delivery at-least-once rather than
     // at-most-once: without it an expired lease would never come back.
     let notifiers = state.notifiers.clone();
-    let _sweeper = sweeper::spawn(engine, move |woken| {
+    let _sweeper = sweeper::spawn(engine, heartbeat, move |woken| {
         for (topic, subscription) in woken {
             notifiers.wake(topic, std::slice::from_ref(subscription));
         }
@@ -61,6 +73,41 @@ async fn main() -> Result<()> {
     axum::serve(listener, router(state))
         .await
         .context("the HTTP server stopped unexpectedly")
+}
+
+/// Asks the running hub about its own health and exits 0 or 1.
+///
+/// Written against a raw socket rather than an HTTP client: a health probe
+/// needs one request and one status line, and that is not worth carrying a
+/// client library — with its TLS stack — into the runtime image for.
+fn healthcheck() -> Result<()> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let config = Config::from_env()?;
+    // A wildcard bind is not a usable destination, so probe the loopback.
+    let target = if config.listen.ip().is_unspecified() {
+        format!("127.0.0.1:{}", config.listen.port())
+    } else {
+        config.listen.to_string()
+    };
+
+    let mut stream =
+        TcpStream::connect(&target).with_context(|| format!("cannot reach mailbox on {target}"))?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+
+    let status_line = response.lines().next().unwrap_or_default();
+    anyhow::ensure!(
+        status_line.contains(" 200"),
+        "mailbox reports itself unhealthy: {}",
+        response.trim()
+    );
+    Ok(())
 }
 
 /// JSON output is W7 (rated Desired, built in L8); the spine is wired now

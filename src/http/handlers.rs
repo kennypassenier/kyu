@@ -51,12 +51,66 @@ fn notice(new: &NewSubscription) -> String {
     }
 }
 
-pub async fn healthz() -> impl IntoResponse {
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/json")],
-        r#"{"status":"ok"}"#,
-    )
+/// W6 · `GET /healthz`
+///
+/// Answers on the two things that can be broken while the process still
+/// accepts connections: a store that cannot be written to, and a sweeper
+/// that has stopped. Both are invisible from outside otherwise — publishes
+/// fail one by one, or messages quietly stop coming back.
+pub async fn healthz(State(state): State<AppState>) -> Response {
+    let engine = state.engine.clone();
+    let store_error = tokio::task::spawn_blocking(move || engine.store().probe_writable())
+        .await
+        .map_err(|error| format!("the health probe did not run: {error}"))
+        .and_then(|probe| probe.map_err(|error| format!("{error:#}")))
+        .err();
+
+    let now = state.engine.now_ms();
+    let sweeper_alive = state.heartbeat.is_alive(now);
+
+    let healthy = store_error.is_none() && sweeper_alive;
+    let status = if healthy {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    let mut body = json!({
+        "status": if healthy { "ok" } else { "degraded" },
+        "store": if store_error.is_none() { "writable" } else { "unwritable" },
+        "sweeper": if sweeper_alive { "alive" } else { "stalled" },
+    });
+    let map = body.as_object_mut().expect("a JSON object");
+
+    if let Some(error) = &store_error {
+        tracing::error!(error = %error, "the store is not writable");
+        map.insert("error".to_string(), json!(error));
+        map.insert(
+            "remedy".to_string(),
+            json!(
+                "check that the data volume is still mounted, writable by this user, \
+                 and not locked by another process. mailbox reports itself unhealthy \
+                 rather than accepting publishes it cannot store."
+            ),
+        );
+    } else if !sweeper_alive {
+        let behind_ms = now.saturating_sub(state.heartbeat.last_beat_ms());
+        tracing::error!(behind_ms, "the sweeper has stopped");
+        map.insert(
+            "error".to_string(),
+            json!(format!("the sweeper last ran {behind_ms} ms ago")),
+        );
+        map.insert(
+            "remedy".to_string(),
+            json!(
+                "restart the container. While the sweeper is stopped, expired leases are \
+                 not returned to the queue and nothing is dead-lettered, so messages \
+                 appear to hang rather than to fail."
+            ),
+        );
+    }
+
+    (status, axum::Json(body)).into_response()
 }
 
 /// K1 · `POST /t/{topic}`
