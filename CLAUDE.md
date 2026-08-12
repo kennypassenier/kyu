@@ -14,9 +14,9 @@ work here (standing rule 19).
 
 | Field | Value |
 |---|---|
-| Current phase | 1 · Inventory & exploration (greenfield) |
-| Last completed gate | Phase 0 approval form (2026-08-12) |
-| Next gate | Phase 1 build-vs-buy decision form (engine choice) |
+| Current phase | 2 · Features |
+| Last completed gate | Phase 1 build-vs-buy form (2026-08-12): engine built into the Rust binary, all external candidates rejected |
+| Next gate | Phase 2 rating forms (feature list, round 1: Kenny's features) |
 | AFK mode | off |
 
 <!-- Update this block after every completed gate. -->

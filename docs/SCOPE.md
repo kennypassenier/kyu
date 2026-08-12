@@ -101,9 +101,29 @@ you come back.
   apply throughout: English code/comments/docs, no paid services, no
   credit-billed tooling.
 
-## Open questions carried into Phase 1
+## Build-vs-buy record (Phase 1, decided 2026-08-12)
 
-- **Q1 (from the gate's remarks).** Does the hub lean on an existing
-  RabbitMQ server running alongside, or is the engine built in? →
-  Phase 1 build-vs-buy form compares external broker (RabbitMQ, NATS)
-  vs an embedded Rust engine. C2 keeps the choice swappable either way.
+Answers Q1 from the Phase 0 gate ("does this lean on an existing
+RabbitMQ server, or is the engine built in?"). Web research ran on
+2026-08-12; all versions/sources verified then. Kenny's decision per
+alternative:
+
+| Alt | Candidate | Decision | Deciding factors |
+|---|---|---|---|
+| A1 | ntfy v2.27 (use as-is) | **Reject** | No acks, redelivery, DLQ or per-consumer state — fails G3/G4 |
+| A2 | NSQ v1.3 (use as-is) | **Reject** | TCP-only consumption (fails G2), no server-side DLQ, memory-first durability (fails S4) |
+| A3 | ElasticMQ (use as-is) | **Reject** | No fan-out (fails G3), SQS request plumbing (fails S1), JVM ~250–500 MB |
+| A4 | RabbitMQ 4.3 as engine (hybrid) | **Reject** | ~150–250 MB Erlang appliance; no replay-from-beginning on queues (fails G7); lapin lacks auto-reconnect |
+| A5 | NATS JetStream 2.14 as engine (hybrid) | **Reject** | No native DLQ (advisories are lossy — collides with G8), no per-subscription TTL (fails G6), Jepsen 2025: default fsync posture loses acked writes on power cut (fails S4) |
+| A6 | Embedded engine in the Rust binary | **Build our own** | One binary fits S1; every scope feature implementable as specified; S4 durability fully in our control; SQLite-as-queue prior art is deep |
+
+Also dismissed without a form item: beanstalkd (TCP-only, no fan-out,
+dormant), Nchan (transport only), betterMQ (immature), sled
+(abandoned).
+
+Consequences: delivery logic (cursors, leases, redelivery, DLQ
+transitions, TTL sweeps, long-poll wakeups) is ours to build and test —
+S2–S5 are our tests, not a broker's. The store library (SQLite via
+rusqlite vs redb) is a Phase 3 decision; early lean is SQLite in WAL
+mode with `synchronous=FULL`. C2 keeps the engine swappable behind the
+HTTP contract regardless.
