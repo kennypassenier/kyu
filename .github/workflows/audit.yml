@@ -11,7 +11,7 @@ jobs:
   advisories:
     name: cargo-deny advisories
     runs-on: ubuntu-latest
-    if: hashFiles('deny.toml') != ''
+    if: hashFiles('deny.toml') != '' && hashFiles('Cargo.toml') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2

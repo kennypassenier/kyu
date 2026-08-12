@@ -1,0 +1,24 @@
+# Deployment unit (C1, K13): one service, one volume, one port. On the
+# LXC this pulls the published image; `docker compose build` uses the
+# local Dockerfile instead.
+services:
+  mailbox:
+    image: ghcr.io/kennypassenier/mailbox:latest
+    build: .
+    container_name: mailbox
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - mailbox-data:/data
+    environment:
+      MAILBOX_LISTEN: 0.0.0.0:8080
+      MAILBOX_DATA_DIR: /data
+      MAILBOX_LOG: info
+    # The healthcheck arrives in L5 together with the binary's
+    # --healthcheck flag: this image has no shell, so `curl` and `sh`
+    # are not available to probe with. Its start-period must exceed
+    # worst-case migration time (AR10).
+
+volumes:
+  mailbox-data:

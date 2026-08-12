@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Repo-scoped quality gate (standing rule 7). Unlike the Claude Code
+# hook in .claude/settings.json, this one fires for EVERY commit in this
+# repository — any session, any terminal, any tool — which is what lets
+# work happen from outside the project directory.
+#
+# Enable in a fresh clone with:  git config core.hooksPath .githooks
+set -euo pipefail
+exec "$(git rev-parse --show-toplevel)/.claude/hooks/gates.sh"

@@ -46,9 +46,8 @@ skeleton proves the riskiest toolchain assumptions (static musl +
 bundled SQLite + a distroless image with no shell) while there is
 nothing to debug but the build.
 
-**Prerequisite needing Kenny's explicit go (SR13):** creating the
-public GitHub repository and pushing to it. Nothing is pushed before
-that go.
+**Prerequisite (SR13):** creating the public GitHub repository and
+pushing to it. Kenny gave that go on 2026-08-12.
 
 ## L1 · Store & time foundation — [K12 partial, AR3, AR7, AR10]
 
@@ -222,9 +221,14 @@ readings:
 
 Configuration C1 = "local + SQL guard".
 
-- `.claude/hooks/check-commit.sh` — PreToolUse hook on Bash: blocks
-  `git commit` when gates fail or the message carries no IDs in
-  brackets.
+- `.githooks/pre-commit` and `.githooks/commit-msg` — the primary gate,
+  because git hooks are repo-scoped: they fire for every commit from any
+  session, terminal or tool. Activated with
+  `git config core.hooksPath .githooks` (local config, so a fresh clone
+  repeats that one command).
+- `.claude/hooks/check-commit.sh` — PreToolUse hook on Bash: the same
+  two gates for sessions opened in this directory. Kept as a second
+  layer, no longer the only one.
 - `.claude/hooks/gates.sh` — `cargo fmt --check`, `cargo clippy
   --all-targets -D warnings`, `cargo test --all`, plus a grep gate
   refusing string-built SQL (AR11). Before L0 exists the Rust steps
@@ -241,5 +245,9 @@ The release workflow (tag → GitHub Release → ghcr image, K13) is
 designed and installed in Phase 9; publishing always waits for Kenny's
 explicit go.
 
-**Session note.** The commit hook only takes effect for sessions opened
-in `~/Projects/mailbox`; Phase 6 must be run from there.
+**Amendment 2026-08-12.** The original enforcement relied only on the
+Claude Code hook, which loads from the session's own project directory —
+so it silently did nothing for sessions opened elsewhere. Kenny retired
+the "work only from the project directory" requirement, so the gates
+moved into git hooks, where they hold regardless of where a session
+runs.

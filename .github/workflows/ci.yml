@@ -29,7 +29,7 @@ jobs:
   deny:
     name: cargo-deny (advisories · licenses · bans)
     runs-on: ubuntu-latest
-    if: hashFiles('deny.toml') != ''
+    if: hashFiles('deny.toml') != '' && hashFiles('Cargo.toml') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Traceability gate (standing rule 4): every commit message names the
+# IDs it implements, so `git log` stays a map from code to decisions.
+set -euo pipefail
+
+msg_file="$1"
+
+if ! grep -qE '\[(meta|[A-Za-z]{1,4}[0-9][^]]*)\]' "$msg_file"; then
+  {
+    echo "COMMIT BLOCKED — message lacks feature/milestone IDs (standing rule 4)."
+    echo "Add the IDs this commit implements, e.g.: feat(L2): ack endpoint [K3, AR4]"
+    echo "Pure infrastructure commits use [meta]."
+  } >&2
+  exit 1
+fi
