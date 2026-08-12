@@ -16,7 +16,9 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
 
-use crate::engine::{Claimed, EngineError, NewSubscription, Received, names};
+use crate::engine::policy::Policy;
+use crate::engine::{Claimed, EngineError, NewSubscription, Received, Settled, names};
+use crate::store::queries::StoredPolicy;
 
 use super::AppState;
 use super::error::ApiError;
@@ -310,4 +312,241 @@ fn insert_str(headers: &mut HeaderMap, name: &'static str, value: &str) {
     if let Ok(parsed) = value.parse() {
         headers.insert(name, parsed);
     }
+}
+
+// ─── L4 · reliability endpoints (K6, K7, W5) ────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+pub struct NackQuery {
+    #[serde(rename = "as")]
+    pub as_: Option<String>,
+    /// `true` sends the message straight to the dead-letter list instead of
+    /// spending its remaining attempts on a payload that cannot work.
+    pub dead: Option<bool>,
+}
+
+/// W5 · `POST /t/{topic}/nack/{id}?as={subscription}[&dead=true]`
+pub async fn nack(
+    State(state): State<AppState>,
+    Path((topic, id)): Path<(String, String)>,
+    Query(query): Query<NackQuery>,
+) -> Result<Response, ApiError> {
+    let subscription = query
+        .as_
+        .clone()
+        .ok_or_else(ApiError::missing_subscription)?;
+    let dead = query.dead.unwrap_or(false);
+
+    let engine = state.engine.clone();
+    let topic_for_engine = topic.clone();
+    let subscription_for_engine = subscription.clone();
+    let id_for_engine = id.clone();
+    let settled = spawn_engine(move || {
+        engine.nack(
+            &topic_for_engine,
+            &subscription_for_engine,
+            &id_for_engine,
+            dead,
+        )
+    })
+    .await?;
+
+    let outcome = match settled {
+        Settled::Redelivered => "redelivered",
+        Settled::DeadLettered => "dead_lettered",
+        Settled::Expired => "expired",
+        Settled::Unchanged => "unchanged",
+    };
+
+    // A redelivered message may be waiting behind a backoff, so waking the
+    // subscription is a hint, not a promise that it is available now.
+    if matches!(settled, Settled::Redelivered) {
+        state
+            .notifiers
+            .wake(&topic, std::slice::from_ref(&subscription));
+    }
+
+    tracing::info!(topic = %topic, subscription = %subscription, id = %id, outcome, "message nacked");
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({ "nacked": id, "outcome": outcome })),
+    )
+        .into_response())
+}
+
+/// K7 · `GET /api/t/{topic}/subs/{sub}/policy`
+pub async fn get_policy(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let (effective, stored) = spawn_engine(move || engine.policy(&topic, &subscription)).await?;
+
+    Ok((StatusCode::OK, axum::Json(policy_json(effective, stored))).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PolicyBody {
+    pub lease_ms: Option<i64>,
+    pub max_attempts: Option<i64>,
+    pub backoff_ms: Option<i64>,
+    pub ttl_ms: Option<i64>,
+}
+
+/// K7 · `PUT /api/t/{topic}/subs/{sub}/policy`
+///
+/// The body replaces the policy in full: a field left out goes back to its
+/// default. One rule beats two, and the response says what is now in force.
+pub async fn put_policy(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    // Parsed by hand rather than with the Json extractor, so a malformed
+    // body still answers with a remedy (standing rule 11).
+    let parsed: PolicyBody = serde_json::from_slice(&body).map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("the policy body is not valid JSON: {error}"),
+            "send an object with any of lease_ms, max_attempts, backoff_ms and ttl_ms, \
+             for example {\"ttl_ms\": 600000}. Fields you leave out return to their \
+             defaults, and the response tells you what is in force.",
+        )
+    })?;
+
+    let stored = StoredPolicy {
+        lease_ms: parsed.lease_ms,
+        max_attempts: parsed.max_attempts,
+        backoff_ms: parsed.backoff_ms,
+        ttl_ms: parsed.ttl_ms,
+    };
+
+    let engine = state.engine.clone();
+    let topic_for_log = topic.clone();
+    let subscription_for_log = subscription.clone();
+    let effective = spawn_engine(move || engine.set_policy(&topic, &subscription, stored)).await?;
+
+    tracing::info!(
+        topic = %topic_for_log,
+        subscription = %subscription_for_log,
+        lease_ms = effective.lease_ms,
+        max_attempts = effective.max_attempts,
+        backoff_ms = effective.backoff_ms,
+        ttl_ms = ?effective.ttl_ms,
+        "subscription policy set"
+    );
+
+    Ok((StatusCode::OK, axum::Json(policy_json(effective, stored))).into_response())
+}
+
+fn policy_json(effective: Policy, stored: StoredPolicy) -> serde_json::Value {
+    // Reporting both means the dashboard can show "30000 (default)" instead
+    // of leaving you to guess where a number came from.
+    json!({
+        "effective": {
+            "lease_ms": effective.lease_ms,
+            "max_attempts": effective.max_attempts,
+            "backoff_ms": effective.backoff_ms,
+            "ttl_ms": effective.ttl_ms,
+        },
+        "explicit": {
+            "lease_ms": stored.lease_ms,
+            "max_attempts": stored.max_attempts,
+            "backoff_ms": stored.backoff_ms,
+            "ttl_ms": stored.ttl_ms,
+        },
+        "retry_schedule_ms": (1..effective.max_attempts.max(1))
+            .map(|attempt| effective.retry_delay_ms(attempt))
+            .collect::<Vec<_>>(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DeadQuery {
+    pub limit: Option<usize>,
+}
+
+/// How much of a payload the dead-letter list shows. Enough to recognise a
+/// message, bounded so listing a queue of megabyte payloads stays cheap; the
+/// full byte count travels with it, and truncation is always marked (AR11).
+const DEAD_PAYLOAD_PREVIEW: usize = 4096;
+
+/// K6 · `GET /api/t/{topic}/subs/{sub}/dead`
+pub async fn list_dead(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+    Query(query): Query<DeadQuery>,
+) -> Result<Response, ApiError> {
+    let limit = query.limit.unwrap_or(100).min(1000);
+    let engine = state.engine.clone();
+    let letters = spawn_engine(move || engine.dead_letters(&topic, &subscription, limit)).await?;
+
+    let items: Vec<_> = letters
+        .into_iter()
+        .map(|letter| {
+            let total = letter.payload.len();
+            let shown = total.min(DEAD_PAYLOAD_PREVIEW);
+            let mut item = json!({
+                "id": letter.id,
+                "published_at": letter.published_at,
+                "dead_at": letter.dead_at,
+                "attempts": letter.attempts,
+                "content_type": letter.content_type,
+                "payload_bytes": total,
+                "truncated": total > shown,
+            });
+            let map = item.as_object_mut().expect("a JSON object");
+            match std::str::from_utf8(&letter.payload[..shown]) {
+                Ok(text) => {
+                    map.insert("payload_text".to_string(), json!(text));
+                }
+                Err(_) => {
+                    map.insert(
+                        "payload_base64".to_string(),
+                        json!(BASE64.encode(&letter.payload[..shown])),
+                    );
+                }
+            }
+            item
+        })
+        .collect();
+
+    Ok((StatusCode::OK, axum::Json(json!({ "dead_letters": items }))).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RequeueQuery {
+    #[serde(rename = "as")]
+    pub as_: Option<String>,
+}
+
+/// K6 · `POST /api/t/{topic}/subs/{sub}/dead/{id}/requeue`
+pub async fn requeue_dead(
+    State(state): State<AppState>,
+    Path((topic, subscription, id)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let topic_for_wake = topic.clone();
+    let subscription_for_wake = subscription.clone();
+    let id_for_response = id.clone();
+    spawn_engine(move || engine.requeue_dead(&topic, &subscription, &id)).await?;
+
+    state.notifiers.wake(
+        &topic_for_wake,
+        std::slice::from_ref(&subscription_for_wake),
+    );
+
+    tracing::info!(
+        topic = %topic_for_wake,
+        subscription = %subscription_for_wake,
+        id = %id_for_response,
+        "dead letter requeued"
+    );
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({ "requeued": id_for_response })),
+    )
+        .into_response())
 }

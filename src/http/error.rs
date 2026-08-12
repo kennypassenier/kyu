@@ -79,9 +79,10 @@ impl From<EngineError> for ApiError {
             EngineError::UnknownTopic { .. }
             | EngineError::UnknownSubscription { .. }
             | EngineError::NoSuchDelivery { .. } => StatusCode::NOT_FOUND,
-            EngineError::AlreadyAcked { .. } | EngineError::NotClaimed { .. } => {
-                StatusCode::CONFLICT
-            }
+            EngineError::AlreadyAcked { .. }
+            | EngineError::NotClaimed { .. }
+            | EngineError::NotDead { .. } => StatusCode::CONFLICT,
+            EngineError::InvalidPolicy { .. } => StatusCode::BAD_REQUEST,
             EngineError::ReplayUnsupported => StatusCode::NOT_IMPLEMENTED,
             EngineError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };

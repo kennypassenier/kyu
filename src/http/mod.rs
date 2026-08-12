@@ -66,5 +66,18 @@ pub fn router(state: AppState) -> Router {
         .route("/t/{topic}", post(handlers::publish))
         .route("/t/{topic}/next", get(handlers::receive))
         .route("/t/{topic}/ack/{id}", post(handlers::ack))
+        .route("/t/{topic}/nack/{id}", post(handlers::nack))
+        .route(
+            "/api/t/{topic}/subs/{subscription}/policy",
+            get(handlers::get_policy).put(handlers::put_policy),
+        )
+        .route(
+            "/api/t/{topic}/subs/{subscription}/dead",
+            get(handlers::list_dead),
+        )
+        .route(
+            "/api/t/{topic}/subs/{subscription}/dead/{id}/requeue",
+            post(handlers::requeue_dead),
+        )
         .with_state(state)
 }

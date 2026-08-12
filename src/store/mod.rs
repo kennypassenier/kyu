@@ -30,11 +30,6 @@ pub const STORE_FILE_NAME: &str = "mailbox.db";
 /// backstop, not the mechanism.
 const BUSY_TIMEOUT_MS: u32 = 5_000;
 
-/// How long a claimed message stays claimed before L4's sweeper may hand
-/// it to someone else. Per-subscription policy (K7) overrides this in L4;
-/// until then it is the only lease there is.
-pub const DEFAULT_LEASE_MS: i64 = 30_000;
-
 /// One writer connection (AR5): SQLite WAL allows many readers but a
 /// single writer, and funnelling writes through one connection makes the
 /// delivery transitions serialise without any lock of our own.

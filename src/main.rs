@@ -9,6 +9,7 @@ use mailbox::engine::Engine;
 use mailbox::engine::clock::SystemClock;
 use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
+use mailbox::sweeper;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -28,7 +29,16 @@ async fn main() -> Result<()> {
     );
 
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
-    let state = AppState::new(engine, Limits::from_config(&config));
+    let state = AppState::new(engine.clone(), Limits::from_config(&config));
+
+    // The sweeper is what makes delivery at-least-once rather than
+    // at-most-once: without it an expired lease would never come back.
+    let notifiers = state.notifiers.clone();
+    let _sweeper = sweeper::spawn(engine, move |woken| {
+        for (topic, subscription) in woken {
+            notifiers.wake(topic, std::slice::from_ref(subscription));
+        }
+    });
 
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await

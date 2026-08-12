@@ -277,3 +277,347 @@ pub fn ack(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<AckOutcome
         },
     })
 }
+
+// ─── L4 · reliability semantics (K5, K6, K7, W5, AR9) ──────────────────────
+
+/// A subscription's policy as stored. `None` means "use the default", which
+/// is resolved in the engine so the default lives in exactly one place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct StoredPolicy {
+    pub lease_ms: Option<i64>,
+    pub max_attempts: Option<i64>,
+    pub backoff_ms: Option<i64>,
+    pub ttl_ms: Option<i64>,
+}
+
+/// A claimed delivery whose lease ran out, with everything the engine needs
+/// to decide where it goes next (AR9) without a second query per row.
+#[derive(Debug, Clone)]
+pub struct Overdue {
+    pub msg_seq: i64,
+    pub sub_id: i64,
+    pub topic: String,
+    pub subscription: String,
+    pub attempts: i64,
+    pub published_at: Millis,
+    pub policy: StoredPolicy,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeadLetter {
+    pub id: String,
+    pub published_at: Millis,
+    pub dead_at: Option<Millis>,
+    pub attempts: i64,
+    pub content_type: Option<String>,
+    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NackOutcome {
+    Nacked,
+    NoSuchDelivery,
+    NotClaimed { state: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequeueOutcome {
+    Requeued,
+    NoSuchDelivery,
+    NotDead { state: String },
+}
+
+pub fn subscription_policy(tx: &Transaction, sub_id: i64) -> Result<StoredPolicy> {
+    tx.query_row(
+        "SELECT lease_ms, max_attempts, backoff_ms, ttl_ms FROM subscriptions WHERE id = ?1",
+        [sub_id],
+        |row| {
+            Ok(StoredPolicy {
+                lease_ms: row.get(0)?,
+                max_attempts: row.get(1)?,
+                backoff_ms: row.get(2)?,
+                ttl_ms: row.get(3)?,
+            })
+        },
+    )
+    .context("cannot read the subscription policy")
+}
+
+/// Replace semantics: every field is written, so an absent field in the
+/// request means "back to the default" rather than "leave whatever was
+/// there". One rule is easier to remember than two.
+pub fn set_subscription_policy(tx: &Transaction, sub_id: i64, policy: StoredPolicy) -> Result<()> {
+    tx.execute(
+        "UPDATE subscriptions
+            SET lease_ms = ?2, max_attempts = ?3, backoff_ms = ?4, ttl_ms = ?5
+          WHERE id = ?1",
+        (
+            sub_id,
+            policy.lease_ms,
+            policy.max_attempts,
+            policy.backoff_ms,
+            policy.ttl_ms,
+        ),
+    )
+    .context("cannot store the subscription policy")?;
+    Ok(())
+}
+
+/// Claimed deliveries whose lease has run out. Bounded by `limit` (AR5):
+/// the writer connection must never be held for a sweep over a huge table.
+pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec<Overdue>> {
+    let mut statement = tx
+        .prepare(
+            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+               FROM deliveries d
+               JOIN subscriptions s ON s.id = d.sub_id
+               JOIN topics t ON t.id = s.topic_id
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE d.state = 'claimed' AND d.lease_expires_at <= ?1
+              ORDER BY d.lease_expires_at
+              LIMIT ?2",
+        )
+        .context("cannot scan for overdue claims")?;
+    let rows = statement
+        .query_map((now, limit as i64), |row| {
+            Ok(Overdue {
+                msg_seq: row.get(0)?,
+                sub_id: row.get(1)?,
+                topic: row.get(2)?,
+                subscription: row.get(3)?,
+                attempts: row.get(4)?,
+                published_at: row.get(5)?,
+                policy: StoredPolicy {
+                    lease_ms: row.get(6)?,
+                    max_attempts: row.get(7)?,
+                    backoff_ms: row.get(8)?,
+                    ttl_ms: row.get(9)?,
+                },
+            })
+        })
+        .context("cannot scan for overdue claims")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the overdue claims")?;
+    Ok(rows)
+}
+
+/// Pending deliveries whose message has outlived its subscription's TTL.
+pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec<Overdue>> {
+    let mut statement = tx
+        .prepare(
+            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+               FROM deliveries d
+               JOIN subscriptions s ON s.id = d.sub_id
+               JOIN topics t ON t.id = s.topic_id
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE d.state = 'pending'
+                AND s.ttl_ms IS NOT NULL
+                AND m.published_at + s.ttl_ms <= ?1
+              ORDER BY d.msg_seq
+              LIMIT ?2",
+        )
+        .context("cannot scan for expired messages")?;
+    let rows = statement
+        .query_map((now, limit as i64), |row| {
+            Ok(Overdue {
+                msg_seq: row.get(0)?,
+                sub_id: row.get(1)?,
+                topic: row.get(2)?,
+                subscription: row.get(3)?,
+                attempts: row.get(4)?,
+                published_at: row.get(5)?,
+                policy: StoredPolicy {
+                    lease_ms: row.get(6)?,
+                    max_attempts: row.get(7)?,
+                    backoff_ms: row.get(8)?,
+                    ttl_ms: row.get(9)?,
+                },
+            })
+        })
+        .context("cannot scan for expired messages")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the expired messages")?;
+    Ok(rows)
+}
+
+/// `claimed -> pending` (AR9). State-guarded, so a delivery that was acked
+/// between the scan and this update stays acked.
+pub fn repend(
+    tx: &Transaction,
+    msg_seq: i64,
+    sub_id: i64,
+    attempts: i64,
+    next_attempt_at: Millis,
+) -> Result<bool> {
+    let updated = tx
+        .execute(
+            "UPDATE deliveries
+                SET state = 'pending', attempts = ?3, next_attempt_at = ?4,
+                    lease_expires_at = NULL
+              WHERE msg_seq = ?1 AND sub_id = ?2 AND state = 'claimed'",
+            (msg_seq, sub_id, attempts, next_attempt_at),
+        )
+        .context("cannot return the delivery to pending")?;
+    Ok(updated > 0)
+}
+
+/// `-> dead` (K6). Accepts both `claimed` (a poison pill nacked straight to
+/// the dead list) and `pending` (retries exhausted).
+pub fn mark_dead(
+    tx: &Transaction,
+    msg_seq: i64,
+    sub_id: i64,
+    attempts: i64,
+    now: Millis,
+) -> Result<bool> {
+    let updated = tx
+        .execute(
+            "UPDATE deliveries
+                SET state = 'dead', attempts = ?3, dead_at = ?4,
+                    lease_expires_at = NULL, next_attempt_at = NULL
+              WHERE msg_seq = ?1 AND sub_id = ?2 AND state IN ('claimed', 'pending')",
+            (msg_seq, sub_id, attempts, now),
+        )
+        .context("cannot dead-letter the delivery")?;
+    Ok(updated > 0)
+}
+
+/// `-> expired` (K7). A message that is past its TTL is settled, recorded
+/// with the moment it lapsed rather than quietly deleted (G8).
+pub fn mark_expired(tx: &Transaction, msg_seq: i64, sub_id: i64, now: Millis) -> Result<bool> {
+    let updated = tx
+        .execute(
+            "UPDATE deliveries
+                SET state = 'expired', expired_at = ?3,
+                    lease_expires_at = NULL, next_attempt_at = NULL
+              WHERE msg_seq = ?1 AND sub_id = ?2 AND state IN ('claimed', 'pending')",
+            (msg_seq, sub_id, now),
+        )
+        .context("cannot expire the delivery")?;
+    Ok(updated > 0)
+}
+
+/// W5 · `claimed -> pending` on the consumer's own say-so, without waiting
+/// out the lease. Returns the attempt count so the engine can apply the
+/// same dead-letter and TTL rules as a lease expiry.
+pub fn nack_claimed(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<NackOutcome> {
+    let found: Option<(i64, i64, String)> = tx
+        .query_row(
+            "SELECT d.msg_seq, d.attempts, d.state
+               FROM deliveries d
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE m.id = ?1 AND d.sub_id = ?2",
+            (message_id, sub_id),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .optional()
+        .context("cannot inspect the delivery")?;
+
+    let Some((_, _, state)) = found else {
+        return Ok(NackOutcome::NoSuchDelivery);
+    };
+    if state != "claimed" {
+        return Ok(NackOutcome::NotClaimed { state });
+    }
+    Ok(NackOutcome::Nacked)
+}
+
+/// The delivery row behind a message id, for a subscription.
+pub fn delivery_of(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Option<Overdue>> {
+    tx.query_row(
+        "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+                s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+           FROM deliveries d
+           JOIN subscriptions s ON s.id = d.sub_id
+           JOIN topics t ON t.id = s.topic_id
+           JOIN messages m ON m.seq = d.msg_seq
+          WHERE m.id = ?1 AND d.sub_id = ?2",
+        (message_id, sub_id),
+        |row| {
+            Ok(Overdue {
+                msg_seq: row.get(0)?,
+                sub_id: row.get(1)?,
+                topic: row.get(2)?,
+                subscription: row.get(3)?,
+                attempts: row.get(4)?,
+                published_at: row.get(5)?,
+                policy: StoredPolicy {
+                    lease_ms: row.get(6)?,
+                    max_attempts: row.get(7)?,
+                    backoff_ms: row.get(8)?,
+                    ttl_ms: row.get(9)?,
+                },
+            })
+        },
+    )
+    .optional()
+    .context("cannot look up the delivery")
+}
+
+pub fn dead_letters(tx: &Transaction, sub_id: i64, limit: usize) -> Result<Vec<DeadLetter>> {
+    let mut statement = tx
+        .prepare(
+            "SELECT m.id, m.published_at, d.dead_at, d.attempts, m.content_type, m.payload
+               FROM deliveries d
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE d.sub_id = ?1 AND d.state = 'dead'
+              ORDER BY d.dead_at, m.seq
+              LIMIT ?2",
+        )
+        .context("cannot list the dead letters")?;
+    let rows = statement
+        .query_map((sub_id, limit as i64), |row| {
+            Ok(DeadLetter {
+                id: row.get(0)?,
+                published_at: row.get(1)?,
+                dead_at: row.get(2)?,
+                attempts: row.get(3)?,
+                content_type: row.get(4)?,
+                payload: row.get(5)?,
+            })
+        })
+        .context("cannot list the dead letters")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the dead letters")?;
+    Ok(rows)
+}
+
+/// `dead -> pending` with the attempt count reset (AR9): a requeued message
+/// gets a full set of retries, because the reason it failed has usually been
+/// fixed by hand in between.
+pub fn requeue_dead(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<RequeueOutcome> {
+    let updated = tx
+        .execute(
+            "UPDATE deliveries
+                SET state = 'pending', attempts = 0, dead_at = NULL,
+                    next_attempt_at = NULL, lease_expires_at = NULL
+              WHERE sub_id = ?2
+                AND state = 'dead'
+                AND msg_seq = (SELECT seq FROM messages WHERE id = ?1)",
+            (message_id, sub_id),
+        )
+        .context("cannot requeue the dead letter")?;
+
+    if updated > 0 {
+        return Ok(RequeueOutcome::Requeued);
+    }
+
+    let state: Option<String> = tx
+        .query_row(
+            "SELECT d.state
+               FROM deliveries d
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE m.id = ?1 AND d.sub_id = ?2",
+            (message_id, sub_id),
+            |row| row.get(0),
+        )
+        .optional()
+        .context("cannot inspect the delivery state")?;
+
+    Ok(match state {
+        None => RequeueOutcome::NoSuchDelivery,
+        Some(state) => RequeueOutcome::NotDead { state },
+    })
+}

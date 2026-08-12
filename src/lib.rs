@@ -10,8 +10,9 @@
 //! - [`dashboard`] — rendering (K10)
 //! - [`events`] — the hub's own events onto `mailbox.*` topics (W11)
 //!
-//! [`config`] sits outside that list on purpose: it is a shell concern,
-//! read once before anything else can start.
+//! [`config`] and [`sweeper`] sit outside that list on purpose: they are
+//! shell concerns — configuration read once before anything can start, and
+//! the timer that drives the engine's background transitions.
 
 pub mod config;
 pub mod dashboard;
@@ -19,3 +20,4 @@ pub mod engine;
 pub mod events;
 pub mod http;
 pub mod store;
+pub mod sweeper;
