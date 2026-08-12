@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use mailbox::config::Config;
 use mailbox::http;
+use mailbox::store::Store;
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -11,6 +12,17 @@ async fn main() -> Result<()> {
     init_tracing();
 
     let config = Config::from_env()?;
+
+    // Opening the store migrates it forward, snapshotting first if there is
+    // anything to lose (AR10). Failing here is correct: serving requests
+    // without somewhere durable to put them would break K1's promise that a
+    // confirmed publish is a kept one.
+    let store = Store::open(&config.data_dir)?;
+    tracing::info!(
+        store = %store.path().map(|path| path.display().to_string()).unwrap_or_default(),
+        "store ready"
+    );
+
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
         .with_context(|| {

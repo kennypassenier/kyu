@@ -14,10 +14,13 @@ publish = false
 [dependencies]
 anyhow = "1"                                                    # error context at the binary edge (AR4)
 axum = "0.8"                                                    # HTTP surface (T1)
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }  # runtime (T3)
 tracing = "0.1"                                                 # structured events (T5)
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+ulid = "3.0.0"
 
 [dev-dependencies]
 reqwest = { version = "0.12", default-features = false }        # real HTTP in tests (SR9); no TLS needed for localhost
+tempfile = "3.27.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
