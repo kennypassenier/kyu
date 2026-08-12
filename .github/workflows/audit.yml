@@ -1,0 +1,19 @@
+name: Advisory audit
+
+# Advisories land continuously, so a push-triggered scan is not enough:
+# this catches a vulnerability published against an unchanged Cargo.lock.
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  advisories:
+    name: cargo-deny advisories
+    runs-on: ubuntu-latest
+    if: hashFiles('deny.toml') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories

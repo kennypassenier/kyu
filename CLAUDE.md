@@ -14,9 +14,10 @@ work here (standing rule 19).
 
 | Field | Value |
 |---|---|
-| Current phase | 5 · Realization plan |
-| Last completed gate | Phase 4 architecture freeze (2026-08-12): AR1–AR11 frozen after architecture-critic attack (12 objections resolved) |
-| Next gate | Phase 5 approval form (milestones, standing rules, hook config) |
+| Current phase | 6 · Development loop — L0 next |
+| Last completed gate | Phase 5 realization plan (2026-08-12): L0–L8 + all 18 standing rules approved; enforcement installed and verified |
+| Next gate | Phase 6 report form for L0 (walking skeleton) |
+| Blocked on | Kenny's explicit go to create the public GitHub repo + first push (SR13) |
 | AFK mode | off |
 
 <!-- Update this block after every completed gate. -->
