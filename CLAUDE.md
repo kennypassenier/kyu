@@ -14,9 +14,9 @@ work here (standing rule 19).
 
 | Field | Value |
 |---|---|
-| Current phase | 3 · Tech choice |
-| Last completed gate | Phase 2 feature freeze (2026-08-12): 24 features, 15 Essential / 6 Desired / 3 Later / 0 Don't do |
-| Next gate | Phase 3 decision form (Rust libraries, dependency policy, MSRV) |
+| Current phase | 4 · Architecture |
+| Last completed gate | Phase 3 tech choice (2026-08-12): T1–T9 — axum, rusqlite, tokio, minijinja+htmx, tracing, policed deps, MIT/Apache dual public, edition 2024 track-stable, distroless/static |
+| Next gate | Phase 4 decision form (AR list, after architecture-critic attack) |
 | AFK mode | off |
 
 <!-- Update this block after every completed gate. -->
