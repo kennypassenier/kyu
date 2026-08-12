@@ -1,9 +1,13 @@
 //! Thin binary (AR1): read configuration, start logging, serve. Every
 //! behaviour worth testing lives in the library.
 
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use mailbox::config::Config;
-use mailbox::http;
+use mailbox::engine::Engine;
+use mailbox::engine::clock::SystemClock;
+use mailbox::http::{AppState, Limits, router};
 use mailbox::store::Store;
 use tracing_subscriber::EnvFilter;
 
@@ -17,11 +21,14 @@ async fn main() -> Result<()> {
     // anything to lose (AR10). Failing here is correct: serving requests
     // without somewhere durable to put them would break K1's promise that a
     // confirmed publish is a kept one.
-    let store = Store::open(&config.data_dir)?;
+    let store = Arc::new(Store::open(&config.data_dir)?);
     tracing::info!(
         store = %store.path().map(|path| path.display().to_string()).unwrap_or_default(),
         "store ready"
     );
+
+    let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
+    let state = AppState::new(engine, Limits::from_config(&config));
 
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
@@ -41,7 +48,7 @@ async fn main() -> Result<()> {
         "mailbox started"
     );
 
-    axum::serve(listener, http::router())
+    axum::serve(listener, router(state))
         .await
         .context("the HTTP server stopped unexpectedly")
 }

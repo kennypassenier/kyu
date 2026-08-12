@@ -29,9 +29,9 @@ fn l1_migration_creates_the_schema_in_an_empty_directory() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let store = Store::open(dir.path()).expect("opening a fresh store must succeed");
 
-    assert_eq!(schema_version(store.conn()), 1);
+    assert_eq!(store.with_conn(schema_version), 1);
 
-    let tables = table_names(store.conn());
+    let tables = store.with_conn(table_names);
     for expected in ["topics", "subscriptions", "messages", "deliveries"] {
         assert!(
             tables.iter().any(|name| name == expected),
@@ -48,20 +48,20 @@ fn l1_opening_an_existing_store_is_idempotent() {
     {
         let store = Store::open(dir.path()).expect("first open");
         store
-            .conn()
-            .execute(
-                "INSERT INTO topics (name, retention_ms, created_at) VALUES (?1, ?2, ?3)",
-                ("notify.kenny", Option::<i64>::None, 1_700_000_000_000i64),
-            )
+            .with_conn(|conn| {
+                conn.execute(
+                    "INSERT INTO topics (name, retention_ms, created_at) VALUES (?1, ?2, ?3)",
+                    ("notify.kenny", Option::<i64>::None, 1_700_000_000_000i64),
+                )
+            })
             .expect("a topic row");
     }
 
     let store = Store::open(dir.path()).expect("second open must not migrate again");
-    assert_eq!(schema_version(store.conn()), 1);
+    assert_eq!(store.with_conn(schema_version), 1);
 
     let topics: i64 = store
-        .conn()
-        .query_row("SELECT count(*) FROM topics", [], |row| row.get(0))
+        .with_conn(|conn| conn.query_row("SELECT count(*) FROM topics", [], |row| row.get(0)))
         .expect("counting topics");
     assert_eq!(topics, 1, "reopening must not disturb existing rows");
 }
@@ -70,37 +70,39 @@ fn l1_opening_an_existing_store_is_idempotent() {
 fn l1_pragmas_are_set_explicitly_not_assumed() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let store = Store::open(dir.path()).expect("opening the store");
-    let conn = store.conn();
+    store.with_conn(|conn| {
+        let journal: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .expect("journal_mode");
+        assert!(
+            journal.eq_ignore_ascii_case("wal"),
+            "expected WAL, got {journal:?}"
+        );
 
-    let journal: String = conn
-        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
-        .expect("journal_mode");
-    assert!(
-        journal.eq_ignore_ascii_case("wal"),
-        "expected WAL, got {journal:?}"
-    );
+        // 2 is FULL. Anything less and a confirmed publish could vanish in a
+        // power cut, which is exactly what K12 promises it will not do.
+        let synchronous: i64 = conn
+            .query_row("PRAGMA synchronous", [], |row| row.get(0))
+            .expect("synchronous");
+        assert_eq!(synchronous, 2, "synchronous must be FULL");
 
-    // 2 is FULL. Anything less and a confirmed publish could vanish in a
-    // power cut, which is exactly what K12 promises it will not do.
-    let synchronous: i64 = conn
-        .query_row("PRAGMA synchronous", [], |row| row.get(0))
-        .expect("synchronous");
-    assert_eq!(synchronous, 2, "synchronous must be FULL");
-
-    let foreign_keys: i64 = conn
-        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
-        .expect("foreign_keys");
-    assert_eq!(foreign_keys, 1, "foreign keys must be enforced");
+        let foreign_keys: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .expect("foreign_keys");
+        assert_eq!(foreign_keys, 1, "foreign keys must be enforced");
+    });
 }
 
 #[test]
 fn l1_foreign_keys_actually_reject_an_orphan_delivery() {
     let store = Store::open_in_memory().expect("an in-memory store");
 
-    let result = store.conn().execute(
-        "INSERT INTO deliveries (msg_seq, sub_id, state) VALUES (?1, ?2, 'pending')",
-        (9_999i64, 9_999i64),
-    );
+    let result = store.with_conn(|conn| {
+        conn.execute(
+            "INSERT INTO deliveries (msg_seq, sub_id, state) VALUES (?1, ?2, 'pending')",
+            (9_999i64, 9_999i64),
+        )
+    });
 
     assert!(
         result.is_err(),
@@ -184,115 +186,115 @@ fn snapshot_exists(dir: &Path) -> bool {
 #[test]
 fn l1_delivery_order_survives_a_clock_that_steps_backwards() {
     let store = Store::open_in_memory().expect("an in-memory store");
-    let conn = store.conn();
     let mut ids = MessageIds::new();
-
-    conn.execute(
-        "INSERT INTO topics (name, retention_ms, created_at) VALUES ('notify.kenny', NULL, 0)",
-        [],
-    )
-    .expect("a topic");
-    let topic_id: i64 = conn
-        .query_row(
-            "SELECT id FROM topics WHERE name = 'notify.kenny'",
-            [],
-            |r| r.get(0),
-        )
-        .expect("the topic id");
-
-    // Published before the outage, then after a reboot whose clock reads an
-    // hour earlier — the AR7 scenario.
-    let before = ids.next(1_700_000_000_000);
-    let after = ids.next(1_700_000_000_000 - 3_600_000);
-
-    for (id, published_at) in [
-        (before, 1_700_000_000_000i64),
-        (after, 1_700_000_000_000 - 3_600_000),
-    ] {
+    store.with_conn(|conn| {
         conn.execute(
-            "INSERT INTO messages (id, topic_id, payload, content_type, published_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            (
-                id.to_string(),
-                topic_id,
-                b"{}".to_vec(),
-                "application/json",
-                published_at,
-            ),
+            "INSERT INTO topics (name, retention_ms, created_at) VALUES ('notify.kenny', NULL, 0)",
+            [],
         )
-        .expect("a message");
-    }
+        .expect("a topic");
+        let topic_id: i64 = conn
+            .query_row(
+                "SELECT id FROM topics WHERE name = 'notify.kenny'",
+                [],
+                |r| r.get(0),
+            )
+            .expect("the topic id");
 
-    let by_seq: Vec<String> = {
-        let mut statement = conn
-            .prepare("SELECT id FROM messages ORDER BY seq")
-            .expect("prepare");
-        statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .expect("query")
-            .map(|row| row.expect("a row"))
-            .collect()
-    };
-    assert_eq!(
-        by_seq,
-        vec![before.to_string(), after.to_string()],
-        "insertion order must be publish order regardless of the clock"
-    );
+        // Published before the outage, then after a reboot whose clock reads an
+        // hour earlier — the AR7 scenario.
+        let before = ids.next(1_700_000_000_000);
+        let after = ids.next(1_700_000_000_000 - 3_600_000);
 
-    let by_published_at: Vec<String> = {
-        let mut statement = conn
-            .prepare("SELECT id FROM messages ORDER BY published_at")
-            .expect("prepare");
-        statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .expect("query")
-            .map(|row| row.expect("a row"))
-            .collect()
-    };
-    assert_ne!(
-        by_published_at, by_seq,
-        "this test is only meaningful while the timestamps disagree with \
+        for (id, published_at) in [
+            (before, 1_700_000_000_000i64),
+            (after, 1_700_000_000_000 - 3_600_000),
+        ] {
+            conn.execute(
+                "INSERT INTO messages (id, topic_id, payload, content_type, published_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+                (
+                    id.to_string(),
+                    topic_id,
+                    b"{}".to_vec(),
+                    "application/json",
+                    published_at,
+                ),
+            )
+            .expect("a message");
+        }
+
+        let by_seq: Vec<String> = {
+            let mut statement = conn
+                .prepare("SELECT id FROM messages ORDER BY seq")
+                .expect("prepare");
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .expect("query")
+                .map(|row| row.expect("a row"))
+                .collect()
+        };
+        assert_eq!(
+            by_seq,
+            vec![before.to_string(), after.to_string()],
+            "insertion order must be publish order regardless of the clock"
+        );
+
+        let by_published_at: Vec<String> = {
+            let mut statement = conn
+                .prepare("SELECT id FROM messages ORDER BY published_at")
+                .expect("prepare");
+            statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .expect("query")
+                .map(|row| row.expect("a row"))
+                .collect()
+        };
+        assert_ne!(
+            by_published_at, by_seq,
+            "this test is only meaningful while the timestamps disagree with \
          insertion order — that disagreement is why AR7 orders by seq"
-    );
+        );
+    });
 }
 
 #[test]
 fn l1_the_delivery_state_enum_matches_ar9() {
     let store = Store::open_in_memory().expect("an in-memory store");
-    let conn = store.conn();
-
-    conn.execute(
-        "INSERT INTO topics (name, retention_ms, created_at) VALUES ('t', NULL, 0)",
-        [],
-    )
-    .expect("a topic");
-    conn.execute(
-        "INSERT INTO subscriptions (topic_id, name, state, created_at)
-         VALUES (1, 'sub', 'active', 0)",
-        [],
-    )
-    .expect("a subscription");
-    conn.execute(
-        "INSERT INTO messages (id, topic_id, payload, published_at)
-         VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAV', 1, x'7b7d', 0)",
-        [],
-    )
-    .expect("a message");
-
-    for state in ["pending", "claimed", "acked", "dead", "expired", "lapsed"] {
+    store.with_conn(|conn| {
         conn.execute(
-            "INSERT OR REPLACE INTO deliveries (msg_seq, sub_id, state) VALUES (1, 1, ?1)",
-            [state],
+            "INSERT INTO topics (name, retention_ms, created_at) VALUES ('t', NULL, 0)",
+            [],
         )
-        .unwrap_or_else(|error| panic!("AR9 state {state:?} must be storable: {error}"));
-    }
+        .expect("a topic");
+        conn.execute(
+            "INSERT INTO subscriptions (topic_id, name, state, created_at)
+         VALUES (1, 'sub', 'active', 0)",
+            [],
+        )
+        .expect("a subscription");
+        conn.execute(
+            "INSERT INTO messages (id, topic_id, payload, published_at)
+         VALUES ('01ARZ3NDEKTSV4RRFFQ69G5FAV', 1, x'7b7d', 0)",
+            [],
+        )
+        .expect("a message");
 
-    let rejected = conn.execute(
-        "INSERT OR REPLACE INTO deliveries (msg_seq, sub_id, state) VALUES (1, 1, 'nonsense')",
-        [],
-    );
-    assert!(
-        rejected.is_err(),
-        "a state outside AR9 must be refused by the schema"
-    );
+        for state in ["pending", "claimed", "acked", "dead", "expired", "lapsed"] {
+            conn.execute(
+                "INSERT OR REPLACE INTO deliveries (msg_seq, sub_id, state) VALUES (1, 1, ?1)",
+                [state],
+            )
+            .unwrap_or_else(|error| panic!("AR9 state {state:?} must be storable: {error}"));
+        }
+
+        let rejected = conn.execute(
+            "INSERT OR REPLACE INTO deliveries (msg_seq, sub_id, state) VALUES (1, 1, 'nonsense')",
+            [],
+        );
+        assert!(
+            rejected.is_err(),
+            "a state outside AR9 must be refused by the schema"
+        );
+    });
 }

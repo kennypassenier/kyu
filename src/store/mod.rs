@@ -15,11 +15,13 @@
 //! writer connection of AR5 arrive with the verbs in L2.
 
 pub mod migrations;
+pub mod queries;
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use anyhow::{Context, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, Transaction};
 
 pub const STORE_FILE_NAME: &str = "mailbox.db";
 
@@ -28,9 +30,20 @@ pub const STORE_FILE_NAME: &str = "mailbox.db";
 /// backstop, not the mechanism.
 const BUSY_TIMEOUT_MS: u32 = 5_000;
 
+/// How long a claimed message stays claimed before L4's sweeper may hand
+/// it to someone else. Per-subscription policy (K7) overrides this in L4;
+/// until then it is the only lease there is.
+pub const DEFAULT_LEASE_MS: i64 = 30_000;
+
+/// One writer connection (AR5): SQLite WAL allows many readers but a
+/// single writer, and funnelling writes through one connection makes the
+/// delivery transitions serialise without any lock of our own.
+///
+/// The reader pool AR5 also calls for arrives with L7, the first
+/// read-heavy consumer; the verbs are all writes.
 #[derive(Debug)]
 pub struct Store {
-    conn: Connection,
+    writer: Mutex<Connection>,
     path: Option<PathBuf>,
 }
 
@@ -60,7 +73,7 @@ impl Store {
         migrations::migrate(&mut conn, Some(data_dir))?;
 
         Ok(Self {
-            conn,
+            writer: Mutex::new(conn),
             path: Some(path),
         })
     }
@@ -75,15 +88,48 @@ impl Store {
             Connection::open_in_memory().context("cannot open an in-memory SQLite database")?;
         apply_pragmas(&conn, Journal::Memory)?;
         migrations::migrate(&mut conn, None)?;
-        Ok(Self { conn, path: None })
+        Ok(Self {
+            writer: Mutex::new(conn),
+            path: None,
+        })
     }
 
-    pub fn conn(&self) -> &Connection {
-        &self.conn
+    /// Runs `f` inside one write transaction, committing if it returns
+    /// `Ok`. This is the only way to write: it is what makes a delivery
+    /// transition atomic (AR3).
+    ///
+    /// The error type is the caller's, so the engine can return its own
+    /// typed errors (AR4) while transaction failures convert in.
+    pub fn write<T, E>(
+        &self,
+        f: impl FnOnce(&Transaction) -> std::result::Result<T, E>,
+    ) -> std::result::Result<T, E>
+    where
+        E: From<anyhow::Error>,
+    {
+        let mut conn = self
+            .writer
+            .lock()
+            .expect("the writer lock is never poisoned");
+        let tx = conn
+            .transaction()
+            .context("cannot open a transaction")
+            .map_err(E::from)?;
+        let value = f(&tx)?;
+        tx.commit()
+            .context("cannot commit the transaction")
+            .map_err(E::from)?;
+        Ok(value)
     }
 
-    pub fn conn_mut(&mut self) -> &mut Connection {
-        &mut self.conn
+    /// Direct connection access, for reads and for tests that assert on the
+    /// schema itself. L7 replaces this with a reader pool (AR5).
+    pub fn with_conn<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
+        let conn = self
+            .writer
+            .lock()
+            .expect("the writer lock is never poisoned");
+        f(&conn)
     }
 
     /// `None` for an in-memory store.
