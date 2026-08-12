@@ -14,9 +14,9 @@ work here (standing rule 19).
 
 | Field | Value |
 |---|---|
-| Current phase | 4 · Architecture |
-| Last completed gate | Phase 3 tech choice (2026-08-12): T1–T9 — axum, rusqlite, tokio, minijinja+htmx, tracing, policed deps, MIT/Apache dual public, edition 2024 track-stable, distroless/static |
-| Next gate | Phase 4 decision form (AR list, after architecture-critic attack) |
+| Current phase | 5 · Realization plan |
+| Last completed gate | Phase 4 architecture freeze (2026-08-12): AR1–AR11 frozen after architecture-critic attack (12 objections resolved) |
+| Next gate | Phase 5 approval form (milestones, standing rules, hook config) |
 | AFK mode | off |
 
 <!-- Update this block after every completed gate. -->

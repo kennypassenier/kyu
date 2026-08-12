@@ -1,8 +1,11 @@
 # mailbox — Architecture decisions
 
 Decisions T1–T9 (tech choice) were taken at the Phase 3 gate on
-2026-08-12. Ecosystem facts were verified against the live web that
-day. AR-entries (Phase 4) follow below when frozen.
+2026-08-12; AR1–AR11 (architecture) were **FROZEN 2026-08-12** at the
+Phase 4 gate after an architecture-critic attack (12 objections: 3
+blockers, 7 serious, 2 minor — all resolved by amendment or explicit
+decision below; AR4/AR6/AR8 survived unchanged). Changes only via
+mini-rounds, recorded as dated amendments.
 
 ## T1 · Web framework: axum
 
@@ -86,3 +89,236 @@ uses a `--healthcheck` flag on the mailbox binary itself, since the
 image has no shell. Rejected: scratch (hand-rolled certs/nonroot for
 2 MB), alpine (a shell and package manager the container doesn't
 need).
+
+---
+
+# Architecture (AR1–AR11) — frozen 2026-08-12
+
+## AR1 · Module layout: core/shell split
+
+One Cargo package: `mailbox` lib + thin `main.rs`.
+
+- `engine/` — ALL delivery semantics (publish, claim, ack, nack,
+  redelivery, DLQ, TTL/retention/idle/due-time transitions). Pure
+  logic: no tokio, no HTTP, no ambient wall clock — time enters via
+  the `Clock` trait (AR7), storage via the `store` API.
+- `store/` — SQLite: schema, migrations, all SQL. Module boundary, not
+  a swappable-engine trait (swappability lives at the HTTP contract,
+  C2); tests build in-memory databases through it.
+- `http/` — axum routes; HTTP ⇄ engine translation only. Long-poll
+  wait loops live here.
+- `dashboard/` — minijinja rendering + htmx fragment endpoints;
+  read-only over engine/store, plus the W9 publish call.
+- `events/` — W11: engine emits typed events; this module publishes
+  them onto `mailbox.*` topics through the normal publish path.
+
+**Loop-breaker (amendment, critic objection 12):** events *about*
+`mailbox.*` topics are logged only, never re-published as events —
+otherwise a broken consumer of `mailbox.events` dead-letters, which
+emits a dead-letter event onto the same topic, which dead-letters, ad
+infinitum. Dedicated test required.
+
+Rationale: the mocked-clock suites (K5/K7/K9/K11) require injected
+time; core/shell keeps tokio and axum out of semantics tests.
+
+## AR2 · HTTP contract: raw body default + JSON envelope opt-in
+
+*(Decided in the AR2 deep-dive round.)*
+
+- `POST /t/{topic}` — publish; body stored verbatim. 201 →
+  `{"id":"<ulid>"}`. Query `delay`/`at` (W4).
+- `GET /t/{topic}/next?as={sub}` — long-poll claim.
+  - Default: 200 with the payload as the response body, verbatim,
+    metadata in headers (`Mailbox-Id`, `Mailbox-Topic`,
+    `Mailbox-Attempt`, `Mailbox-Published-At`, stored `Content-Type`).
+  - `&envelope=json`: 200 with
+    `{"id","topic","attempt","published_at","content_type","payload"}`;
+    JSON payloads embed as JSON, non-JSON/binary payloads appear as
+    `"payload_base64"` — flagged, never silently mangled (G8).
+  - 204 after `wait` seconds (default 30, max 300), identical in both
+    modes. `from=beginning` on first call (K8).
+- `POST /t/{topic}/ack/{id}?as={sub}`; `POST /t/{topic}/nack/{id}?as=
+  {sub}[&dead=true]` (W5).
+- Admin/observability: `GET /api/topics`, `GET /api/t/{topic}`,
+  `GET|PUT /api/t/{topic}/subs/{sub}/policy`, DLQ list/requeue,
+  archive/unarchive, `GET /healthz` (W6), `GET /metrics` (W1).
+
+Payload-as-body is the contract: `curl | jq` on the payload works and
+binary survives. The envelope exists because header-parsing in shell
+(`-D-`, CR stripping, case-insensitive match behind Traefik/HTTP-2) is
+real friction against S1 — so the K10 dashboard renders BOTH blessed
+snippets per topic (raw two-liner and envelope one-liner), and both are
+tested. Rejected: envelope-always (permanent base64 for binary, kills
+payload fidelity); headers-only (leaves the friction unaddressed).
+
+**Content-type rule (amendment, objection 5):** `curl -d` silently
+sends `application/x-www-form-urlencoded`; mailbox stores what it is
+sent, verbatim, so every rendered example and doc snippet carries an
+explicit `-H 'content-type: …'`. The dashboard sniffs content for
+*display* only, never rewriting stored metadata.
+
+## AR3 · Storage: materialized fan-out, backlogs win over retention
+
+Tables (all times integer unix-millis UTC):
+
+- `topics(id, name UNIQUE, retention_ms, created_at)`
+- `subscriptions(id, topic_id, name, state
+  [active|flagged|archived], lease_ms, max_attempts, backoff_ms,
+  ttl_ms NULL, created_at, last_poll_at, UNIQUE(topic_id, name))`
+- `messages(rowid INTEGER PK AUTOINCREMENT, id TEXT UNIQUE /*ULID*/,
+  topic_id, payload BLOB, content_type, published_at, due_at /*W4*/)`
+- `deliveries(msg_id, sub_id, state
+  [pending|claimed|acked|dead|expired|lapsed], attempts,
+  lease_expires_at, next_attempt_at, dead_at, expired_at,
+  PRIMARY KEY(msg_id, sub_id))`
+
+Fan-out is MATERIALIZED: publish inserts one `deliveries` row per
+active subscription in the same transaction as the message. Claim is
+one state-guarded `UPDATE … RETURNING` on the oldest deliverable row
+(ordered by `messages.rowid`, AR7). Every transition is a single
+transaction; invariants are checkable with one `SELECT`.
+
+**Amendment (blocker 1):** `expired` (+`expired_at`) and `lapsed` are
+part of the enum — AR9's TTL transition had no representable state.
+The past-max-attempts → `dead` check happens on the claimed→pending
+transition and in the sweeper, so no row can idle in `pending` with
+attempts > max.
+
+**Amendment (blocker 2):** `from=beginning` (K8) requires a named
+**backfill** operation: on a subscription's first poll with that flag,
+deliveries rows are retro-inserted for retained messages in bounded
+batches (AR5), skipping messages the retention sweep removes mid-run
+(no FK dangling, no delivery for a vanished message). K8's boundary
+test asserts "replay sees exactly what retention kept".
+
+**Decision (blocker 3) — backlogs win:** retention (K9) never deletes a
+message that still has a pending or claimed delivery on an **active**
+subscription. The pressure valve is K11: archiving a subscription
+settles its outstanding deliveries as `lapsed` (recorded, counted,
+dashboard-visible), after which retention may collect the message.
+Unbounded growth is therefore bounded by the idle-archive timeline, and
+the dashboard shows oldest-unacked age per subscription. Rejected:
+"retention wins" (predictable disk, but a slow consumer silently loses
+real backlog on short-retention topics — G4/G8 violation in spirit).
+
+Schema versioning: `PRAGMA user_version`, forward-only numbered
+migrations embedded in the binary, applied in a transaction at startup
+(AR10). Pragmas set explicitly at every open — never inherited from
+build defaults: WAL, `synchronous=FULL`, `foreign_keys=ON`,
+`busy_timeout`.
+
+## AR4 · Error model *(critic-cleared, unchanged)*
+
+Typed errors (`thiserror`) in engine/store; `anyhow` with context at
+binary edges; no panics on reachable paths (a panic is a bug and
+S4-relevant). Every HTTP error body is `{"error":"…","remedy":"…"}` —
+remedy mandatory (standing rule 11), e.g. *"subscription 'pritner'
+unknown on topic notify.kenny; existing: [ha-forwarder]; subscriptions
+are created by polling"*. 4xx = caller mistake with the exact fix; 5xx
+= genuine internal failure, always logged at ERROR.
+
+## AR5 · Concurrency: one writer, notify-after-commit, bounded work
+
+- Single process (N1). Reader pool + ONE dedicated writer connection
+  (SQLite WAL), all store calls via `spawn_blocking`.
+- Long-poll wakeups: per-subscription `tokio::sync::Notify`, fired
+  after commit. Correctness never depends on wakeups — claim races are
+  resolved by the store transaction; a missed wakeup costs latency
+  only.
+- ONE sweeper task: lease expiry, TTL, retention, idle-flagging, W4
+  due-time promotion — through the same engine functions the
+  mocked-clock tests exercise.
+
+**Amendments (objections 6, 7):** every sweep and backfill runs in
+bounded batches (`LIMIT N` per transaction, N≈500) so the single writer
+is never blocked for seconds and a SIGKILL mid-sweep cannot replay a
+giant rollback; sweeper tick ≤ 1 s; poller re-check interval ≤ 5 s; the
+sweeper fires a subscription's `Notify` whenever it re-pends or
+promotes a message, so redelivery does not wait for the next poll.
+
+## AR6 · Configuration: environment only *(critic-cleared)*
+
+`MAILBOX_DATA_DIR`, `MAILBOX_LISTEN`, `MAILBOX_MAX_BODY_BYTES`, log
+level/format, plus global *defaults* (idle-flag/archive thresholds,
+default retention). Only what the process needs before it can open the
+store; all per-topic/per-subscription policy (K7, K9) lives in the
+database, set via API/dashboard. Rejected: a TOML file (a second place
+to look).
+
+## AR7 · Time and identifiers
+
+- Public message id: ULID, generated monotonic-clamped (never behind
+  the previous one).
+- **Amendment (objection 8):** delivery and claim ORDER use
+  `messages.rowid` (AUTOINCREMENT insertion order), not the ULID —
+  after a power cut a host can boot with a skewed RTC and NTP steps the
+  clock backwards, which would make new ULIDs sort before pre-outage
+  messages and break S3's in-order drain.
+- API timestamps RFC3339 UTC; DB integer unix-millis.
+- `Clock` trait injected into engine and sweeper: `SystemClock` in
+  production, `MockClock` in the K5/K7/K9/K11 suites.
+
+## AR8 · Names, limits, reserved space *(critic-cleared, unchanged)*
+
+Topic and subscription names `^[a-z0-9._-]{1,64}$`; dots namespace
+(`notify.kenny`, `jobs.transcode`). `mailbox.*` reserved for system
+topics (W11); external publish there → 403 with remedy. Payload cap 1
+MiB default (env-overridable) → 413 with remedy. `wait` ≤ 300 s,
+default 30 s.
+
+## AR9 · Delivery state machine (pinned artifact)
+
+```
+pending  --claim-->        claimed
+claimed  --ack-->          acked
+claimed  --lease expiry | nack-->  pending  (attempts+1,
+                                    next_attempt_at = now + backoff)
+pending  --attempts > max_attempts-->  dead      (K6)
+pending  --past TTL-->                 expired   (recorded, K7)
+dead     --manual requeue-->           pending   (attempts reset)
+active sub archived (K11) --> outstanding deliveries lapsed (AR3)
+```
+
+**Decision (objection 9) — expire on re-pend:** whenever a delivery
+returns to `pending` (lease expiry or nack), it is TTL-checked against
+the message's publish time first; past TTL → `expired`. Without this, a
+10-minute-TTL TTS subscription whose worker hangs 25 minutes would
+still speak a half-hour-old doorbell announcement. Rejected: "deliver
+anyway" (a message that consumed retry effort deserves delivery —
+honest, but breaks "relevant now or never").
+
+Every transition above gets a test named after it. Illegal transitions
+are unreachable by construction: each is one UPDATE guarded by the
+current state in its WHERE clause.
+
+## AR10 · Updates and migrations
+
+No self-updater: updates are image pulls via compose (K13). At startup
+forward-only migrations apply inside a transaction; opening a schema
+NEWER than the binary knows is refused with a remedy.
+
+**Amendment (objection 10):** before applying any migration the binary
+snapshots the store (`VACUUM INTO mailbox.pre-v{N}.db`, last two kept)
+— otherwise a bad image migrates the schema, misbehaves, and rolling
+the image tag back hits "refuse newer schema" with no snapshot to
+return to. Rollback = previous image + snapshot file, documented as a
+numbered runbook procedure (Phase 8). The Docker healthcheck
+start-period must exceed worst-case migration time so a restart loop
+cannot kill a migration mid-flight.
+
+## AR11 · Security model and payload display
+
+- LAN threat model (N3); no auth in v1 (W2 = Later, additive). Binding
+  and exposure are compose/LXC concerns.
+- Payloads are UNTRUSTED wherever rendered: minijinja autoescape ON,
+  payloads rendered as text only, htmx fragments escaped — a malicious
+  message must not be able to script the dashboard (stored XSS via
+  queue).
+- **Amendment (objection 11):** display = lossy UTF-8 decode with a
+  hard cap (4 KiB shown) and a visible marker — *"truncated — N of M
+  bytes"* / *"binary payload (N bytes)"* (G8: no silent truncation).
+  W9 prefills text payloads only.
+- mailbox stores no secrets today; if W2 lands, token via env only,
+  never logged, with a mandatory plaintext-scan test.
+- SQL exclusively parameterized (rusqlite params); no string-built SQL
+  anywhere, enforced by review plus a grep gate in CI.
