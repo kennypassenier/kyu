@@ -13,9 +13,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 6 · Development loop — L0 next |
-| Last completed gate | Phase 5 realization plan (2026-08-12): L0–L8 + all 18 standing rules approved; enforcement installed and verified |
-| Next gate | Phase 6 report form for L0 (walking skeleton) |
+| Current phase | 6 · Development loop — L1 in progress |
+| Last completed gate | L0 walking skeleton (2026-08-12): 4/4 exit criteria, 5 deviations ratified, CI green, repo public |
+| Next gate | Phase 6 report form for L1 (store & time foundation) |
 | AFK mode | off |
 
 <!-- Update this block after every completed gate. -->

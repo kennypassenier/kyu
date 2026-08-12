@@ -13,8 +13,8 @@ are deliberately absent.
 
 | Milestone | Feature IDs | Status | Gate date |
 |---|---|---|---|
-| L0 · Walking skeleton + enforcement | [meta] | not started | — |
-| L1 · Store & time foundation | K12 (partial), AR3, AR7, AR10 | not started | — |
+| L0 · Walking skeleton + enforcement | [meta] | **done** | 2026-08-12 |
+| L1 · Store & time foundation | K12 (partial), AR3, AR7, AR10 | in progress | — |
 | L2 · The three verbs | K1, K2, K3, AR2, AR4, AR8 | not started | — |
 | L3 · Fan-out & competing consumers | K4, S5 | not started | — |
 | L4 · Reliability semantics | K5, K6, K7, W5, AR9 | not started | — |
@@ -48,6 +48,17 @@ nothing to debug but the build.
 
 **Prerequisite (SR13):** creating the public GitHub repository and
 pushing to it. Kenny gave that go on 2026-08-12.
+
+**Gate passed 2026-08-12.** All four exit criteria accepted; five
+deviations ratified. Evidence: commits `7ebe626`, `e01de5f`, `77bfe93`;
+CI runs `31575504616` and `31575662505` green on all three jobs; 7 tests
+passing; 10.3 MB image on distroless/static answering `/healthz` with
+`{"status":"ok"}` as `nonroot`. Recorded honestly: CI was green from the
+*second* push — the first failed workflow validation because
+`hashFiles()` is not permitted in a job-level `if` (the guards were
+removed rather than repaired). Also ratified: enforcement moved into git
+hooks, a `config` module outside AR1's five, the Dockerfile `/data`
+ownership fix for the nonroot user, and `actions/checkout` bumped to v7.
 
 ## L1 · Store & time foundation — [K12 partial, AR3, AR7, AR10]
 

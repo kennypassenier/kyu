@@ -121,6 +121,13 @@ infinitum. Dedicated test required.
 Rationale: the mocked-clock suites (K5/K7/K9/K11) require injected
 time; core/shell keeps tokio and axum out of semantics tests.
 
+**Interpretation ratified 2026-08-12 (L0 gate).** The five modules above
+are the *domain* modules. Shell concerns may live beside them: `config`
+is its own module (so AR6 parsing is testable without mutating the
+process environment) and tracing setup lives in `main.rs`. Domain
+primitives stay inside the frozen modules — the `Clock` (AR7) and the id
+generator live under `engine`, the schema and migrations under `store`.
+
 ## AR2 · HTTP contract: raw body default + JSON envelope opt-in
 
 *(Decided in the AR2 deep-dive round.)*
