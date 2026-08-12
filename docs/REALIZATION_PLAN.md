@@ -16,8 +16,8 @@ are deliberately absent.
 | L0 · Walking skeleton + enforcement | [meta] | **done** | 2026-08-12 |
 | L1 · Store & time foundation | K12 (partial), AR3, AR7, AR10 | **done** | 2026-08-12 |
 | L2 · The three verbs | K1, K2, K3, AR2, AR4, AR8 | **done** | 2026-08-12 |
-| L3 · Fan-out & competing consumers | K4, S5 | next | — |
-| L4 · Reliability semantics | K5, K6, K7, W5, AR9 | not started | — |
+| L3 · Fan-out & competing consumers | K4, S5 | **done** | 2026-08-12 |
+| L4 · Reliability semantics | K5, K6, K7, W5, AR9 | next | — |
 | L5 · Crash-safety & container | K12 (full), K13, W6 | not started | — |
 | L6 · History & lifecycle | K8, K9, K11, W11 | not started | — |
 | L7 · Dashboard | K10, W9, AR11 | not started | — |

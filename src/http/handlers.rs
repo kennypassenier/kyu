@@ -16,7 +16,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
 
-use crate::engine::{Claimed, NewSubscription, Received};
+use crate::engine::{Claimed, EngineError, NewSubscription, Received, names};
 
 use super::AppState;
 use super::error::ApiError;
@@ -129,6 +129,21 @@ pub async fn receive(
         .as_
         .clone()
         .ok_or_else(ApiError::missing_subscription)?;
+
+    // Validated here, before anything is allocated for this subscription:
+    // the notifier map is keyed by name, and a typo should not be able to
+    // leave an entry behind in it. The engine validates again for its own
+    // callers, and both paths report the same error.
+    for (kind, name) in [("topic", &topic), ("subscription", &subscription)] {
+        if !names::is_valid(name) {
+            return Err(EngineError::InvalidName {
+                kind,
+                name: name.clone(),
+            }
+            .into());
+        }
+    }
+
     let wait = match query.wait {
         None => Duration::from_secs(state.limits.default_wait_s),
         Some(seconds) if seconds <= state.limits.max_wait_s => Duration::from_secs(seconds),
