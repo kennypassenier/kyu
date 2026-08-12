@@ -12,7 +12,6 @@ jobs:
   gates:
     name: fmt · clippy · tests
     runs-on: ubuntu-latest
-    if: hashFiles('Cargo.toml') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -29,7 +28,6 @@ jobs:
   deny:
     name: cargo-deny (advisories · licenses · bans)
     runs-on: ubuntu-latest
-    if: hashFiles('deny.toml') != '' && hashFiles('Cargo.toml') != ''
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
@@ -39,7 +37,6 @@ jobs:
   image:
     name: container build
     runs-on: ubuntu-latest
-    if: hashFiles('Dockerfile') != ''
     steps:
       - uses: actions/checkout@v4
       - name: Build image
