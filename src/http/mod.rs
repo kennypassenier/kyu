@@ -67,6 +67,12 @@ impl AppState {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/", get(handlers::dashboard_index))
+        .route("/t/{topic}/dashboard", get(handlers::dashboard_topic))
+        .route(
+            "/t/{topic}/dashboard/publish",
+            post(handlers::dashboard_publish),
+        )
         .route("/healthz", get(handlers::healthz))
         .route("/t/{topic}", post(handlers::publish))
         .route("/t/{topic}/next", get(handlers::receive))

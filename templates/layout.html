@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}mailbox{% endblock %}</title>
+<script src="/static/htmx.min.js" defer></script>
+<style>
+:root { color-scheme: light dark; --line: #8883; --dim: #7b7b7b; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 1.5rem; font: 15px/1.6 ui-sans-serif, system-ui, sans-serif; }
+main { max-width: 62rem; margin: 0 auto; }
+h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
+h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
+a { color: inherit; }
+.sub { color: var(--dim); margin: 0 0 1.5rem; }
+table { width: 100%; border-collapse: collapse; margin-bottom: .5rem; }
+th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+pre { background: #8881; border: 1px solid var(--line); border-radius: 6px; padding: .7rem .9rem; overflow-x: auto; margin: .35rem 0 .9rem; }
+.state { font-size: .78rem; padding: .1rem .45rem; border-radius: 999px; border: 1px solid var(--line); }
+.state-flagged { background: #f5a5; }
+.state-archived { background: #8885; }
+.note { background: #f5a3; border: 1px solid #f5a8; border-radius: 6px; padding: .6rem .8rem; margin: .6rem 0; }
+.empty { color: var(--dim); font-style: italic; }
+form.publish textarea { width: 100%; min-height: 5rem; font-family: ui-monospace, monospace; font-size: .85rem; }
+button { font: inherit; padding: .3rem .8rem; }
+</style>
+</head>
+<body>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

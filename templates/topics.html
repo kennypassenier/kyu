@@ -1,0 +1,32 @@
+{% extends "layout.html" %}
+{% block title %}mailbox — topics{% endblock %}
+{% block content %}
+<h1>mailbox</h1>
+<p class="sub">Every topic on this hub. A topic exists once something publishes to it.</p>
+
+{% if topics %}
+<table>
+  <tr>
+    <th>Topic</th><th class="num">Messages</th><th class="num">Subscriptions</th>
+    <th class="num">Backlog</th><th class="num">Dead</th><th>Last published</th>
+  </tr>
+  {% for topic in topics %}
+  <tr>
+    <td><a href="/t/{{ topic.name }}/dashboard">{{ topic.name }}</a></td>
+    <td class="num">{{ topic.messages }}</td>
+    <td class="num">{{ topic.subscriptions }}</td>
+    <td class="num">{{ topic.backlog }}</td>
+    <td class="num">{% if topic.dead > 0 %}<strong>{{ topic.dead }}</strong>{% else %}0{% endif %}</td>
+    <td>{% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="empty">never</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty">No topics yet.</p>
+{% endif %}
+
+<h2>Start a topic</h2>
+<p class="sub">A topic exists as soon as something publishes to it:</p>
+<pre>curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
+<p class="sub">Then open the topic to see the receive and acknowledge commands, filled in with its own data.</p>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "layout.html" %}
+{% block title %}mailbox — {{ topic.name }}{% endblock %}
+{% block content %}
+<h1>{{ topic.name }}</h1>
+<p class="sub">
+  <a href="/">all topics</a> ·
+  {{ topic.messages }} message(s) retained ·
+  backlog {{ topic.backlog }}{% if topic.dead > 0 %} · <strong>{{ topic.dead }} dead</strong>{% endif %}
+</p>
+
+<h2>Send and receive</h2>
+{% if snippets.bootstrap_note %}<p class="note">{{ snippets.bootstrap_note }}</p>{% endif %}
+<p class="sub">Publish a message:</p>
+<pre>{{ snippets.publish }}</pre>
+<p class="sub">Receive it — the payload is the body, the id comes back in a header:</p>
+<pre>{{ snippets.receive_raw }}</pre>
+<p class="sub">Or ask for one JSON document instead:</p>
+<pre>{{ snippets.receive_envelope }}</pre>
+<p class="sub">Then acknowledge it, so it is not delivered again:</p>
+<pre>{{ snippets.ack }}</pre>
+
+<h2>Subscriptions</h2>
+{% if subscriptions %}
+<table>
+  <tr>
+    <th>Name</th><th>State</th><th class="num">Backlog</th><th class="num">In flight</th>
+    <th class="num">Dead</th><th>Oldest unacked</th><th>Policy</th>
+  </tr>
+  {% for subscription in subscriptions %}
+  <tr>
+    <td>{{ subscription.name }}</td>
+    <td><span class="state state-{{ subscription.state }}">{{ subscription.state }}</span></td>
+    <td class="num">{{ subscription.backlog }}</td>
+    <td class="num">{{ subscription.claimed }}</td>
+    <td class="num">{% if subscription.dead > 0 %}<strong>{{ subscription.dead }}</strong>{% else %}0{% endif %}</td>
+    <td>{% if subscription.oldest_unacked_at %}{{ subscription.oldest_unacked_at }}{% else %}<span class="empty">nothing waiting</span>{% endif %}</td>
+    <td>
+      lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
+      {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
+      ttl {{ subscription.ttl_ms }}ms{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty">Nothing has polled this topic yet.</p>
+{% endif %}
+
+<h2>Recent messages</h2>
+{% if messages %}
+<table>
+  <tr><th>Id</th><th>Published</th><th>Type</th><th>Payload</th></tr>
+  {% for message in messages %}
+  <tr>
+    <td><code>{{ message.id }}</code></td>
+    <td>{{ message.published_at }}{% if message.due_at %}<br><span class="empty">due {{ message.due_at }}</span>{% endif %}</td>
+    <td>{{ message.content_type }}</td>
+    <td>
+      {% if message.payload.binary %}<span class="empty">{{ message.note }}</span>
+      {% else %}<code>{{ message.payload.text }}</code>
+        {% if message.note %}<br><span class="empty">{{ message.note }}</span>{% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty">No messages retained on this topic.</p>
+{% endif %}
+
+<h2>Publish a test message</h2>
+<form class="publish" method="post" action="/t/{{ topic.name }}/dashboard/publish">
+  <textarea name="payload" aria-label="payload">{% if messages %}{{ messages[0].payload.text }}{% else %}{"hello":"world"}{% endif %}</textarea>
+  <button type="submit">Publish to {{ topic.name }}</button>
+</form>
+{% endblock %}

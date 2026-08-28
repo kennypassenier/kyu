@@ -15,6 +15,7 @@ publish = false
 anyhow = "1"                                                    # error context at the binary edge (AR4)
 axum = "0.8"                                                    # HTTP surface (T1)
 base64 = "0.23.1"
+minijinja = "2.24.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

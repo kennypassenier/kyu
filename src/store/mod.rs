@@ -11,8 +11,9 @@
 //! SQLite. Ordering rests on `messages.seq`, the rowid, because a clock
 //! can move backwards after a power cut (AR7).
 //!
-//! L1 lands opening, pragmas and migrations. The reader pool and single
-//! writer connection of AR5 arrive with the verbs in L2.
+//! Concurrency follows AR5: one writer connection, so delivery transitions
+//! serialise without a lock of our own, and a small pool of readers so the
+//! dashboard can scan a topic without ever blocking a publish.
 
 pub mod migrations;
 pub mod queries;
@@ -30,45 +31,15 @@ pub const STORE_FILE_NAME: &str = "mailbox.db";
 /// backstop, not the mechanism.
 const BUSY_TIMEOUT_MS: u32 = 5_000;
 
-/// One writer connection (AR5): SQLite WAL allows many readers but a
-/// single writer, and funnelling writes through one connection makes the
-/// delivery transitions serialise without any lock of our own.
-///
-/// The reader pool AR5 also calls for arrives with L7, the first
-/// read-heavy consumer; the verbs are all writes.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn l5_the_write_probe_passes_on_a_healthy_store() {
-        let store = Store::open_in_memory().expect("a store");
-        store.probe_writable().expect("a fresh store is writable");
-    }
-
-    #[test]
-    fn l5_the_write_probe_fails_when_writes_are_refused() {
-        let store = Store::open_in_memory().expect("a store");
-        // query_only makes SQLite refuse writes on this connection, which is
-        // how it behaves on a read-only store.
-        store.with_conn(|conn| {
-            conn.pragma_update(None, "query_only", "ON")
-                .expect("the pragma")
-        });
-
-        let error = store
-            .probe_writable()
-            .expect_err("a store that refuses writes must not pass the probe");
-        assert!(
-            format!("{error:#}").contains("not writable"),
-            "and it must say so plainly: {error:#}"
-        );
-    }
-}
+/// Read connections for the dashboard (AR5). WAL allows readers to work
+/// while the writer commits, so a dashboard scanning a topic never blocks a
+/// publish — which is the whole reason the pool exists.
+const READERS: usize = 4;
 
 #[derive(Debug)]
 pub struct Store {
     writer: Mutex<Connection>,
+    readers: Vec<Mutex<Connection>>,
     path: Option<PathBuf>,
 }
 
@@ -97,8 +68,17 @@ impl Store {
         apply_pragmas(&conn, Journal::Wal)?;
         migrations::migrate(&mut conn, Some(data_dir))?;
 
+        let mut readers = Vec::with_capacity(READERS);
+        for _ in 0..READERS {
+            let reader = Connection::open(&path)
+                .with_context(|| format!("cannot open a read connection to {}", path.display()))?;
+            apply_pragmas(&reader, Journal::Existing)?;
+            readers.push(Mutex::new(reader));
+        }
+
         Ok(Self {
             writer: Mutex::new(conn),
+            readers,
             path: Some(path),
         })
     }
@@ -113,10 +93,32 @@ impl Store {
             Connection::open_in_memory().context("cannot open an in-memory SQLite database")?;
         apply_pragmas(&conn, Journal::Memory)?;
         migrations::migrate(&mut conn, None)?;
+        // An in-memory database is private to its connection, so the pool
+        // would be a set of empty databases: reads share the writer instead.
         Ok(Self {
             writer: Mutex::new(conn),
+            readers: Vec::new(),
             path: None,
         })
+    }
+
+    /// Runs a read against a pooled connection, falling back to the writer
+    /// when every reader is busy or when there is no pool (in memory).
+    pub fn read<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
+        for reader in &self.readers {
+            if let Ok(conn) = reader.try_lock() {
+                return f(&conn);
+            }
+        }
+        if let Some(reader) = self.readers.first() {
+            let conn = reader.lock().expect("a reader lock is never poisoned");
+            return f(&conn);
+        }
+        let conn = self
+            .writer
+            .lock()
+            .expect("the writer lock is never poisoned");
+        f(&conn)
     }
 
     /// Runs `f` inside one write transaction, committing if it returns
@@ -147,8 +149,8 @@ impl Store {
         Ok(value)
     }
 
-    /// Direct connection access, for reads and for tests that assert on the
-    /// schema itself. L7 replaces this with a reader pool (AR5).
+    /// Direct access to the writer connection, for tests that assert on the
+    /// schema itself. Ordinary reads go through [`Store::read`].
     pub fn with_conn<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
         let conn = self
             .writer
@@ -192,6 +194,8 @@ impl Store {
 enum Journal {
     Wal,
     Memory,
+    /// A second connection to a database whose journal mode is already set.
+    Existing,
 }
 
 /// Sets every pragma the durability and correctness promises depend on.
@@ -204,6 +208,10 @@ fn apply_pragmas(conn: &Connection, journal: Journal) -> Result<()> {
     // rows of AR3 lean on it: a delivery must never outlive its message.
     conn.pragma_update(None, "foreign_keys", "ON")
         .context("cannot enable foreign_keys")?;
+
+    if journal == Journal::Existing {
+        return Ok(());
+    }
 
     if journal == Journal::Wal {
         // journal_mode returns the mode it settled on, so read it back
@@ -226,4 +234,34 @@ fn apply_pragmas(conn: &Connection, journal: Journal) -> Result<()> {
         .context("cannot set synchronous=FULL")?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn l5_the_write_probe_passes_on_a_healthy_store() {
+        let store = Store::open_in_memory().expect("a store");
+        store.probe_writable().expect("a fresh store is writable");
+    }
+
+    #[test]
+    fn l5_the_write_probe_fails_when_writes_are_refused() {
+        let store = Store::open_in_memory().expect("a store");
+        // query_only makes SQLite refuse writes on this connection, which is
+        // how it behaves on a read-only store.
+        store.with_conn(|conn| {
+            conn.pragma_update(None, "query_only", "ON")
+                .expect("the pragma")
+        });
+
+        let error = store
+            .probe_writable()
+            .expect_err("a store that refuses writes must not pass the probe");
+        assert!(
+            format!("{error:#}").contains("not writable"),
+            "and it must say so plainly: {error:#}"
+        );
+    }
 }

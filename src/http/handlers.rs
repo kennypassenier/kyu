@@ -9,16 +9,17 @@ use std::time::Duration;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
 
+use crate::dashboard::{self, MessageView, SubscriptionView, TopicView};
 use crate::engine::policy::Policy;
 use crate::engine::{Claimed, EngineError, NewSubscription, Received, Settled, names};
-use crate::store::queries::StoredPolicy;
+use crate::store::queries::{self, StoredPolicy};
 
 use super::AppState;
 use super::error::ApiError;
@@ -714,4 +715,175 @@ pub async fn put_retention(
         axum::Json(json!({ "effective_ms": effective, "explicit_ms": explicit })),
     )
         .into_response())
+}
+
+// ─── L7 · the dashboard (K10, W9, AR11) ─────────────────────────────────────
+
+/// How many recent messages a topic page shows.
+const RECENT_MESSAGES: usize = 20;
+
+/// K10 · `GET /` — every topic on the hub.
+pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
+    let engine = state.engine.clone();
+    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
+        let topics = engine
+            .store()
+            .read(queries::topic_summaries)?
+            .into_iter()
+            .map(TopicView::from)
+            .collect();
+        dashboard::render_topics(topics, engine.now_ms())
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error| internal(format!("{error:#}")))?;
+
+    Ok(Html(page))
+}
+
+/// K10 · `GET /t/{topic}/dashboard` — one topic in detail.
+pub async fn dashboard_topic(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+) -> Result<Html<String>, ApiError> {
+    let engine = state.engine.clone();
+    let topic_name = topic.clone();
+
+    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<String>> {
+        engine.store().read(|conn| {
+            let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
+                return Ok(None);
+            };
+
+            let summary = queries::topic_summaries(conn)?
+                .into_iter()
+                .find(|summary| summary.name == topic_name);
+            let Some(summary) = summary else {
+                return Ok(None);
+            };
+
+            let subscriptions: Vec<SubscriptionView> =
+                queries::subscription_summaries(conn, topic_id)?
+                    .into_iter()
+                    .map(SubscriptionView::from)
+                    .collect();
+            let messages: Vec<MessageView> =
+                queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?
+                    .into_iter()
+                    .map(MessageView::from)
+                    .collect();
+
+            // The snippets carry this topic's own most recent payload and a
+            // subscription that genuinely exists, so what you copy is what
+            // your hub actually answers to (S1).
+            let example = messages.first();
+            let snippets = dashboard::Snippets::build(
+                "",
+                &topic_name,
+                subscriptions
+                    .iter()
+                    .find(|subscription| subscription.state != "archived")
+                    .map(|subscription| subscription.name.as_str()),
+                example.map(|message| &message.payload),
+                example.and_then(|message| message.content_type.as_deref()),
+            );
+
+            Ok(Some(dashboard::render_topic(
+                TopicView::from(summary),
+                subscriptions,
+                messages,
+                snippets,
+                engine.now_ms(),
+            )?))
+        })
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error| internal(format!("{error:#}")))?;
+
+    match page {
+        Some(page) => Ok(Html(page)),
+        None => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("topic {topic:?} does not exist"),
+            "a topic starts existing when something publishes to it. Open / to see \
+             which topics this hub has.",
+        )),
+    }
+}
+
+/// W9 · `POST /t/{topic}/dashboard/publish` — the test-publish form.
+///
+/// Answers the question that costs the most time at 23:00: is the producer
+/// broken, or the consumer? One click puts a known message on the topic.
+pub async fn dashboard_publish(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    // A browser form posts urlencoded; take the payload field out of it.
+    let form = String::from_utf8_lossy(&body);
+    let payload = form
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("payload="))
+        .map(urldecode)
+        .unwrap_or_default();
+
+    let engine = state.engine.clone();
+    let topic_for_engine = topic.clone();
+    let published = spawn_engine(move || {
+        engine.publish(
+            &topic_for_engine,
+            payload.as_bytes(),
+            Some("application/json"),
+        )
+    })
+    .await?;
+
+    state.notifiers.wake(&topic, &published.delivered_to);
+    tracing::info!(topic = %topic, id = %published.id, "test message published from the dashboard");
+
+    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+}
+
+fn urldecode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'+' => {
+                out.push(b' ');
+                index += 1;
+            }
+            b'%' if index + 2 < bytes.len() => {
+                let hex = std::str::from_utf8(&bytes[index + 1..index + 3]).unwrap_or("");
+                match u8::from_str_radix(hex, 16) {
+                    Ok(byte) => {
+                        out.push(byte);
+                        index += 3;
+                    }
+                    Err(_) => {
+                        out.push(bytes[index]);
+                        index += 1;
+                    }
+                }
+            }
+            byte => {
+                out.push(byte);
+                index += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+fn internal(message: String) -> ApiError {
+    tracing::error!(error = %message, "dashboard failure");
+    ApiError::new(
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "the dashboard could not be rendered",
+        "check the hub's logs for the matching error line; the message API is \
+         unaffected by a dashboard fault.",
+    )
 }
