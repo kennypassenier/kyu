@@ -41,18 +41,61 @@ directory. That refusal was reproduced on 2026-08-28, not theorised.
 
 ---
 
-## 2 · Upgrade
+## 2 · Cut a release (how a new image comes into existence)
 
-1. Tag the release in this repo: `git tag v0.2.0 && git push origin v0.2.0`.
-   GitHub Actions publishes `ghcr.io/kennypassenier/mailbox:0.2.0` and
-   `:latest`.
-2. Write the GitHub Release yourself — `gh release create v0.2.0` — because
-   the workflow publishes the image, not the release.
-3. **Deployed via the homelab:** nothing to do. The nightly run updates it and
+Kenny asked for this written down rather than remembered, and it is short on
+purpose: **tagging is the whole trigger.** There is no button to press on
+GitHub and no image to build by hand.
+
+1. **Decide the version.** Semver over the HTTP contract — the three verbs,
+   their parameters, their response shapes, and the environment variables.
+   Breaking any of those is a major. Adding an endpoint or a parameter is a
+   minor. Fixing behaviour without changing the contract is a patch. The
+   dashboard's HTML and the on-disk schema are explicitly *not* part of it.
+2. **Bump it in two places, in one commit:** `Cargo.toml`'s `version`, and a
+   new section at the top of `CHANGELOG.md`. They drift the moment you do
+   them separately.
+3. **Push, and wait for CI to go green.** Tagging a red commit produces a
+   release you then have to withdraw.
+4. **Tag and push the tag:**
+   ```bash
+   git tag v1.2.3
+   git push origin v1.2.3
+   ```
+   The `v` prefix is what `.github/workflows/release-image.yml` triggers on
+   (`tags: ["v*"]`). Nothing else starts it — not a push to main, not a
+   release created by hand.
+5. **Watch it:** `gh run list --workflow=release-image` — it takes a few
+   minutes. It publishes two tags of the same image:
+   `ghcr.io/kennypassenier/mailbox:1.2.3` and `:latest`.
+6. **Write the GitHub Release yourself:**
+   ```bash
+   gh release create v1.2.3 --title "v1.2.3" --notes-file <(sed -n '/## \[1.2.3\]/,/## \[/p' CHANGELOG.md)
+   ```
+   The workflow deliberately does not do this. Release notes are the one part
+   a human adds something to, and automating them from commit subjects
+   produces a list nobody reads.
+7. **Verify the image exists and is pullable:**
+   ```bash
+   docker pull ghcr.io/kennypassenier/mailbox:1.2.3
+   ```
+   The package is linked to this repository and takes its visibility, so a
+   public repo yields a package the homelab host can pull anonymously.
+
+**Deviation from the procedure, recorded rather than forgotten:** Phase 9 of
+the dev procedure asks for tag → build → *checksum manifest* → GitHub Release.
+mailbox ships no self-updating binary — updates arrive as a new image, whose
+integrity Docker already verifies by digest — so a checksum manifest would be
+a file with no reader. See AR12.
+
+## 2b · Upgrade a running hub
+
+1. Cut the release as in §2, so the new image exists.
+2. **Deployed via the homelab:** nothing to do. The nightly run updates it and
    rolls back on a failed health check (`com.homelab.update.policy=auto`).
    Immediate instead: `homelab update stacks/<name>`.
-4. **Standalone:** `docker compose pull && docker compose up -d`.
-5. Verify: `curl -sf $HUB/healthz`, and check the log line `schema migrated`
+3. **Standalone:** `docker compose pull && docker compose up -d`.
+4. Verify: `curl -sf $HUB/healthz`, and check the log line `schema migrated`
    if the schema moved.
 
 **What happens to your data.** A populated store is snapshotted with

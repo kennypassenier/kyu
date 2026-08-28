@@ -400,6 +400,22 @@ because they are architecture, not implementation detail.
   the same version rather than for "stable". Without it a green local gate
   did not predict a green build, which stopped being theoretical the day
   1.98 added a lint 1.97 did not have.
+- **Release shape (Phase 9 gate, 2026-08-28).** The procedure asks for
+  tag → build → *checksum manifest* → GitHub Release, and mailbox does
+  tag → build → image, with the GitHub Release written by hand. Both
+  omissions are reasoned, not forgotten. A checksum manifest exists to let a
+  self-updating binary verify what it downloaded; mailbox ships no such
+  binary — updates arrive as a new image, whose integrity Docker already
+  verifies by digest — so the manifest would be a file with no reader.
+  Automating the release notes would mean diverging from the shared
+  `templates/rust-service/` workflow that all of Kenny's Rust repos use, to
+  generate the one artefact a human actually improves. Kenny chose to keep
+  the workflow as-is on condition that the release procedure itself is
+  written down; it is, in OPERATIONS_RUNBOOK §2.
+- **Version (Phase 9 gate).** 1.0.0 rather than 0.x, Kenny's call: a
+  deliberate promise that the HTTP contract is settled and breaking it means
+  2.0.0. The dashboard's HTML and the on-disk schema are explicitly outside
+  that promise.
 
 ## AR11 · Security model and payload display
 

@@ -13,9 +13,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 7 · Hardening |
-| Last completed gate | Mini-rounds M1-M4 (2026-08-28): distribution, ecosystem, backup, toolchain |
-| Next gate | Phase 8 · Documentation |
+| Current phase | 9 · Release |
+| Last completed gate | Phase 9 gate (2026-08-28): 1.0.0, changelog approved, Kenny's go to tag |
+| Next gate | Phase 10 · Retrospective |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)

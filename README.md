@@ -5,13 +5,12 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: feature-complete, not yet released.** Every frozen feature is
-> built and under test (190 tests, CI green on every push). What has *not*
-> happened: no version has been tagged, so no image exists on GHCR yet, and
-> the hub has not run anywhere but a test container. This README claims only
-> what the code does — the honesty pass this line used to promise was done on
-> 2026-08-28, and it found this very block claiming the message API did not
-> exist.
+> **Status: 1.0.0.** Every frozen feature is built and under test (190 tests,
+> CI green on every push). 1.0.0 is a promise about the HTTP contract — the
+> three verbs, their parameters and response shapes, and the environment
+> variables: breaking those means 2.0.0. The dashboard's HTML and the on-disk
+> schema are not part of that promise. Still true and worth knowing: the hub
+> has not yet run anywhere but a test container.
 
 ## The idea
 
