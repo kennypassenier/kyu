@@ -19,9 +19,9 @@ are deliberately absent.
 | L3 · Fan-out & competing consumers | K4, S5 | **done** | 2026-08-12 |
 | L4 · Reliability semantics | K5, K6, K7, W5, AR9 | **done** | 2026-08-12 |
 | L5 · Crash-safety & container | K12 (full), K13, W6 | **done** | 2026-08-12 |
-| L6 · History & lifecycle | K8, K9, K11, W11 | next | — |
-| L7 · Dashboard | K10, W9, AR11 | not started | — |
-| L8 · Observability, ops, scheduling | W1, W7, W8, W4 | not started | — |
+| L6 · History & lifecycle | K8, K9, K11, W11 | **done** | 2026-08-12 |
+| L7 · Dashboard | K10, W9, AR11 | **done** | 2026-08-12 |
+| L8 · Observability, ops, scheduling | W1, W7, W8, W4 | **done** | 2026-08-12 |
 
 Each milestone ends with a Phase 6 report form: one item per exit
 criterion with its evidence, one item per deviation discovered while

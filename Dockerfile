@@ -9,6 +9,9 @@ RUN apk add --no-cache build-base
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+# The dashboard templates are compiled into the binary (include_str!), so the
+# build needs them even though nothing is mounted at runtime.
+COPY templates ./templates
 RUN cargo build --release --locked && strip target/release/mailbox
 
 # /data must belong to the nonroot user before Docker creates the volume

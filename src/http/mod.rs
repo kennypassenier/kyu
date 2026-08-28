@@ -74,6 +74,8 @@ pub fn router(state: AppState) -> Router {
             post(handlers::dashboard_publish),
         )
         .route("/healthz", get(handlers::healthz))
+        .route("/metrics", get(handlers::metrics))
+        .route("/api/backup", post(handlers::backup))
         .route("/t/{topic}", post(handlers::publish))
         .route("/t/{topic}/next", get(handlers::receive))
         .route("/t/{topic}/ack/{id}", post(handlers::ack))

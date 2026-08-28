@@ -977,3 +977,46 @@ pub fn topic_id_by_name_conn(conn: &rusqlite::Connection, name: &str) -> Result<
     .optional()
     .with_context(|| format!("cannot look up topic {name:?}"))
 }
+
+// ─── L8 · metrics and backup (W1, W8) ──────────────────────────────────────
+
+#[derive(Debug, Clone)]
+pub struct DeliveryCount {
+    pub topic: String,
+    pub subscription: String,
+    pub state: String,
+    pub count: i64,
+}
+
+/// Every (topic, subscription, state) count in one pass, so the metrics
+/// endpoint is one query rather than one per series.
+pub fn delivery_counts(conn: &rusqlite::Connection) -> Result<Vec<DeliveryCount>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT t.name, s.name, d.state, count(*)
+               FROM deliveries d
+               JOIN subscriptions s ON s.id = d.sub_id
+               JOIN topics t ON t.id = s.topic_id
+              GROUP BY t.name, s.name, d.state
+              ORDER BY t.name, s.name, d.state",
+        )
+        .context("cannot count the deliveries")?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(DeliveryCount {
+                topic: row.get(0)?,
+                subscription: row.get(1)?,
+                state: row.get(2)?,
+                count: row.get(3)?,
+            })
+        })
+        .context("cannot count the deliveries")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the delivery counts")?;
+    Ok(rows)
+}
+
+pub fn scalar(conn: &rusqlite::Connection, sql: &str) -> Result<i64> {
+    conn.query_row(sql, [], |row| row.get(0))
+        .with_context(|| format!("cannot run {sql}"))
+}

@@ -174,6 +174,8 @@ const BACKFILL_BATCH: usize = 500;
 pub struct Published {
     pub id: String,
     pub delivered_to: Vec<String>,
+    /// `Some` when the message is scheduled rather than immediate (W4).
+    pub due_at: Option<Millis>,
 }
 
 /// A subscription that this very poll brought into existence, with the
@@ -273,6 +275,21 @@ impl Engine {
         payload: &[u8],
         content_type: Option<&str>,
     ) -> Result<Published> {
+        self.publish_due(topic, payload, content_type, None)
+    }
+
+    /// W4 · publish something that becomes deliverable later.
+    ///
+    /// The message is stored and durable straight away — only its delivery
+    /// waits. A restart cannot lose the schedule, because the due time is a
+    /// column rather than a timer in memory.
+    pub fn publish_due(
+        &self,
+        topic: &str,
+        payload: &[u8],
+        content_type: Option<&str>,
+        due_at: Option<Millis>,
+    ) -> Result<Published> {
         if !names::is_valid(topic) {
             return Err(EngineError::InvalidName {
                 kind: "topic",
@@ -299,7 +316,8 @@ impl Engine {
                 None => queries::create_topic(tx, topic, now)?,
             };
 
-            let seq = queries::insert_message(tx, &id, topic_id, payload, content_type, now, None)?;
+            let seq =
+                queries::insert_message(tx, &id, topic_id, payload, content_type, now, due_at)?;
 
             let subscriptions = queries::active_subscriptions(tx, topic_id)?;
             for subscription in &subscriptions {
@@ -312,7 +330,11 @@ impl Engine {
                 .collect::<Vec<_>>())
         })?;
 
-        Ok(Published { id, delivered_to })
+        Ok(Published {
+            id,
+            delivered_to,
+            due_at,
+        })
     }
 
     /// K2. Claims the oldest deliverable message for `subscription`,

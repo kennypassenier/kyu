@@ -13,9 +13,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 6 · Development loop — L1 in progress |
-| Last completed gate | L0 walking skeleton (2026-08-12): 4/4 exit criteria, 5 deviations ratified, CI green, repo public |
-| Next gate | Phase 6 report form for L1 (store & time foundation) |
+| Current phase | 6 · Development loop — all milestones built (L0–L8) |
+| Last completed gate | L5 crash-safety (2026-08-12); L6–L8 built in AFK mode, awaiting the combined report |
+| Next gate | Combined Phase 6 report for L6, L7 and L8 |
 | AFK mode | on — L6–L8 accumulate into one combined report |
 
 <!-- Update this block after every completed gate. -->

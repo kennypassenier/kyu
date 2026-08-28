@@ -114,10 +114,25 @@ fn healthcheck() -> Result<()> {
     Ok(())
 }
 
-/// JSON output is W7 (rated Desired, built in L8); the spine is wired now
-/// so every later milestone logs through it.
+/// W7 · structured logging.
+///
+/// `MAILBOX_LOG_FORMAT=json` emits one JSON object per line, so Loki can
+/// filter on topic, subscription or message id rather than on substrings.
+/// The default stays human-readable, because the first person reading these
+/// logs is usually someone at a terminal.
 fn init_tracing() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("MAILBOX_LOG").unwrap_or_else(|_| "info".into()))
-        .init();
+    let filter = EnvFilter::try_from_env("MAILBOX_LOG").unwrap_or_else(|_| "info".into());
+    let json = std::env::var("MAILBOX_LOG_FORMAT")
+        .map(|format| format.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+
+    if json {
+        tracing_subscriber::fmt()
+            .json()
+            .with_current_span(false)
+            .with_env_filter(filter)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
 }

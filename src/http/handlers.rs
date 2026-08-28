@@ -114,13 +114,47 @@ pub async fn healthz(State(state): State<AppState>) -> Response {
     (status, axum::Json(body)).into_response()
 }
 
+#[derive(Debug, Deserialize)]
+pub struct PublishQuery {
+    /// W4 · deliver this many milliseconds from now.
+    pub delay: Option<i64>,
+    /// W4 · deliver at this Unix millisecond timestamp.
+    pub at: Option<i64>,
+}
+
 /// K1 · `POST /t/{topic}`
 pub async fn publish(
     State(state): State<AppState>,
     Path(topic): Path<String>,
+    Query(query): Query<PublishQuery>,
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
+    let now = state.engine.now_ms();
+    let due_at = match (query.delay, query.at) {
+        (None, None) => None,
+        (Some(_), Some(_)) => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "delay and at cannot both be given",
+                "use delay=<milliseconds from now> or at=<unix milliseconds>, not both. \
+                 Two answers to when would mean one of them is quietly ignored.",
+            ));
+        }
+        (Some(delay), None) => {
+            if delay < 0 {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("delay must not be negative, got {delay}"),
+                    "use a positive number of milliseconds, or leave delay out to \
+                     deliver immediately.",
+                ));
+            }
+            Some(now.saturating_add(delay))
+        }
+        (None, Some(at)) => Some(at),
+    };
+
     let limit = state.limits.max_body_bytes;
     let payload = to_bytes(body, limit).await.map_err(|error| {
         // to_bytes fails both for an oversized body and for a broken
@@ -142,9 +176,10 @@ pub async fn publish(
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
-    let published =
-        spawn_engine(move || engine.publish(&topic_for_engine, &payload, content_type.as_deref()))
-            .await?;
+    let published = spawn_engine(move || {
+        engine.publish_due(&topic_for_engine, &payload, content_type.as_deref(), due_at)
+    })
+    .await?;
 
     state.notifiers.wake(&topic, &published.delivered_to);
 
@@ -152,14 +187,18 @@ pub async fn publish(
         topic = %topic,
         id = %published.id,
         delivered_to = published.delivered_to.len(),
+        due_at = ?published.due_at,
         "message published"
     );
 
-    Ok((
-        StatusCode::CREATED,
-        axum::Json(json!({ "id": published.id })),
-    )
-        .into_response())
+    let mut body = json!({ "id": published.id });
+    if let Some(due) = published.due_at {
+        body.as_object_mut()
+            .expect("a JSON object")
+            .insert("due_at".to_string(), json!(due));
+    }
+
+    Ok((StatusCode::CREATED, axum::Json(body)).into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -886,4 +925,125 @@ fn internal(message: String) -> ApiError {
         "check the hub's logs for the matching error line; the message API is \
          unaffected by a dashboard fault.",
     )
+}
+
+// ─── L8 · metrics and backup (W1, W8) ───────────────────────────────────────
+
+/// W1 · `GET /metrics` in Prometheus text format.
+///
+/// The series that answer "is something silently broken": a growing backlog,
+/// a dead-letter count above zero, an oldest-unacked age that keeps rising.
+pub async fn metrics(State(state): State<AppState>) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let heartbeat = state.heartbeat.clone();
+
+    let body = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
+        let now = engine.now_ms();
+        engine.store().read(|conn| {
+            let counts = queries::delivery_counts(conn)?;
+            let topics = queries::scalar(conn, "SELECT count(*) FROM topics")?;
+            let subscriptions = queries::scalar(conn, "SELECT count(*) FROM subscriptions")?;
+            let messages = queries::scalar(conn, "SELECT count(*) FROM messages")?;
+            let bytes = queries::scalar(
+                conn,
+                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
+            )
+            .unwrap_or(0);
+
+            let mut out = String::new();
+            out.push_str("# HELP mailbox_topics Topics on this hub.\n");
+            out.push_str("# TYPE mailbox_topics gauge\n");
+            out.push_str(&format!("mailbox_topics {topics}\n"));
+            out.push_str("# HELP mailbox_subscriptions Subscriptions across all topics.\n");
+            out.push_str("# TYPE mailbox_subscriptions gauge\n");
+            out.push_str(&format!("mailbox_subscriptions {subscriptions}\n"));
+            out.push_str("# HELP mailbox_messages Messages currently retained.\n");
+            out.push_str("# TYPE mailbox_messages gauge\n");
+            out.push_str(&format!("mailbox_messages {messages}\n"));
+            out.push_str("# HELP mailbox_store_bytes Size of the store on disk.\n");
+            out.push_str("# TYPE mailbox_store_bytes gauge\n");
+            out.push_str(&format!("mailbox_store_bytes {bytes}\n"));
+            out.push_str(
+                "# HELP mailbox_deliveries Deliveries by topic, subscription and state.\n",
+            );
+            out.push_str("# TYPE mailbox_deliveries gauge\n");
+            for count in counts {
+                out.push_str(&format!(
+                    "mailbox_deliveries{{topic=\"{}\",subscription=\"{}\",state=\"{}\"}} {}\n",
+                    escape_label(&count.topic),
+                    escape_label(&count.subscription),
+                    count.state,
+                    count.count
+                ));
+            }
+            out.push_str("# HELP mailbox_sweeper_age_ms Time since the sweeper last ran.\n");
+            out.push_str("# TYPE mailbox_sweeper_age_ms gauge\n");
+            out.push_str(&format!(
+                "mailbox_sweeper_age_ms {}\n",
+                now.saturating_sub(heartbeat.last_beat_ms())
+            ));
+            Ok(out)
+        })
+    })
+    .await
+    .map_err(|error| internal(format!("the metrics task failed: {error}")))?
+    .map_err(|error| internal(format!("{error:#}")))?;
+
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        body,
+    )
+        .into_response())
+}
+
+/// Label values are topic and subscription names, which AR8 already limits
+/// to `[a-z0-9._-]` — this is the belt to that braces.
+fn escape_label(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// W8 · `POST /api/backup`
+///
+/// Writes a consistent copy of the store while the hub keeps running.
+pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+
+    let result = tokio::task::spawn_blocking(move || -> anyhow::Result<(String, u64)> {
+        let store = engine.store();
+        let Some(path) = store.path() else {
+            anyhow::bail!("this hub runs on an in-memory store, which has nothing to back up");
+        };
+        let directory = path.parent().unwrap_or(std::path::Path::new("."));
+        // Named for the moment it was taken, so several backups coexist and
+        // the newest is obvious from a directory listing.
+        let target = directory.join(format!("mailbox.backup-{}.db", engine.now_ms()));
+        let bytes = store.backup_to(&target)?;
+        Ok((target.display().to_string(), bytes))
+    })
+    .await
+    .map_err(|error| internal(format!("the backup task failed: {error}")))?;
+
+    match result {
+        Ok((path, bytes)) => {
+            tracing::info!(path = %path, bytes, "backup written");
+            Ok((
+                StatusCode::OK,
+                axum::Json(json!({
+                    "backup": path,
+                    "bytes": bytes,
+                    "restore": "stop the hub, replace mailbox.db with this file (removing any \
+                                mailbox.db-wal and mailbox.db-shm beside it), then start it \
+                                again. The backup is a complete database, not a partial copy.",
+                })),
+            )
+                .into_response())
+        }
+        Err(error) => Err(ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("the backup failed: {error:#}"),
+            "check free space and that the data directory is writable. mailbox keeps \
+             serving either way; a failed backup does not affect delivery.",
+        )),
+    }
 }
