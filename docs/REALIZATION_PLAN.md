@@ -33,6 +33,27 @@ Each milestone ends with a Phase 6 report form: one item per exit
 criterion with its evidence, one item per deviation discovered while
 building, and the question whether to proceed.
 
+## Gate log — phases 7 onward
+
+Standing rule 5: every gate's outcome lands in a versioned document. This
+table was added on 2026-08-28 because it had not been kept — the gates below
+had been recorded only in `CLAUDE.md`, which rule 19 calls an assistant's
+resume note rather than documentation. Fixed retroactively from the session
+record.
+
+| Gate | Date | Kenny's decision | Landed in |
+|---|---|---|---|
+| Phase 7 · hardening gaps | 2026-08-28 | All 16 gaps closed, including the three Claude would have deferred; security review run | `7dddd09`, `a3e6e7c`, TEST_PLAN.md |
+| Phase 7 · report | 2026-08-28 | S1/S2 agreed; S3 → mini-round on AR2; L1/L2 closed; R2 → mini-rounds before Phase 8 | `c1b8515`, AR2 amendment |
+| Mini-round · AR2 | 2026-08-28 | Neutralise executable content types only, not all | AR2 amendment, `src/http/handlers.rs` |
+| Mini-round · W2 (3 rounds) | 2026-08-28 | Door over verbs + dashboard, monitoring open; loud warning when unprotected; own login page; encrypted per-app tokens; masked snippets, 10 s reveal; build in one go; Bootstrap vendored | `5d35294`, `e544077`, FEATURES.md W2, AR11 amendment |
+| Mini-round · M1 distribution | 2026-08-28 | Adopt the homelab's `release-image.yml` verbatim | `99f58ad`, AR12 |
+| Mini-round · M2 ecosystem | 2026-08-28 | Build the preset in the homelab repo; native-binary deployment investigated and rejected | homelab `8c7b5e8`, AR12 |
+| Mini-round · M3 backup | 2026-08-28 | Ride the homelab's restic backup; no scheduler in the hub | preset compose, AR12 |
+| Mini-round · M4 toolchain | 2026-08-28 | Pin the Rust version in the project | `5f19ca3`, AR12 |
+| Phase 8 · documentation | 2026-08-28 | All six documents approved: README (honesty pass), USER_GUIDE, OPERATIONS_RUNBOOK, DEBUGGING_GUIDE, ARCHITECTURE_REFERENCE, TEST_PLAN. README approved with one correction: the GHCR-private claim is wrong, remove it | `cf01ca4`, `7716f17` |
+| Phase 9 · release | 2026-08-28 | 1.0.0 (not 0.x); changelog approved; workflow unchanged on condition the release procedure is written down; branch protection deferred; correct the claim in the homelab repo; **go to tag and release** | `c7b0e1f`, `ae99b88`, `1523c4c`, tag `v1.0.0`, homelab `9bac850` |
+
 ## L0 · Walking skeleton + enforcement — [meta]
 
 Cargo package (lib + thin binary), the five empty-but-compiling modules
