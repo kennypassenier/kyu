@@ -266,6 +266,21 @@ impl Engine {
         &self.store
     }
 
+    /// Every write goes through here so that a storage failure is recorded
+    /// once, in one place (W6, the L1 gap closed at the Phase 7 gate).
+    ///
+    /// Only `Internal` counts. The typed errors — an unknown topic, an
+    /// already-acked message — are the caller being wrong, and a hub that
+    /// called itself unhealthy over a 404 would be crying wolf.
+    fn write<T>(&self, f: impl FnOnce(&rusqlite::Transaction) -> Result<T>) -> Result<T> {
+        let result = self.store.write(f);
+        if let Err(EngineError::Internal(error)) = &result {
+            tracing::error!(error = ?error, "a store write failed");
+            self.store.record_write_failure();
+        }
+        result
+    }
+
     /// K1. Stores the payload verbatim and creates one delivery row per
     /// active subscription, all in one transaction: a message that exists
     /// without its delivery rows would be a message nobody can receive.
@@ -310,7 +325,7 @@ impl Engine {
             .next(now)
             .to_string();
 
-        let delivered_to = self.store.write(|tx| -> Result<Vec<String>> {
+        let delivered_to = self.write(|tx| -> Result<Vec<String>> {
             let topic_id = match queries::topic_id_by_name(tx, topic)? {
                 Some(id) => id,
                 None => queries::create_topic(tx, topic, now)?,
@@ -364,7 +379,7 @@ impl Engine {
         }
         let now = self.clock.now_ms();
 
-        self.store.write(|tx| -> Result<Received> {
+        self.write(|tx| -> Result<Received> {
             let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
                 // Auto-creating a topic here would turn a typo into a
                 // subscription that waits forever on a topic nobody
@@ -457,7 +472,7 @@ impl Engine {
             });
         }
 
-        self.store.write(|tx| -> Result<()> {
+        self.write(|tx| -> Result<()> {
             let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
                 return Err(EngineError::UnknownTopic {
                     topic: topic.to_string(),
@@ -496,7 +511,7 @@ impl Engine {
     /// backlog was lapsed.
     pub fn unarchive(&self, topic: &str, subscription: &str) -> Result<bool> {
         let now = self.clock.now_ms();
-        self.store.write(|tx| -> Result<bool> {
+        self.write(|tx| -> Result<bool> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
 
             // Idempotent, but not noisy with it: unarchiving something that
@@ -549,7 +564,7 @@ impl Engine {
                     .to_string(),
             });
         }
-        self.store.write(|tx| -> Result<()> {
+        self.write(|tx| -> Result<()> {
             let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
                 return Err(EngineError::UnknownTopic {
                     topic: topic.to_string(),
@@ -570,7 +585,7 @@ impl Engine {
     /// K7. The policy in force for a subscription, alongside the raw stored
     /// values so a caller can tell which fields are explicit.
     pub fn policy(&self, topic: &str, subscription: &str) -> Result<(Policy, StoredPolicy)> {
-        self.store.write(|tx| -> Result<(Policy, StoredPolicy)> {
+        self.write(|tx| -> Result<(Policy, StoredPolicy)> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
             let stored = queries::subscription_policy(tx, sub_id)?;
             Ok((Policy::effective(stored), stored))
@@ -589,7 +604,7 @@ impl Engine {
         if let Err((field, reason)) = policy::validate(stored) {
             return Err(EngineError::InvalidPolicy { field, reason });
         }
-        self.store.write(|tx| -> Result<Policy> {
+        self.write(|tx| -> Result<Policy> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
             queries::set_subscription_policy(tx, sub_id, stored)?;
             Ok(Policy::effective(stored))
@@ -608,7 +623,7 @@ impl Engine {
     ) -> Result<Settled> {
         let now = self.clock.now_ms();
 
-        self.store.write(|tx| -> Result<Settled> {
+        self.write(|tx| -> Result<Settled> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
 
             match queries::nack_claimed(tx, message_id, sub_id)? {
@@ -647,7 +662,7 @@ impl Engine {
         subscription: &str,
         limit: usize,
     ) -> Result<Vec<DeadLetter>> {
-        self.store.write(|tx| -> Result<Vec<DeadLetter>> {
+        self.write(|tx| -> Result<Vec<DeadLetter>> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
             Ok(queries::dead_letters(tx, sub_id, limit)?)
         })
@@ -656,7 +671,7 @@ impl Engine {
     /// K6. Puts a dead letter back in the queue with a fresh set of
     /// attempts.
     pub fn requeue_dead(&self, topic: &str, subscription: &str, message_id: &str) -> Result<()> {
-        self.store.write(|tx| -> Result<()> {
+        self.write(|tx| -> Result<()> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
             match queries::requeue_dead(tx, message_id, sub_id)? {
                 RequeueOutcome::Requeued => Ok(()),
@@ -683,7 +698,7 @@ impl Engine {
     pub fn sweep(&self, batch_limit: usize) -> Result<SweepReport> {
         let now = self.clock.now_ms();
 
-        self.store.write(|tx| -> Result<SweepReport> {
+        self.write(|tx| -> Result<SweepReport> {
             let mut report = SweepReport::default();
 
             let overdue = queries::overdue_claims(tx, now, batch_limit)?;

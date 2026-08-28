@@ -60,11 +60,25 @@ fn notice(new: &NewSubscription) -> String {
 /// fail one by one, or messages quietly stop coming back.
 pub async fn healthz(State(state): State<AppState>) -> Response {
     let engine = state.engine.clone();
-    let store_error = tokio::task::spawn_blocking(move || engine.store().probe_writable())
-        .await
-        .map_err(|error| format!("the health probe did not run: {error}"))
-        .and_then(|probe| probe.map_err(|error| format!("{error:#}")))
-        .err();
+    let store_error = tokio::task::spawn_blocking(move || {
+        // Two questions, because they fail differently. The probe takes the
+        // write lock, which catches a read-only store. The failure record
+        // catches what a probe cannot: a disk that is full but writable only
+        // refuses at commit time, so the hub reports that a write actually
+        // failed rather than predicting that one would.
+        engine.store().probe_writable()?;
+        if let Some(ago) = engine.store().recent_write_failure() {
+            anyhow::bail!(
+                "a write failed {} seconds ago; the store may be full",
+                ago.as_secs()
+            );
+        }
+        Ok::<(), anyhow::Error>(())
+    })
+    .await
+    .map_err(|error| format!("the health probe did not run: {error}"))
+    .and_then(|probe| probe.map_err(|error| format!("{error:#}")))
+    .err();
 
     let now = state.engine.now_ms();
     let sweeper_alive = state.heartbeat.is_alive(now);
@@ -89,9 +103,10 @@ pub async fn healthz(State(state): State<AppState>) -> Response {
         map.insert(
             "remedy".to_string(),
             json!(
-                "check that the data volume is still mounted, writable by this user, \
-                 and not locked by another process. mailbox reports itself unhealthy \
-                 rather than accepting publishes it cannot store."
+                "check free space on the data volume first, then that it is still \
+                 mounted, writable by this user and not locked by another process. \
+                 mailbox reports itself unhealthy rather than accepting publishes it \
+                 cannot store, and recovers by itself once writes succeed again."
             ),
         );
     } else if !sweeper_alive {
@@ -381,20 +396,24 @@ fn render(claimed: Claimed, envelope: bool, created: Option<&NewSubscription>) -
         if let Ok(value) = content_type.parse() {
             headers.insert(header::CONTENT_TYPE, value);
         }
-        // The stored content type is reported as AR2 promises, but a payload
-        // published as text/html would otherwise execute in the hub's own
-        // origin for anyone who opens this URL — an iframe on a hostile page
-        // is enough. Handing the bytes over as a download keeps the contract
-        // and takes away the browser rendering; curl neither notices nor
-        // cares.
-        headers.insert(
-            header::CONTENT_DISPOSITION,
-            axum::http::HeaderValue::from_static("attachment"),
-        );
+        // nosniff always: it costs nothing and stops a browser deciding that
+        // a text/plain payload is really HTML.
         headers.insert(
             axum::http::header::X_CONTENT_TYPE_OPTIONS,
             axum::http::HeaderValue::from_static("nosniff"),
         );
+        // attachment only for the types a browser would execute. A payload
+        // published as text/html would otherwise run in the hub's own origin
+        // for anyone opening this URL — an iframe on a hostile page is
+        // enough. Everything else still opens normally in a tab, which is
+        // what the AR2 mini-round settled on: protection without making the
+        // API unbrowsable.
+        if executes_in_a_browser(&content_type) {
+            headers.insert(
+                header::CONTENT_DISPOSITION,
+                axum::http::HeaderValue::from_static("attachment"),
+            );
+        }
         insert_str(headers, HEADER_ID, &message.id);
         insert_str(headers, HEADER_TOPIC, &claimed.topic);
         insert_str(headers, HEADER_ATTEMPT, &attempt.to_string());
@@ -436,6 +455,34 @@ fn render(claimed: Claimed, envelope: bool, created: Option<&NewSubscription>) -
         insert_str(response.headers_mut(), HEADER_NOTICE, &notice(new));
     }
     response
+}
+
+/// Whether a browser would run this content type as code rather than show
+/// it as data (AR2 amendment, 2026-08-28).
+///
+/// Deliberately a short, explicit list rather than a clever rule: the cost
+/// of a wrong entry is a payload that renders itself in the hub's origin, so
+/// the list errs towards including things. `nosniff` accompanies it, which
+/// is what stops a browser executing something that is not on the list.
+fn executes_in_a_browser(content_type: &str) -> bool {
+    let media = content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+
+    matches!(
+        media.as_str(),
+        "text/html"
+            | "application/xhtml+xml"
+            | "image/svg+xml"
+            | "text/xml"
+            | "application/xml"
+            | "text/xsl"
+    ) || media.ends_with("+xml")
+        || media.contains("javascript")
+        || media.contains("ecmascript")
 }
 
 fn insert_str(headers: &mut HeaderMap, name: &'static str, value: &str) {

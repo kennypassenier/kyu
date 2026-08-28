@@ -67,11 +67,16 @@ Every gap the Phase 7 audit raised was closed rather than accepted, so
 this section records what remains true about the system rather than
 choices to skip work.
 
-- **A disk that is full but writable is not visible on `/healthz`.** The
-  probe takes SQLite's write lock, which succeeds until a commit needs a
-  new page. Publishes then fail loudly with a remedy and the hub stays up
-  (proven), but the health endpoint keeps reporting `ok`, so an uptime
-  check will not raise it. Watch `mailbox_store_bytes` instead.
+- ~~A disk that is full but writable is not visible on `/healthz`.~~
+  **Closed at the Phase 7 gate (2026-08-28).** Rather than predicting a
+  failure the write lock cannot see, the store now remembers that a write
+  actually failed and health reports it for a minute afterwards, then
+  recovers by itself. Only storage failures count — an unknown topic is
+  the caller being wrong, and a hub that called itself unhealthy over a
+  404 would be crying wolf. Proven by
+  `p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up`, which caps
+  the store, publishes until it refuses, and asserts a 503 whose remedy
+  names free space first.
 - **Cross-origin protection depends on the browser.** Refusing requests
   that announce a foreign `Origin` stops the drive-by case. It is not
   authentication: anything on the LAN that speaks HTTP directly can still

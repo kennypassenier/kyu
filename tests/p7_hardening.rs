@@ -281,9 +281,30 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
         "and it must carry a remedy: {json}"
     );
 
-    // The process is still serving, and reads still work.
+    // The process is still serving and reads still work — but health must
+    // now say so, which is the L1 gap Kenny chose to close at the Phase 7
+    // gate. A hub refusing every publish while Uptime Kuma stays green is
+    // exactly the silence this project is built against.
+    let health = reqwest::get(hub.url("/healthz")).await.expect("a response");
+    let status = health.status().as_u16();
+    let body = body_json(health).await;
+
     assert_eq!(
-        reqwest::get(hub.url("/healthz"))
+        status, 503,
+        "a store that cannot accept a write is not healthy: {body}"
+    );
+    assert_eq!(body["store"], "unwritable");
+    assert!(
+        body["remedy"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("free space"),
+        "and the remedy names the likeliest cause first: {body}"
+    );
+
+    // Reads are unaffected: the dashboard and the metrics still answer.
+    assert_eq!(
+        reqwest::get(hub.url("/metrics"))
             .await
             .expect("a response")
             .status(),

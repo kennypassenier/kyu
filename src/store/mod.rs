@@ -36,11 +36,25 @@ const BUSY_TIMEOUT_MS: u32 = 5_000;
 /// publish — which is the whole reason the pool exists.
 const READERS: usize = 4;
 
+/// How long a failed write keeps the hub unhealthy. Long enough that a
+/// scrape or an uptime check cannot miss it between polls, short enough that
+/// the hub recovers by itself once the cause is gone.
+const WRITE_FAILURE_WINDOW: std::time::Duration = std::time::Duration::from_secs(60);
+
 #[derive(Debug)]
 pub struct Store {
     writer: Mutex<Connection>,
     readers: Vec<Mutex<Connection>>,
     path: Option<PathBuf>,
+    /// When a write last failed (W6, closed at the Phase 7 gate).
+    ///
+    /// The write probe takes SQLite's lock, which succeeds on a disk that is
+    /// full but writable — the failure only appears when a commit needs a new
+    /// page. Rather than predicting that, the store remembers that a write
+    /// actually failed, so health reports what happened instead of what it
+    /// guessed. This catches every cause, not only a full disk: a read-only
+    /// remount, a permissions change, a corrupt file.
+    last_write_failure: Mutex<Option<std::time::Instant>>,
 }
 
 impl Store {
@@ -80,6 +94,7 @@ impl Store {
             writer: Mutex::new(conn),
             readers,
             path: Some(path),
+            last_write_failure: Mutex::new(None),
         })
     }
 
@@ -99,6 +114,7 @@ impl Store {
             writer: Mutex::new(conn),
             readers: Vec::new(),
             path: None,
+            last_write_failure: Mutex::new(None),
         })
     }
 
@@ -138,15 +154,40 @@ impl Store {
             .writer
             .lock()
             .expect("the writer lock is never poisoned");
-        let tx = conn
-            .transaction()
-            .context("cannot open a transaction")
-            .map_err(E::from)?;
+        let tx = match conn.transaction().context("cannot open a transaction") {
+            Ok(tx) => tx,
+            Err(error) => {
+                self.record_write_failure();
+                return Err(E::from(error));
+            }
+        };
         let value = f(&tx)?;
-        tx.commit()
-            .context("cannot commit the transaction")
-            .map_err(E::from)?;
+        if let Err(error) = tx.commit().context("cannot commit the transaction") {
+            // The commit is where a full disk finally says so.
+            self.record_write_failure();
+            return Err(E::from(error));
+        }
         Ok(value)
+    }
+
+    /// Called by the engine when a write failed for a storage reason rather
+    /// than a business one — an unknown topic is not a sick store.
+    pub fn record_write_failure(&self) {
+        *self
+            .last_write_failure
+            .lock()
+            .expect("the failure lock is never poisoned") = Some(std::time::Instant::now());
+    }
+
+    /// How long ago a write last failed, if that was recent enough to still
+    /// mean something (W6).
+    pub fn recent_write_failure(&self) -> Option<std::time::Duration> {
+        let last = *self
+            .last_write_failure
+            .lock()
+            .expect("the failure lock is never poisoned");
+        last.map(|at| at.elapsed())
+            .filter(|elapsed| *elapsed < WRITE_FAILURE_WINDOW)
     }
 
     /// Direct access to the writer connection, for tests that assert on the
