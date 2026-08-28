@@ -16,7 +16,7 @@ from anywhere — the gates live in git hooks, not in session config.
 | Current phase | 6 · Development loop — L1 in progress |
 | Last completed gate | L0 walking skeleton (2026-08-12): 4/4 exit criteria, 5 deviations ratified, CI green, repo public |
 | Next gate | Phase 6 report form for L1 (store & time foundation) |
-| AFK mode | off |
+| AFK mode | on — L6–L8 accumulate into one combined report |
 
 <!-- Update this block after every completed gate. -->
 

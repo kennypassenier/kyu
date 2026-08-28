@@ -84,5 +84,13 @@ pub fn router(state: AppState) -> Router {
             "/api/t/{topic}/subs/{subscription}/dead/{id}/requeue",
             post(handlers::requeue_dead),
         )
+        .route(
+            "/api/t/{topic}/subs/{subscription}/unarchive",
+            post(handlers::unarchive),
+        )
+        .route(
+            "/api/t/{topic}/retention",
+            get(handlers::get_retention).put(handlers::put_retention),
+        )
         .with_state(state)
 }

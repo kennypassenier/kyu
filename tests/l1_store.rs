@@ -29,7 +29,12 @@ fn l1_migration_creates_the_schema_in_an_empty_directory() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let store = Store::open(dir.path()).expect("opening a fresh store must succeed");
 
-    assert_eq!(store.with_conn(schema_version), 1);
+    // Not a literal: the schema grows, and this test is about the migration
+    // runner reaching the current version rather than about which one it is.
+    assert_eq!(
+        store.with_conn(schema_version),
+        migrations::MIGRATIONS.len() as u32
+    );
 
     let tables = store.with_conn(table_names);
     for expected in ["topics", "subscriptions", "messages", "deliveries"] {
@@ -58,10 +63,19 @@ fn l1_opening_an_existing_store_is_idempotent() {
     }
 
     let store = Store::open(dir.path()).expect("second open must not migrate again");
-    assert_eq!(store.with_conn(schema_version), 1);
+    assert_eq!(
+        store.with_conn(schema_version),
+        migrations::MIGRATIONS.len() as u32
+    );
 
     let topics: i64 = store
-        .with_conn(|conn| conn.query_row("SELECT count(*) FROM topics", [], |row| row.get(0)))
+        .with_conn(|conn| {
+            conn.query_row(
+                "SELECT count(*) FROM topics WHERE name = 'notify.kenny'",
+                [],
+                |row| row.get(0),
+            )
+        })
         .expect("counting topics");
     assert_eq!(topics, 1, "reopening must not disturb existing rows");
 }

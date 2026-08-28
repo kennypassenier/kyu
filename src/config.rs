@@ -8,6 +8,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 
+use crate::engine::Defaults;
+
 pub const DEFAULT_LISTEN: &str = "0.0.0.0:8080";
 pub const DEFAULT_DATA_DIR: &str = "/data";
 pub const DEFAULT_MAX_BODY_BYTES: u64 = 1024 * 1024;
@@ -17,6 +19,9 @@ pub struct Config {
     pub listen: SocketAddr,
     pub data_dir: PathBuf,
     pub max_body_bytes: u64,
+    /// Hub-wide defaults for things a topic or subscription can override
+    /// (AR6): retention and the idle thresholds.
+    pub defaults: Defaults,
 }
 
 impl Config {
@@ -24,7 +29,22 @@ impl Config {
         let listen = std::env::var("MAILBOX_LISTEN").ok();
         let data_dir = std::env::var("MAILBOX_DATA_DIR").ok();
         let max_body = std::env::var("MAILBOX_MAX_BODY_BYTES").ok();
-        Self::parse(listen.as_deref(), data_dir.as_deref(), max_body.as_deref())
+        let mut config = Self::parse(listen.as_deref(), data_dir.as_deref(), max_body.as_deref())?;
+
+        config.defaults = Defaults {
+            retention_ms: duration_from_env("MAILBOX_RETENTION_MS", config.defaults.retention_ms)?,
+            idle_flag_ms: duration_from_env(
+                "MAILBOX_IDLE_FLAG_MS",
+                Some(config.defaults.idle_flag_ms),
+            )?
+            .unwrap_or(config.defaults.idle_flag_ms),
+            idle_archive_ms: duration_from_env(
+                "MAILBOX_IDLE_ARCHIVE_MS",
+                Some(config.defaults.idle_archive_ms),
+            )?
+            .unwrap_or(config.defaults.idle_archive_ms),
+        };
+        Ok(config)
     }
 
     /// Parses configuration from raw values, so tests never have to mutate
@@ -80,8 +100,35 @@ impl Config {
             listen,
             data_dir,
             max_body_bytes,
+            defaults: Defaults::default(),
         })
     }
+}
+
+/// Reads a millisecond duration from the environment. The literal `never`
+/// means "no limit" — spelled out rather than encoded as 0, which would read
+/// like "immediately" to anyone skimming the compose file.
+fn duration_from_env(name: &str, fallback: Option<i64>) -> Result<Option<i64>> {
+    let Some(raw) = std::env::var(name).ok() else {
+        return Ok(fallback);
+    };
+    if raw.eq_ignore_ascii_case("never") {
+        return Ok(None);
+    }
+    let parsed: i64 = raw.parse().with_context(|| {
+        format!(
+            "{name} is not a whole number of milliseconds: {raw:?}. Set it to a \
+             millisecond count (604800000 is a week), or to \"never\" to switch the \
+             limit off entirely."
+        )
+    })?;
+    if parsed <= 0 {
+        bail!(
+            "{name} is {parsed}, which is not a usable duration. Set a positive \
+             millisecond count, or \"never\" to switch the limit off."
+        );
+    }
+    Ok(Some(parsed))
 }
 
 #[cfg(test)]

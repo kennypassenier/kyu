@@ -36,7 +36,11 @@ async fn main() -> Result<()> {
 
     let clock = SystemClock;
     let heartbeat = Heartbeat::starting_at(clock.now_ms());
-    let engine = Arc::new(Engine::new(store, Arc::new(clock)));
+    let engine = Arc::new(Engine::with_defaults(
+        store,
+        Arc::new(clock),
+        config.defaults,
+    ));
     let state = AppState::new(
         engine.clone(),
         Limits::from_config(&config),

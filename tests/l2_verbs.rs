@@ -443,6 +443,9 @@ async fn l2_every_error_carries_a_remedy() {
         200
     );
 
+    // Note: `from=beginning` used to belong in this table as a 501. L6
+    // implemented replay (K8), so it is a feature now and is tested in
+    // l6_history rather than here.
     let cases: Vec<(&str, u16, reqwest::RequestBuilder)> = vec![
         (
             "an invalid topic name",
@@ -480,11 +483,6 @@ async fn l2_every_error_carries_a_remedy() {
             "a wait beyond the maximum",
             400,
             client.get(hub.url("/t/notify.kenny/next?as=printer&wait=9999")),
-        ),
-        (
-            "replay, which this build does not implement",
-            501,
-            client.get(hub.url("/t/notify.kenny/next?as=printer&from=beginning&wait=0")),
         ),
         (
             "an unknown subscription acking",

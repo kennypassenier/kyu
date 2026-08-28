@@ -16,6 +16,7 @@ pub mod policy;
 
 use std::sync::{Arc, Mutex};
 
+use crate::events::{self, Event};
 use crate::store::Store;
 use crate::store::queries::{
     self, AckOutcome, ClaimedMessage, DeadLetter, NackOutcome, Overdue, RequeueOutcome,
@@ -73,8 +74,8 @@ pub enum EngineError {
     #[error("{field} is not a usable value: {reason}")]
     InvalidPolicy { field: &'static str, reason: String },
 
-    #[error("replaying a topic from the beginning is not implemented in this build")]
-    ReplayUnsupported,
+    #[error("subscription {subscription:?} on topic {topic:?} is archived")]
+    SubscriptionArchived { topic: String, subscription: String },
 
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -134,12 +135,16 @@ impl EngineError {
                  leaving the previous value in place."
                     .to_string()
             }
-            Self::ReplayUnsupported => {
-                "poll without from=beginning to receive messages published from now on. \
-                 Replaying retained history arrives with the retention work (K8) and is \
-                 refused here rather than silently ignored."
-                    .to_string()
-            }
+            Self::SubscriptionArchived {
+                topic,
+                subscription,
+            } => format!(
+                "this subscription was archived after going unpolled for too long, and \
+                 the messages it was holding were settled as lapsed. Unarchive it with \
+                 POST /api/t/{topic}/subs/{subscription}/unarchive to start receiving \
+                 again — from that moment on, or add ?from=beginning to a poll to pick up \
+                 what the topic still retains."
+            ),
             Self::Internal(_) => {
                 "this is a fault in mailbox rather than in the request. Check the hub's logs \
                  for the matching error line and the dashboard for the store's health."
@@ -158,6 +163,9 @@ fn describe_existing(what: &str, existing: &[String]) -> String {
 }
 
 type Result<T> = std::result::Result<T, EngineError>;
+
+/// Rows per transaction while replaying a topic into a subscription (AR5).
+const BACKFILL_BATCH: usize = 500;
 
 /// What a publish did, so the caller can wake exactly the subscriptions
 /// that gained a message. The engine stays free of tokio by reporting them
@@ -185,6 +193,8 @@ pub struct NewSubscription {
 pub struct Received {
     pub claimed: Option<Claimed>,
     pub created: Option<NewSubscription>,
+    /// How many retained messages a `from=beginning` poll pulled in (K8).
+    pub backfilled: usize,
 }
 
 /// A claimed message and where it came from.
@@ -202,19 +212,52 @@ impl Claimed {
     }
 }
 
+/// Hub-wide defaults that are not per-subscription policy (AR6): they are
+/// read from the environment once and apply wherever nothing more specific
+/// is set.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Defaults {
+    /// How long a topic keeps messages nobody still needs (K9).
+    pub retention_ms: Option<Millis>,
+    /// Idle time before a subscription is flagged on the dashboard (K11).
+    pub idle_flag_ms: Millis,
+    /// Idle time before it is archived and stops accumulating (K11).
+    pub idle_archive_ms: Millis,
+}
+
+impl Default for Defaults {
+    fn default() -> Self {
+        Self {
+            retention_ms: Some(7 * 24 * 60 * 60 * 1_000),
+            idle_flag_ms: 7 * 24 * 60 * 60 * 1_000,
+            idle_archive_ms: 30 * 24 * 60 * 60 * 1_000,
+        }
+    }
+}
+
 pub struct Engine {
     store: Arc<Store>,
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
+    defaults: Defaults,
 }
 
 impl Engine {
     pub fn new(store: Arc<Store>, clock: Arc<dyn Clock>) -> Self {
+        Self::with_defaults(store, clock, Defaults::default())
+    }
+
+    pub fn with_defaults(store: Arc<Store>, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
         Self {
             store,
             clock,
             ids: Mutex::new(MessageIds::new()),
+            defaults,
         }
+    }
+
+    pub fn defaults(&self) -> Defaults {
+        self.defaults
     }
 
     pub fn store(&self) -> &Arc<Store> {
@@ -297,10 +340,6 @@ impl Engine {
                 name: subscription.to_string(),
             });
         }
-        if from_beginning {
-            return Err(EngineError::ReplayUnsupported);
-        }
-
         let now = self.clock.now_ms();
 
         self.store.write(|tx| -> Result<Received> {
@@ -326,7 +365,45 @@ impl Engine {
                         (id, Some(created))
                     }
                 };
+            // An archived subscription is not quietly revived by a poll: its
+            // backlog was lapsed when it was archived, and whoever comes back
+            // needs to know that before carrying on (G8, K11).
+            let state = queries::subscription_state(tx, sub_id)?;
+            if state == "archived" {
+                return Err(EngineError::SubscriptionArchived {
+                    topic: topic.to_string(),
+                    subscription: subscription.to_string(),
+                });
+            }
+            // Polling is the definition of not-idle, so a flag clears itself.
+            if state == "flagged" {
+                queries::set_subscription_state(tx, sub_id, "active")?;
+            }
+
             queries::touch_subscription_poll(tx, sub_id, now)?;
+
+            // K8 · replay. Idempotent and batched: it hands this subscription
+            // a delivery row for every retained message it does not have, so
+            // asking twice cannot duplicate anything.
+            let mut backfilled = 0;
+            if from_beginning {
+                loop {
+                    let inserted =
+                        queries::backfill_deliveries(tx, topic_id, sub_id, BACKFILL_BATCH)?;
+                    backfilled += inserted;
+                    if inserted < BACKFILL_BATCH {
+                        break;
+                    }
+                }
+                if backfilled > 0 {
+                    tracing::info!(
+                        topic,
+                        subscription,
+                        backfilled,
+                        "replayed retained messages into a subscription"
+                    );
+                }
+            }
 
             let policy = Policy::effective(queries::subscription_policy(tx, sub_id)?);
             let claimed = queries::claim_next(tx, sub_id, now, policy.lease_ms)?;
@@ -337,6 +414,7 @@ impl Engine {
                     message,
                 }),
                 created,
+                backfilled,
             })
         })
     }
@@ -388,6 +466,67 @@ impl Engine {
                     state,
                 }),
             }
+        })
+    }
+
+    /// K11 · brings an archived subscription back. Deliberately explicit:
+    /// a poll will not do it, so nobody resumes without seeing that the
+    /// backlog was lapsed.
+    pub fn unarchive(&self, topic: &str, subscription: &str) -> Result<()> {
+        let now = self.clock.now_ms();
+        self.store.write(|tx| -> Result<()> {
+            let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            queries::set_subscription_state(tx, sub_id, "active")?;
+            queries::touch_subscription_poll(tx, sub_id, now)?;
+            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            events::emit(
+                tx,
+                &mut ids,
+                now,
+                &Event::SubscriptionUnarchived {
+                    topic: topic.to_string(),
+                    subscription: subscription.to_string(),
+                },
+            )?;
+            Ok(())
+        })
+    }
+
+    /// K9 · a topic's retention, `None` meaning "keep forever".
+    pub fn retention(&self, topic: &str) -> Result<(Option<Millis>, Option<Millis>)> {
+        self.store
+            .write(|tx| -> Result<(Option<Millis>, Option<Millis>)> {
+                let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
+                    return Err(EngineError::UnknownTopic {
+                        topic: topic.to_string(),
+                        existing: queries::topic_names(tx)?,
+                    });
+                };
+                let explicit = queries::topic_retention(tx, topic_id)?;
+                Ok((explicit.or(self.defaults.retention_ms), explicit))
+            })
+    }
+
+    pub fn set_retention(&self, topic: &str, retention_ms: Option<Millis>) -> Result<()> {
+        if let Some(retention) = retention_ms
+            && retention <= 0
+        {
+            return Err(EngineError::InvalidPolicy {
+                field: "retention_ms",
+                reason: "a retention window must be longer than zero milliseconds; omit it \
+                         to fall back to the hub default, or set keep_forever to true"
+                    .to_string(),
+            });
+        }
+        self.store.write(|tx| -> Result<()> {
+            let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
+                return Err(EngineError::UnknownTopic {
+                    topic: topic.to_string(),
+                    existing: queries::topic_names(tx)?,
+                });
+            };
+            queries::set_topic_retention(tx, topic_id, retention_ms)?;
+            Ok(())
         })
     }
 
@@ -520,13 +659,35 @@ impl Engine {
             let stale = queries::pending_past_ttl(tx, now, batch_limit)?;
             report.more_work = overdue.len() >= batch_limit || stale.len() >= batch_limit;
 
+            // Locking the id generator inside the store transaction is safe
+            // in one direction only: publish takes the generator and releases
+            // it *before* the store, so the two can never wait on each other.
+            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+
             for delivery in overdue {
-                match apply(tx, &delivery, now)? {
+                let settled = apply(tx, &delivery, now)?;
+                match settled {
                     Settled::Redelivered => {
                         report.redelivered += 1;
-                        report.wake.push((delivery.topic, delivery.subscription));
+                        report
+                            .wake
+                            .push((delivery.topic.clone(), delivery.subscription.clone()));
                     }
-                    Settled::DeadLettered => report.dead_lettered += 1,
+                    Settled::DeadLettered => {
+                        report.dead_lettered += 1;
+                        let woken = events::emit(
+                            tx,
+                            &mut ids,
+                            now,
+                            &Event::DeadLettered {
+                                topic: delivery.topic.clone(),
+                                subscription: delivery.subscription.clone(),
+                                message_id: queries::message_id_of(tx, delivery.msg_seq)?,
+                                attempts: delivery.attempts + 1,
+                            },
+                        )?;
+                        report.wake_events(woken);
+                    }
                     Settled::Expired => report.expired += 1,
                     Settled::Unchanged => {}
                 }
@@ -534,11 +695,95 @@ impl Engine {
 
             // A pending message past its TTL never had a chance to fail, so
             // its attempt count stays as it is.
+            let mut expired_by_subscription: Vec<(String, String)> = Vec::new();
             for delivery in stale {
                 if queries::mark_expired(tx, delivery.msg_seq, delivery.sub_id, now)? {
                     report.expired += 1;
+                    expired_by_subscription
+                        .push((delivery.topic.clone(), delivery.subscription.clone()));
                 }
             }
+            // One event per subscription rather than per message: a TTL sweep
+            // can settle hundreds at once, and a flood of events is its own
+            // kind of silence.
+            expired_by_subscription.sort();
+            let mut counted: Vec<(String, String, usize)> = Vec::new();
+            for pair in expired_by_subscription {
+                match counted.last_mut() {
+                    Some(last) if last.0 == pair.0 && last.1 == pair.1 => last.2 += 1,
+                    _ => counted.push((pair.0, pair.1, 1)),
+                }
+            }
+            for (topic, subscription, count) in counted {
+                let woken = events::emit(
+                    tx,
+                    &mut ids,
+                    now,
+                    &Event::Expired {
+                        topic,
+                        subscription,
+                        count,
+                    },
+                )?;
+                report.wake_events(woken);
+            }
+
+            // K11 · idle lifecycle.
+            let flag_cutoff = now.saturating_sub(self.defaults.idle_flag_ms);
+            for subscription in queries::subscriptions_to_flag(tx, flag_cutoff, batch_limit)? {
+                queries::set_subscription_state(tx, subscription.id, "flagged")?;
+                report.flagged += 1;
+                let woken = events::emit(
+                    tx,
+                    &mut ids,
+                    now,
+                    &Event::SubscriptionFlagged {
+                        topic: subscription.topic.clone(),
+                        subscription: subscription.name.clone(),
+                        idle_ms: self.defaults.idle_flag_ms,
+                    },
+                )?;
+                report.wake_events(woken);
+            }
+
+            let archive_cutoff = now.saturating_sub(self.defaults.idle_archive_ms);
+            for subscription in queries::subscriptions_to_archive(tx, archive_cutoff, batch_limit)?
+            {
+                queries::set_subscription_state(tx, subscription.id, "archived")?;
+                let lapsed = queries::lapse_outstanding(tx, subscription.id)?;
+                report.archived += 1;
+                report.lapsed += lapsed;
+                let woken = events::emit(
+                    tx,
+                    &mut ids,
+                    now,
+                    &Event::SubscriptionArchived {
+                        topic: subscription.topic.clone(),
+                        subscription: subscription.name.clone(),
+                        lapsed,
+                    },
+                )?;
+                report.wake_events(woken);
+            }
+
+            // K9 · retention, last: everything above may have settled a
+            // delivery that was the only reason to keep a message.
+            let collected =
+                queries::collect_retained(tx, now, self.defaults.retention_ms, batch_limit)?;
+            if collected > 0 {
+                report.collected = collected;
+                let woken = events::emit(
+                    tx,
+                    &mut ids,
+                    now,
+                    &Event::MessagesCollected { count: collected },
+                )?;
+                report.wake_events(woken);
+            }
+            report.more_work = report.more_work
+                || collected >= batch_limit
+                || report.flagged >= batch_limit
+                || report.archived >= batch_limit;
 
             report.wake.sort();
             report.wake.dedup();
@@ -596,6 +841,13 @@ pub struct SweepReport {
     pub redelivered: usize,
     pub dead_lettered: usize,
     pub expired: usize,
+    /// Messages retention collected (K9).
+    pub collected: usize,
+    /// Subscriptions newly flagged as idle (K11).
+    pub flagged: usize,
+    /// Subscriptions archived, and the deliveries that lapsed with them.
+    pub archived: usize,
+    pub lapsed: usize,
     /// Subscriptions with a message waiting again, so their waiting pollers
     /// can be woken instead of sitting out their timeout (AR5).
     pub wake: Vec<(String, String)>,
@@ -604,8 +856,21 @@ pub struct SweepReport {
 }
 
 impl SweepReport {
+    /// Records subscriptions of the events topic that gained a message.
+    fn wake_events(&mut self, subscriptions: Vec<String>) {
+        for subscription in subscriptions {
+            self.wake
+                .push((crate::events::EVENTS_TOPIC.to_string(), subscription));
+        }
+    }
+
     pub fn changed(&self) -> usize {
-        self.redelivered + self.dead_lettered + self.expired
+        self.redelivered
+            + self.dead_lettered
+            + self.expired
+            + self.collected
+            + self.flagged
+            + self.archived
     }
 }
 

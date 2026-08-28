@@ -213,6 +213,7 @@ pub async fn receive(
     // Only the first pass can create the subscription, so remember what it
     // said and report it however the poll ends.
     let mut created = None;
+    let mut backfilled = 0usize;
 
     loop {
         // Register for a wakeup *before* looking, so a publish landing
@@ -225,9 +226,22 @@ pub async fn receive(
         if received.created.is_some() {
             created = received.created;
         }
+        if received.backfilled > 0 {
+            backfilled += received.backfilled;
+        }
 
         if let Some(claimed) = received.claimed {
-            return Ok(render(claimed, envelope, created.as_ref()));
+            let mut response = render(claimed, envelope, created.as_ref());
+            if backfilled > 0 {
+                insert_str(
+                    response.headers_mut(),
+                    HEADER_NOTICE,
+                    &format!(
+                        "replayed {backfilled} retained message(s) into subscription {subscription:?}"
+                    ),
+                );
+            }
+            return Ok(response);
         }
 
         let remaining = deadline.saturating_duration_since(Instant::now());
@@ -235,7 +249,15 @@ pub async fn receive(
             // Nothing waiting. 204 rather than an error: an empty topic is
             // the normal state of a healthy queue.
             let mut response = StatusCode::NO_CONTENT.into_response();
-            if let Some(new) = &created {
+            if backfilled > 0 {
+                insert_str(
+                    response.headers_mut(),
+                    HEADER_NOTICE,
+                    &format!(
+                        "replayed {backfilled} retained message(s) into subscription {subscription:?}"
+                    ),
+                );
+            } else if let Some(new) = &created {
                 insert_str(response.headers_mut(), HEADER_NOTICE, &notice(new));
             }
             return Ok(response);
@@ -601,6 +623,95 @@ pub async fn requeue_dead(
     Ok((
         StatusCode::OK,
         axum::Json(json!({ "requeued": id_for_response })),
+    )
+        .into_response())
+}
+
+// ─── L6 · history and lifecycle (K8, K9, K11) ───────────────────────────────
+
+/// K11 · `POST /api/t/{topic}/subs/{sub}/unarchive`
+pub async fn unarchive(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let topic_for_response = topic.clone();
+    let subscription_for_response = subscription.clone();
+    spawn_engine(move || engine.unarchive(&topic, &subscription)).await?;
+
+    tracing::info!(
+        topic = %topic_for_response,
+        subscription = %subscription_for_response,
+        "subscription unarchived"
+    );
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({
+            "unarchived": subscription_for_response,
+            "topic": topic_for_response,
+            "note": "this subscription receives messages published from now on; the \
+                     backlog it held when it was archived was settled as lapsed. Poll \
+                     with ?from=beginning to pick up what the topic still retains.",
+        })),
+    )
+        .into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RetentionBody {
+    pub retention_ms: Option<i64>,
+    /// Explicit opt-out, so "keep forever" is something you write rather
+    /// than something you get by leaving a field out.
+    pub keep_forever: Option<bool>,
+}
+
+/// K9 · `GET|PUT /api/t/{topic}/retention`
+pub async fn get_retention(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let (effective, explicit) = spawn_engine(move || engine.retention(&topic)).await?;
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({ "effective_ms": effective, "explicit_ms": explicit })),
+    )
+        .into_response())
+}
+
+pub async fn put_retention(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let parsed: RetentionBody = serde_json::from_slice(&body).map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("the retention body is not valid JSON: {error}"),
+            "send {\"retention_ms\": 604800000} for a week, {\"keep_forever\": true} to \
+             keep messages indefinitely, or {} to fall back to the hub default.",
+        )
+    })?;
+
+    let retention = if parsed.keep_forever.unwrap_or(false) {
+        // Distinct from "unset": one means never collect, the other means
+        // follow the hub default.
+        Some(i64::MAX)
+    } else {
+        parsed.retention_ms
+    };
+
+    let engine = state.engine.clone();
+    let topic_for_response = topic.clone();
+    spawn_engine(move || engine.set_retention(&topic, retention)).await?;
+
+    let engine = state.engine.clone();
+    let (effective, explicit) = spawn_engine(move || engine.retention(&topic_for_response)).await?;
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({ "effective_ms": effective, "explicit_ms": explicit })),
     )
         .into_response())
 }

@@ -23,7 +23,7 @@ const SNAPSHOTS_KEPT: usize = 2;
 
 /// The schema, one entry per version. Append only — never edit a
 /// published entry, or databases in the field diverge from new ones.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_1_INITIAL_SCHEMA];
+pub const MIGRATIONS: &[&str] = &[MIGRATION_1_INITIAL_SCHEMA, MIGRATION_2_EVENTS_TOPIC];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
 /// (AR7). `STRICT` makes SQLite enforce the column types instead of
@@ -89,6 +89,15 @@ CREATE INDEX deliveries_by_state
 -- Retention and replay walk a topic in insertion order.
 CREATE INDEX messages_by_topic
     ON messages (topic_id, seq);
+"#;
+
+/// The hub's own event topic (W11) exists from the start, so that something
+/// can subscribe to it *before* the first event happens. Creating it lazily
+/// would mean the only way to start listening was to wait for a failure.
+///
+/// `created_at` is 0: it has been there since the schema was.
+const MIGRATION_2_EVENTS_TOPIC: &str = r#"
+INSERT INTO topics (name, retention_ms, created_at) VALUES ('mailbox.events', NULL, 0);
 "#;
 
 /// Brings `conn` up to the current schema version, returning it.
