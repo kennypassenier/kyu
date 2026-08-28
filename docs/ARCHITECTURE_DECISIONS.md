@@ -27,42 +27,6 @@ transition is a single SQL transaction. Confirms the Phase 1 lean.
 Rejected: redb 4.1 (pure-Rust supply chain, but key-value only —
 hand-rolled indexes and claim logic for no functional gain).
 
-## AR2 amendment (mini-round, 2026-08-28) · browser-executable payloads
-
-**Original decision.** The raw receive response returns the payload bytes
-verbatim with the content type the publisher sent. Payload fidelity is the
-contract.
-
-**The insight.** The content type is attacker-chosen (any LAN device may
-publish) and a browser treats it as an instruction. A payload published as
-`text/html` executed in the hub's own origin for anyone opening the receive
-URL — an iframe on a hostile page is enough — where it could read every
-topic and drive every endpoint as the operator. AR11 already said payloads
-are untrusted wherever rendered; this endpoint did not honour it.
-
-**Decided.** `X-Content-Type-Options: nosniff` on every raw response, and
-`Content-Disposition: attachment` **only** for types a browser would
-execute: `text/html`, `application/xhtml+xml`, `image/svg+xml`, `text/xml`,
-`application/xml`, `text/xsl`, anything ending in `+xml`, and anything
-containing `javascript` or `ecmascript`.
-
-Rejected: attaching everything (measured cost — a browser then downloads
-ordinary JSON, making the API unbrowsable by hand); rewriting the label to
-`application/octet-stream` (breaks the contract for any consumer that
-switches on the content type); and doing nothing (leans on "LAN only", but
-"on the LAN" includes a compromised IoT device, and this hands it the
-operator's browser session on the hub).
-
-**Contract impact.** The content type is still returned exactly as
-published, so AR2's promise holds. Non-browser clients are unaffected,
-verified against the container: `curl` returns an identical body. The
-envelope response shape is untouched.
-
-**Proven by** `p7_sec3_a_payload_cannot_render_itself_in_the_hubs_origin`,
-`p7_sec3_an_ordinary_payload_still_opens_in_a_browser`, and
-`p7_sec3_every_executable_type_is_forced_to_download`, which checks all ten
-list entries individually rather than assuming the rule.
-
 ## T3 · Async runtime: tokio
 
 tokio 1.x. async-std is discontinued (Mar 2025); smol has a minimal
@@ -199,6 +163,42 @@ sends `application/x-www-form-urlencoded`; mailbox stores what it is
 sent, verbatim, so every rendered example and doc snippet carries an
 explicit `-H 'content-type: …'`. The dashboard sniffs content for
 *display* only, never rewriting stored metadata.
+
+## AR2 amendment (mini-round, 2026-08-28) · browser-executable payloads
+
+**Original decision.** The raw receive response returns the payload bytes
+verbatim with the content type the publisher sent. Payload fidelity is the
+contract.
+
+**The insight.** The content type is attacker-chosen (any LAN device may
+publish) and a browser treats it as an instruction. A payload published as
+`text/html` executed in the hub's own origin for anyone opening the receive
+URL — an iframe on a hostile page is enough — where it could read every
+topic and drive every endpoint as the operator. AR11 already said payloads
+are untrusted wherever rendered; this endpoint did not honour it.
+
+**Decided.** `X-Content-Type-Options: nosniff` on every raw response, and
+`Content-Disposition: attachment` **only** for types a browser would
+execute: `text/html`, `application/xhtml+xml`, `image/svg+xml`, `text/xml`,
+`application/xml`, `text/xsl`, anything ending in `+xml`, and anything
+containing `javascript` or `ecmascript`.
+
+Rejected: attaching everything (measured cost — a browser then downloads
+ordinary JSON, making the API unbrowsable by hand); rewriting the label to
+`application/octet-stream` (breaks the contract for any consumer that
+switches on the content type); and doing nothing (leans on "LAN only", but
+"on the LAN" includes a compromised IoT device, and this hands it the
+operator's browser session on the hub).
+
+**Contract impact.** The content type is still returned exactly as
+published, so AR2's promise holds. Non-browser clients are unaffected,
+verified against the container: `curl` returns an identical body. The
+envelope response shape is untouched.
+
+**Proven by** `p7_sec3_a_payload_cannot_render_itself_in_the_hubs_origin`,
+`p7_sec3_an_ordinary_payload_still_opens_in_a_browser`, and
+`p7_sec3_every_executable_type_is_forced_to_download`, which checks all ten
+list entries individually rather than assuming the rule.
 
 ## AR3 · Storage: materialized fan-out, backlogs win over retention
 
