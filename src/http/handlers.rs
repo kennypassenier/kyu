@@ -16,7 +16,7 @@ use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
 
-use crate::dashboard::{self, MessageView, SubscriptionView, TopicView};
+use crate::dashboard::{self, DeadLetterView, MessageView, SubscriptionView, TopicView};
 use crate::engine::policy::Policy;
 use crate::engine::{Claimed, EngineError, NewSubscription, Received, Settled, names};
 use crate::store::queries::{self, StoredPolicy};
@@ -705,7 +705,7 @@ pub async fn unarchive(
     let engine = state.engine.clone();
     let topic_for_response = topic.clone();
     let subscription_for_response = subscription.clone();
-    spawn_engine(move || engine.unarchive(&topic, &subscription)).await?;
+    let changed = spawn_engine(move || engine.unarchive(&topic, &subscription)).await?;
 
     tracing::info!(
         topic = %topic_for_response,
@@ -713,14 +713,22 @@ pub async fn unarchive(
         "subscription unarchived"
     );
 
+    let note = if changed {
+        "this subscription receives messages published from now on; the backlog it \
+         held when it was archived was settled as lapsed. Poll with ?from=beginning \
+         to pick up what the topic still retains."
+    } else {
+        "this subscription was not archived, so nothing changed and no event was \
+         published."
+    };
+
     Ok((
         StatusCode::OK,
         axum::Json(json!({
             "unarchived": subscription_for_response,
             "topic": topic_for_response,
-            "note": "this subscription receives messages published from now on; the \
-                     backlog it held when it was archived was settled as lapsed. Poll \
-                     with ?from=beginning to pick up what the topic still retains.",
+            "changed": changed,
+            "note": note,
         })),
     )
         .into_response())
@@ -789,6 +797,11 @@ pub async fn put_retention(
 /// How many recent messages a topic page shows.
 const RECENT_MESSAGES: usize = 20;
 
+/// How many dead letters a topic page shows (K6). Bounded because a broken
+/// consumer can produce a great many, and a page that will not load is no
+/// use on the night you need it.
+const DEAD_LETTERS_SHOWN: usize = 50;
+
 /// K10 · `GET /` — every topic on the hub.
 pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
@@ -839,6 +852,11 @@ pub async fn dashboard_topic(
                     .into_iter()
                     .map(MessageView::from)
                     .collect();
+            let dead_letters: Vec<DeadLetterView> =
+                queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?
+                    .into_iter()
+                    .map(DeadLetterView::from)
+                    .collect();
 
             // The snippets carry this topic's own most recent payload and a
             // subscription that genuinely exists, so what you copy is what
@@ -859,6 +877,7 @@ pub async fn dashboard_topic(
                 TopicView::from(summary),
                 subscriptions,
                 messages,
+                dead_letters,
                 snippets,
                 engine.now_ms(),
             )?))
@@ -909,6 +928,47 @@ pub async fn dashboard_publish(
 
     state.notifiers.wake(&topic, &published.delivered_to);
     tracing::info!(topic = %topic, id = %published.id, "test message published from the dashboard");
+
+    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+}
+
+/// K6 · `POST /t/{topic}/dashboard/requeue` — the requeue button.
+pub async fn dashboard_requeue(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let form = String::from_utf8_lossy(&body);
+    let field = |name: &str| {
+        form.split('&')
+            .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            .map(urldecode)
+    };
+
+    let subscription = field("subscription").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "the requeue form did not name a subscription",
+            "use the button on the dashboard's dead-letter table, or call \
+             POST /api/t/<topic>/subs/<subscription>/dead/<id>/requeue directly.",
+        )
+    })?;
+    let id = field("id").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "the requeue form did not name a message",
+            "use the button on the dashboard's dead-letter table, which fills this in.",
+        )
+    })?;
+
+    let engine = state.engine.clone();
+    let topic_for_engine = topic.clone();
+    let subscription_for_wake = subscription.clone();
+    spawn_engine(move || engine.requeue_dead(&topic_for_engine, &subscription, &id)).await?;
+
+    state
+        .notifiers
+        .wake(&topic, std::slice::from_ref(&subscription_for_wake));
 
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }

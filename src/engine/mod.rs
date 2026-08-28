@@ -494,10 +494,19 @@ impl Engine {
     /// K11 · brings an archived subscription back. Deliberately explicit:
     /// a poll will not do it, so nobody resumes without seeing that the
     /// backlog was lapsed.
-    pub fn unarchive(&self, topic: &str, subscription: &str) -> Result<()> {
+    pub fn unarchive(&self, topic: &str, subscription: &str) -> Result<bool> {
         let now = self.clock.now_ms();
-        self.store.write(|tx| -> Result<()> {
+        self.store.write(|tx| -> Result<bool> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+
+            // Idempotent, but not noisy with it: unarchiving something that
+            // was never archived changes nothing, so it announces nothing.
+            // A spurious subscription.unarchived event would wake whatever
+            // HA automation listens to mailbox.events for no reason.
+            if queries::subscription_state(tx, sub_id)? != "archived" {
+                return Ok(false);
+            }
+
             queries::set_subscription_state(tx, sub_id, "active")?;
             queries::touch_subscription_poll(tx, sub_id, now)?;
             let mut ids = self.ids.lock().expect("the id lock is never poisoned");
@@ -510,7 +519,7 @@ impl Engine {
                     subscription: subscription.to_string(),
                 },
             )?;
-            Ok(())
+            Ok(true)
         })
     }
 

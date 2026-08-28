@@ -19,7 +19,9 @@ use serde::Serialize;
 
 use crate::engine::clock::Millis;
 use crate::engine::policy::Policy;
-use crate::store::queries::{RecentMessage, StoredPolicy, SubscriptionSummary, TopicSummary};
+use crate::store::queries::{
+    RecentMessage, StoredPolicy, SubscriptionSummary, TopicDeadLetter, TopicSummary,
+};
 
 /// How much of a payload the dashboard shows. Enough to recognise a
 /// message; the rest is announced rather than dropped in silence (AR11).
@@ -128,6 +130,37 @@ impl From<RecentMessage> for MessageView {
     }
 }
 
+/// K6 · a dead letter as the dashboard shows it: which subscription gave up
+/// on it, when, after how many attempts, and what it actually said.
+#[derive(Debug, Clone, Serialize)]
+pub struct DeadLetterView {
+    pub subscription: String,
+    pub id: String,
+    pub published_at: Millis,
+    pub dead_at: Option<Millis>,
+    pub attempts: i64,
+    pub content_type: Option<String>,
+    pub payload: PayloadView,
+    pub note: Option<String>,
+}
+
+impl From<TopicDeadLetter> for DeadLetterView {
+    fn from(dead: TopicDeadLetter) -> Self {
+        let payload = PayloadView::of(&dead.letter.payload);
+        let note = payload.note();
+        Self {
+            subscription: dead.subscription,
+            id: dead.letter.id,
+            published_at: dead.letter.published_at,
+            dead_at: dead.letter.dead_at,
+            attempts: dead.letter.attempts,
+            content_type: dead.letter.content_type,
+            payload,
+            note,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SubscriptionView {
     pub name: String,
@@ -135,6 +168,7 @@ pub struct SubscriptionView {
     pub backlog: i64,
     pub claimed: i64,
     pub dead: i64,
+    pub lapsed: i64,
     pub last_poll_at: Option<Millis>,
     pub oldest_unacked_at: Option<Millis>,
     pub lease_ms: i64,
@@ -172,6 +206,7 @@ impl From<SubscriptionSummary> for SubscriptionView {
             backlog: summary.backlog,
             claimed: summary.claimed,
             dead: summary.dead,
+            lapsed: summary.lapsed,
             last_poll_at: summary.last_poll_at,
             oldest_unacked_at: summary.oldest_unacked_at,
             lease_ms: effective.lease_ms,
@@ -274,6 +309,7 @@ pub fn render_topic(
     topic: TopicView,
     subscriptions: Vec<SubscriptionView>,
     messages: Vec<MessageView>,
+    dead_letters: Vec<DeadLetterView>,
     snippets: Snippets,
     now: Millis,
 ) -> Result<String> {
@@ -284,6 +320,7 @@ pub fn render_topic(
             topic => topic,
             subscriptions => subscriptions,
             messages => messages,
+            dead_letters => dead_letters,
             snippets => snippets,
             now => now,
         })

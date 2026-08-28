@@ -58,4 +58,22 @@ AFTER=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0"
 STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "${HUB}/t/notify.kenny/next?as=printer&wait=0" || true)
 [ "$STATUS" = "204" ] || { echo "the acked message came back (status $STATUS)"; exit 1; }
 
-printf '\nOK: three verbs, healthcheck and restart all behaved.\n'
+say "upgrade: the same volume against a freshly built image"
+# The only place migration, snapshot and the healthcheck start-period meet
+# in reality is an existing volume meeting a new image — which is what every
+# pull on the LXC does.
+docker rm -f "$NAME" >/dev/null
+docker run -d --name "$NAME" -p "${PORT}:8080" -v "${VOLUME}:/data" "$IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+    if curl -sf -o /dev/null "${HUB}/healthz"; then break; fi
+    sleep 0.5
+done
+curl -sf -o /dev/null "${HUB}/healthz" || { echo "the hub did not come back after an upgrade"; docker logs "$NAME"; exit 1; }
+
+STILL=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0" \
+        | tr -d '\r' | awk 'tolower($1)=="mailbox-id:"{print $2}')
+[ -z "$STILL" ] || { echo "the upgraded hub redelivered something already acked: $STILL"; exit 1; }
+
+docker exec "$NAME" /usr/local/bin/mailbox --healthcheck
+
+printf '\nOK: three verbs, healthcheck, restart and upgrade all behaved.\n'

@@ -193,6 +193,23 @@ impl Store {
         let bytes = std::fs::metadata(path)
             .with_context(|| format!("cannot stat the backup at {}", path.display()))?
             .len();
+
+        // Open what was just written and ask SQLite whether it is intact. A
+        // backup is only a backup if it restores; reporting success for a
+        // file that merely exists is how a truncated copy gets discovered
+        // on the day it is needed.
+        let verify = Connection::open(path)
+            .with_context(|| format!("the backup at {} cannot be opened", path.display()))?;
+        let integrity: String = verify
+            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
+            .with_context(|| format!("the backup at {} cannot be checked", path.display()))?;
+        anyhow::ensure!(
+            integrity == "ok",
+            "the backup at {} is not a sound database ({integrity}). It has been left \
+             in place for inspection; take another one, and check free space first.",
+            path.display()
+        );
+
         Ok(bytes)
     }
 

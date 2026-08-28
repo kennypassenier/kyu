@@ -872,6 +872,10 @@ pub struct SubscriptionSummary {
     pub backlog: i64,
     pub claimed: i64,
     pub dead: i64,
+    /// Settled when the subscription was archived (K11). AR3 calls for this
+    /// to be visible; a lapsed backlog that nobody can see is the silence
+    /// G8 forbids.
+    pub lapsed: i64,
     pub last_poll_at: Option<Millis>,
     pub oldest_unacked_at: Option<Millis>,
     pub policy: StoredPolicy,
@@ -935,6 +939,8 @@ pub fn subscription_summaries(
                       WHERE d.sub_id = s.id AND d.state = 'claimed'),
                     (SELECT count(*) FROM deliveries d
                       WHERE d.sub_id = s.id AND d.state = 'dead'),
+                    (SELECT count(*) FROM deliveries d
+                      WHERE d.sub_id = s.id AND d.state = 'lapsed'),
                     s.last_poll_at,
                     (SELECT min(m.published_at) FROM deliveries d
                        JOIN messages m ON m.seq = d.msg_seq
@@ -954,15 +960,16 @@ pub fn subscription_summaries(
                 backlog: row.get(2)?,
                 claimed: row.get(3)?,
                 dead: row.get(4)?,
-                last_poll_at: row.get(5)?,
-                oldest_unacked_at: row.get(6)?,
+                lapsed: row.get(5)?,
+                last_poll_at: row.get(6)?,
+                oldest_unacked_at: row.get(7)?,
                 policy: StoredPolicy {
-                    lease_ms: row.get(7)?,
-                    max_attempts: row.get(8)?,
-                    backoff_ms: row.get(9)?,
-                    ttl_ms: row.get(10)?,
-                    idle_flag_ms: row.get(11)?,
-                    idle_archive_ms: row.get(12)?,
+                    lease_ms: row.get(8)?,
+                    max_attempts: row.get(9)?,
+                    backoff_ms: row.get(10)?,
+                    ttl_ms: row.get(11)?,
+                    idle_flag_ms: row.get(12)?,
+                    idle_archive_ms: row.get(13)?,
                 },
             })
         })
@@ -1051,4 +1058,50 @@ pub fn delivery_counts(conn: &rusqlite::Connection) -> Result<Vec<DeliveryCount>
 pub fn scalar(conn: &rusqlite::Connection, sql: &str) -> Result<i64> {
     conn.query_row(sql, [], |row| row.get(0))
         .with_context(|| format!("cannot run {sql}"))
+}
+
+// ─── Phase 7 · hardening ───────────────────────────────────────────────────
+
+/// A dead letter with the subscription it belongs to, for the dashboard's
+/// dead-letter section (K6, K10).
+#[derive(Debug, Clone)]
+pub struct TopicDeadLetter {
+    pub subscription: String,
+    pub letter: DeadLetter,
+}
+
+pub fn dead_letters_for_topic(
+    conn: &rusqlite::Connection,
+    topic_id: i64,
+    limit: usize,
+) -> Result<Vec<TopicDeadLetter>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT s.name, m.id, m.published_at, d.dead_at, d.attempts, m.content_type, m.payload
+               FROM deliveries d
+               JOIN subscriptions s ON s.id = d.sub_id
+               JOIN messages m ON m.seq = d.msg_seq
+              WHERE s.topic_id = ?1 AND d.state = 'dead'
+              ORDER BY d.dead_at DESC, m.seq DESC
+              LIMIT ?2",
+        )
+        .context("cannot list the topic's dead letters")?;
+    let rows = statement
+        .query_map((topic_id, limit as i64), |row| {
+            Ok(TopicDeadLetter {
+                subscription: row.get(0)?,
+                letter: DeadLetter {
+                    id: row.get(1)?,
+                    published_at: row.get(2)?,
+                    dead_at: row.get(3)?,
+                    attempts: row.get(4)?,
+                    content_type: row.get(5)?,
+                    payload: row.get(6)?,
+                },
+            })
+        })
+        .context("cannot list the topic's dead letters")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the topic's dead letters")?;
+    Ok(rows)
 }

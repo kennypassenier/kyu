@@ -24,7 +24,7 @@
 <table>
   <tr>
     <th>Name</th><th>State</th><th class="num">Backlog</th><th class="num">In flight</th>
-    <th class="num">Dead</th><th>Oldest unacked</th><th>Policy</th>
+    <th class="num">Dead</th><th class="num">Lapsed</th><th>Oldest unacked</th><th>Policy</th>
   </tr>
   {% for subscription in subscriptions %}
   <tr>
@@ -33,6 +33,7 @@
     <td class="num">{{ subscription.backlog }}</td>
     <td class="num">{{ subscription.claimed }}</td>
     <td class="num">{% if subscription.dead > 0 %}<strong>{{ subscription.dead }}</strong>{% else %}0{% endif %}</td>
+    <td class="num">{{ subscription.lapsed }}</td>
     <td>{% if subscription.oldest_unacked_at %}{{ subscription.oldest_unacked_at }}{% else %}<span class="empty">nothing waiting</span>{% endif %}</td>
     <td>
       lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
@@ -44,6 +45,38 @@
 </table>
 {% else %}
 <p class="empty">Nothing has polled this topic yet.</p>
+{% endif %}
+
+<h2>Dead letters</h2>
+{% if dead_letters %}
+<p class="sub">These gave up. Nothing is lost — each one waits here until you deal with it.</p>
+<table>
+  <tr><th>Subscription</th><th>Id</th><th>Died</th><th class="num">Attempts</th><th>Payload</th><th></th></tr>
+  {% for dead in dead_letters %}
+  <tr>
+    <td>{{ dead.subscription }}</td>
+    <td><code>{{ dead.id }}</code></td>
+    <td>{% if dead.dead_at %}{{ dead.dead_at }}{% else %}<span class="empty">unknown</span>{% endif %}<br>
+        <span class="empty">published {{ dead.published_at }}</span></td>
+    <td class="num">{{ dead.attempts }}</td>
+    <td>
+      {% if dead.payload.binary %}<span class="empty">{{ dead.note }}</span>
+      {% else %}<code>{{ dead.payload.text }}</code>
+        {% if dead.note %}<br><span class="empty">{{ dead.note }}</span>{% endif %}
+      {% endif %}
+    </td>
+    <td>
+      <form method="post" action="/t/{{ topic.name }}/dashboard/requeue">
+        <input type="hidden" name="subscription" value="{{ dead.subscription }}">
+        <input type="hidden" name="id" value="{{ dead.id }}">
+        <button type="submit">Requeue</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="empty">Nothing has been dead-lettered on this topic.</p>
 {% endif %}
 
 <h2>Recent messages</h2>
