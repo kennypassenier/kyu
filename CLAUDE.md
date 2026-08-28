@@ -13,10 +13,18 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 6 · Development loop — all milestones built (L0–L8) |
-| Last completed gate | L5 crash-safety (2026-08-12); L6–L8 built in AFK mode, awaiting the combined report |
-| Next gate | Combined Phase 6 report for L6, L7 and L8 |
-| AFK mode | on — L6–L8 accumulate into one combined report |
+| Current phase | 7 · Hardening |
+| Last completed gate | Phase 7 gap decisions (2026-08-28): 16 gaps, all closed; 144 tests |
+| Next gate | Phase 7 report, then queued mini-rounds from the 2026-08-28 procedure update |
+| AFK mode | off |
+
+### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
+
+| Item | Status |
+|---|---|
+| Update & distribution mechanism | covered in substance by K13 (tag → GitHub Release → ghcr image, pulled by compose); to be recorded formally |
+| Ecosystem integration | NOT discussed — mailbox ships a compose file but no homelab v2 preset manifest |
+| Backup & restore | partially: W8 is a manual endpoint with an exercised restore; no AUTOMATIC scheduled backup |
 
 <!-- Update this block after every completed gate. -->
 

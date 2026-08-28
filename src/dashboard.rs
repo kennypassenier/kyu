@@ -243,6 +243,36 @@ impl From<TopicSummary> for TopicView {
     }
 }
 
+/// Whether a stored content type is safe to print inside a shell command:
+/// a token, a slash, a token, and optional `; key=value` parameters. No
+/// quotes, no spaces beyond the parameter separators, no shell metacharacters.
+fn is_plain_media_type(value: &str) -> bool {
+    fn is_token(part: &str) -> bool {
+        !part.is_empty()
+            && part.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric()
+                    || matches!(
+                        byte,
+                        b'!' | b'#' | b'$' | b'&' | b'^' | b'_' | b'.' | b'+' | b'-'
+                    )
+            })
+    }
+
+    let mut parts = value.split(';');
+    let Some((kind, subtype)) = parts.next().and_then(|media| media.split_once('/')) else {
+        return false;
+    };
+    if !is_token(kind) || !is_token(subtype) {
+        return false;
+    }
+    parts.all(|parameter| {
+        parameter
+            .trim()
+            .split_once('=')
+            .is_some_and(|(name, argument)| is_token(name) && is_token(argument.trim_matches('"')))
+    })
+}
+
 /// The copy-paste examples, rendered with this topic's own real payload and
 /// a subscription name that actually exists. Generic documentation is what
 /// you skim; your own data is what you trust (S1).
@@ -270,7 +300,15 @@ impl Snippets {
             }
             _ => r#"{"hello":"world"}"#.to_string(),
         };
-        let content_type = content_type.unwrap_or("application/json");
+        // The content type is whatever a publisher put in the header, and
+        // this string is pasted into a shell. A quote in it closes the
+        // argument and everything after it runs on the operator's machine —
+        // HTML escaping protects the browser, not the clipboard. Anything
+        // that is not an ordinary media type is replaced rather than
+        // escaped, because a snippet nobody can read is no use either.
+        let content_type = content_type
+            .filter(|value| is_plain_media_type(value))
+            .unwrap_or("application/json");
         let name = subscription.unwrap_or("my-consumer");
 
         Self {

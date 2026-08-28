@@ -1,6 +1,7 @@
 //! The HTTP surface (AR2). Routes translate HTTP into engine calls and
 //! back; business logic stays in [`crate::engine`].
 
+pub mod csrf;
 pub mod error;
 pub mod handlers;
 pub mod notify;
@@ -104,5 +105,6 @@ pub fn router(state: AppState) -> Router {
             "/api/t/{topic}/retention",
             get(handlers::get_retention).put(handlers::put_retention),
         )
+        .layer(axum::middleware::from_fn(csrf::same_origin_only))
         .with_state(state)
 }

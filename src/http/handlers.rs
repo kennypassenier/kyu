@@ -381,6 +381,20 @@ fn render(claimed: Claimed, envelope: bool, created: Option<&NewSubscription>) -
         if let Ok(value) = content_type.parse() {
             headers.insert(header::CONTENT_TYPE, value);
         }
+        // The stored content type is reported as AR2 promises, but a payload
+        // published as text/html would otherwise execute in the hub's own
+        // origin for anyone who opens this URL — an iframe on a hostile page
+        // is enough. Handing the bytes over as a download keeps the contract
+        // and takes away the browser rendering; curl neither notices nor
+        // cares.
+        headers.insert(
+            header::CONTENT_DISPOSITION,
+            axum::http::HeaderValue::from_static("attachment"),
+        );
+        headers.insert(
+            axum::http::header::X_CONTENT_TYPE_OPTIONS,
+            axum::http::HeaderValue::from_static("nosniff"),
+        );
         insert_str(headers, HEADER_ID, &message.id);
         insert_str(headers, HEADER_TOPIC, &claimed.topic);
         insert_str(headers, HEADER_ATTEMPT, &attempt.to_string());
