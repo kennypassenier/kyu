@@ -90,6 +90,60 @@ That is precisely why the key is a separate variable rather than derived from
 the token: so that rotating a leaked password does not silently take every
 integration down with it.
 
+## Releases and updates
+
+Pushing a version tag publishes a Docker image to GHCR:
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+`.github/workflows/release-image.yml` then builds and pushes
+`ghcr.io/kennypassenier/mailbox:0.1.0` and `:latest`. The workflow is taken
+from the homelab's `templates/rust-service/`, so every one of these Rust
+repos ships the same way — one shape to remember instead of four.
+
+Two things that are deliberately *not* automatic:
+
+- **The GitHub Release itself.** The workflow publishes the image, not a
+  release. Writing release notes is a human act; `gh release create` at the
+  moment you mean it.
+- **Deployment.** The LXC pulls `:latest` through compose. Deployed via the
+  homelab preset it also carries `com.homelab.update.policy=auto`, so the
+  nightly run updates it and rolls back on a failed health check.
+
+One unverified detail, carried over from the homelab guide and repeated here
+so nobody has to rediscover it: that guide says the GHCR package is created
+**private** even on a public repo and has to be flipped to public once. It
+has never been checked against a real package. The first tag settles it.
+
+## Backups
+
+The store is one SQLite file. Two routes, and they are not equivalent:
+
+**Through the homelab** (the supported route). `presets/mailbox/` in the
+homelab repo binds the data directory under `/appdata/<stack>/mailbox-config`,
+which is what restic walks: encrypted, off-site, 7 daily / 4 weekly / 3
+monthly, with a restore drill scheduled quarterly. The preset also carries
+`com.homelab.backup.pause=true`, which stops the container while the snapshot
+is taken — SQLite copied mid-write is not a database.
+
+**Standalone** (this repo's `compose.yml`). It uses a named volume, on
+purpose: the image is distroless and runs as uid 65532, and a bind mount does
+not inherit that ownership, so `- ./data:/data` makes the hub refuse to start
+until you chown the directory. The cost is that restic cannot see a named
+volume — so on the standalone route, backups are yours to arrange:
+
+```bash
+curl -X POST -H "authorization: Bearer $MAILBOX_TOKEN" http://hub.lan:8080/api/backup
+```
+
+That writes a consistent copy beside the store while the hub keeps serving,
+opens it, integrity-checks it, and answers with the path and the restore
+procedure. A backup that will not restore is not a backup, which is what its
+test asserts: take one under load, restore it into a fresh directory, deliver
+a message out of it.
+
 ## Configuration
 
 Two layers, and the distinction matters: the **environment** configures the

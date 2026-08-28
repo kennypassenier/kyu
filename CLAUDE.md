@@ -14,18 +14,19 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | 7 · Hardening |
-| Last completed gate | W2 mini-round (2026-08-28): shared-token auth built; 189 tests |
-| Next gate | Remaining queued mini-rounds, then Phase 8 |
+| Last completed gate | Mini-rounds M1-M4 (2026-08-28): distribution, ecosystem, backup, toolchain |
+| Next gate | Phase 8 · Documentation |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
-| Shared-token auth (W2) | **DONE** 2026-08-28 — mini-round over three rounds; door, per-app tokens, login page, masked snippets |
-| Update & distribution mechanism | covered in substance by K13 (tag → GitHub Release → ghcr image, pulled by compose); to be recorded formally |
-| Ecosystem integration | NOT discussed — mailbox ships a compose file but no homelab v2 preset manifest |
-| Backup & restore | partially: W8 is a manual endpoint with an exercised restore; no AUTOMATIC scheduled backup |
+| Shared-token auth (W2) | **DONE** 2026-08-28 — door, per-app tokens, login page, masked snippets |
+| Update & distribution (M1) | **DONE** 2026-08-28 — `release-image.yml` adopted from the homelab template; K13's false "verified end-to-end" claim removed. Unproven until the first tag (Phase 9) |
+| Ecosystem integration (M2) | **DONE** 2026-08-28 — `presets/mailbox/` committed in ~/Projects/homelab (8c7b5e8, not pushed). Native-binary deployment investigated and rejected: not built or planned there |
+| Backup & restore (M3) | **DONE** 2026-08-28 — rides the homelab's restic backup via the preset's `/appdata` bind + pause label; no in-hub scheduler, on purpose |
+| Toolchain pin (M4) | **DONE** 2026-08-28 — `rust-toolchain.toml`, after a green local gate let a red CI through |
 
 <!-- Update this block after every completed gate. -->
 

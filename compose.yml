@@ -10,6 +10,20 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      # A named volume, deliberately, and the reason is worth knowing before
+      # you "fix" it: the image is distroless and runs as uid 65532, and the
+      # Dockerfile hands /data to that user. A named volume inherits that
+      # ownership; a bind mount does not, so `- ./data:/data` makes the hub
+      # refuse to start until you chown the directory yourself. Tried and
+      # measured on 2026-08-28, not assumed.
+      #
+      # The cost, and it is real: the homelab's nightly restic backup walks
+      # host directories, so a named volume is invisible to it. Deploying
+      # THROUGH the homelab therefore uses its own preset
+      # (presets/mailbox/), whose compose binds /appdata/<stack>/
+      # mailbox-config and carries the backup labels. This file is the
+      # standalone route; back it up with POST /api/backup (W8) or a host
+      # snapshot of the volume.
       - mailbox-data:/data
     environment:
       MAILBOX_LISTEN: 0.0.0.0:8080

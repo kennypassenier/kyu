@@ -363,6 +363,44 @@ numbered runbook procedure (Phase 8). The Docker healthcheck
 start-period must exceed worst-case migration time so a restart loop
 cannot kill a migration mid-flight.
 
+## AR12 · Deployment, distribution and backup *(added by the 2026-08-28 mini-rounds M1-M4)*
+
+Three Phase 2 mandatory items the procedure gained after this project froze
+its features, plus one that surfaced while closing them. Recorded here
+because they are architecture, not implementation detail.
+
+- **Distribution (M1).** A `v*` tag publishes a GHCR image, using the
+  workflow from `~/Projects/homelab/templates/rust-service/` verbatim rather
+  than a hand-written one — four Rust repos shipping the same way is worth
+  more than a workflow tuned to this one. The GitHub Release stays a manual
+  `gh release create`: the adopted template does not create one, and adding
+  that would mean diverging from the shared shape unasked.
+- **Ecosystem (M2).** mailbox deploys through the homelab as a preset
+  (`presets/mailbox/` in that repo), which is the interface its own G9
+  feature defines: an image on GHCR plus a preset, and *zero orchestrator
+  code*. Kenny asked whether the binary could run natively and update
+  itself; the answer is that the homelab has no such path built or planned,
+  its only systemd unit is its own daemon, and adding one would be the
+  orchestrator work G9 exists to avoid. For mailbox specifically the gain
+  would be close to zero — the binary is static musl and the image around it
+  is empty — while the loss is the nightly update with rollback, the backups
+  and the parking, all keyed on containers.
+- **Backup (M3).** The homelab's restic backup is the real one: encrypted,
+  off-site, 7d/4w/3m, with a quarterly restore drill. mailbox rides it by
+  binding its data under `/appdata/<stack>/` in the preset and carrying
+  `com.homelab.backup.pause=true`, because SQLite copied mid-write does not
+  restore. No scheduler was built into the hub: a copy beside the original,
+  on the same disk, unencrypted, does not survive the failure you are
+  actually afraid of. W8's manual endpoint remains the standalone answer.
+  **Measured, not assumed:** the standalone `compose.yml` keeps a *named
+  volume* on purpose — the distroless image runs as uid 65532 and a bind
+  mount does not inherit that, so `- ./data:/data` makes the hub refuse to
+  start. That refusal was reproduced before this text was written.
+- **Toolchain (M4).** `rust-toolchain.toml` pins the channel and CI asks for
+  the same version rather than for "stable". Without it a green local gate
+  did not predict a green build, which stopped being theoretical the day
+  1.98 added a lint 1.97 did not have.
+
 ## AR11 · Security model and payload display
 
 - LAN threat model (N3); no auth in v1 (W2 = Later, additive). Binding

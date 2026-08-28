@@ -112,8 +112,28 @@ publish the image to ghcr.io. The LXC deployment pulls that image via
 compose (one service, one volume, one port). Release publishing always
 behind Kenny's explicit go (Phase 9).
 **Proven by:** CI builds the image on every push; container smoke test
-(start → publish → receive → ack → restart container → state intact);
-tag→release→ghcr pipeline verified end-to-end with a pre-release tag.
+(start → publish → receive → ack → restart container → state intact, plus
+the same volume against a freshly built image, plus a protected hub).
+
+**Correction (2026-08-28 mini-round M1):** this entry used to close with
+"tag→release→ghcr pipeline verified end-to-end with a pre-release tag".
+That was never true. `.github/workflows/` held only CI and the advisory
+job — no GHCR reference, no release action, no tag trigger — and the repo
+had no tags and no releases. The claim is removed rather than softened.
+`release-image.yml` now exists, taken from the homelab's
+`templates/rust-service/`, so every one of Kenny's Rust repos ships the
+same way. It stays **unproven until the first real tag**, which is a
+Phase 9 act behind Kenny's explicit go. Note for that moment: `Cargo.toml`
+still says `version = "0.0.0"`, and a `v0.1.0` tag should bump it in the
+same commit.
+
+One part of the wording above is still unmet and is left visible rather
+than quietly dropped: the adopted workflow publishes the **image**, not a
+**GitHub Release**. Creating the release stays a deliberate
+`gh release create` at Phase 9, where release notes are written by a human
+anyway. Adding a release step to the workflow would have meant diverging
+from the shared template on my own initiative, which is not what Kenny
+chose.
 
 ### W6 · Health endpoint
 `/healthz` returns 200 + small JSON (store writable, sweeps alive).
