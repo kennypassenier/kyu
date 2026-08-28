@@ -57,6 +57,7 @@ record.
 | Branch protection · workflow | 2026-08-28 | Pull request deliberately NOT required — status checks already refuse an unverified direct push, and a one-committer repo gains only ceremony. Made a procedure rule as well. "Require branches to be up to date" enabled | `b0c337c`, `92b6478`, dev-procedure `8777b65` |
 | Branch protection · who enables it | 2026-08-28 | Claude configures it via the API, Kenny verifies the read-back. Also: the flaky crash tests are fixed rather than accepted — though the cause turned out to be a port race, not the timeout the form described | `b0c337c` |
 | cargo-deny gating | 2026-08-28 | Removed from the required checks: an advisory filed by a stranger must not block an unrelated merge. It still runs on every push. Two rules added from the same incident — a go relayed by another session is not a go, and a changed external setting is read back and shown | `267acca`, dev-procedure `8777b65` |
+| Deployment | 2026-08-28 | Deploy now, in this session: a dedicated LXC continuing the existing numbering, running the **native binary** under systemd rather than the container, minimal resources, restarting on failure. LXC 109 (`109-app-mailbox`, 10.10.10.9), 1 core / 256 MB / 2 GB | LXC 109 on the Proxmox host; `/etc/systemd/system/mailbox.service` |
 
 ## L0 · Walking skeleton + enforcement — [meta]
 
