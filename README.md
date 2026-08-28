@@ -41,9 +41,67 @@ docker compose up -d
 curl localhost:8080/healthz
 ```
 
-Configuration is environment-only: `MAILBOX_LISTEN`,
-`MAILBOX_DATA_DIR`, `MAILBOX_MAX_BODY_BYTES`, `MAILBOX_LOG`. Everything
-per-topic or per-subscription is policy and lives in the database.
+## Configuration
+
+Two layers, and the distinction matters: the **environment** configures the
+process and sets hub-wide defaults, while **policy** lives in the database
+and belongs to one topic or one subscription. Nothing that varies per
+consumer is an environment variable.
+
+### Environment — the process and its defaults
+
+| Variable | Default | What it does |
+|---|---|---|
+| `MAILBOX_LISTEN` | `0.0.0.0:8080` | Address to bind. |
+| `MAILBOX_DATA_DIR` | `/data` | Where the store lives. |
+| `MAILBOX_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
+| `MAILBOX_LOG` | `info` | Log filter (`tracing` syntax). |
+| `MAILBOX_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |
+| `MAILBOX_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
+| `MAILBOX_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
+| `MAILBOX_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
+
+The two idle thresholds are **defaults, not laws** — see below.
+
+### Policy — per subscription
+
+```bash
+curl -X PUT -d '{"ttl_ms":600000}' \
+     http://hub.lan/api/t/notify.kenny/subs/tts/policy
+```
+
+| Field | Default | What it does |
+|---|---|---|
+| `lease_ms` | 30000 | How long a claimed message stays claimed before it is offered again. |
+| `max_attempts` | 5 | Delivery attempts before the message is dead-lettered. |
+| `backoff_ms` | 1000 | Base retry delay; the schedule is linear (1s, 2s, 3s…). |
+| `ttl_ms` | none | Drop messages older than this — "relevant now or never". |
+| `idle_flag_ms` | hub default | This subscription's own flag threshold. |
+| `idle_archive_ms` | hub default | This subscription's own archive threshold. |
+
+A policy write **replaces** the whole policy: a field you leave out returns
+to its default. The response always states what is now in force, which
+fields are explicit, and the resulting retry schedule.
+
+The idle thresholds exist per subscription because the knowledge that a
+consumer only polls monthly lives with that consumer, not with the hub:
+
+```bash
+# a monthly report consumer that must not be archived after 30 quiet days
+curl -X PUT -d '{"idle_flag_ms":5184000000,"idle_archive_ms":15552000000}' \
+     http://hub.lan/api/t/reports.monthly/subs/monthly-report/policy
+```
+
+### Policy — per topic
+
+```bash
+curl -X PUT -d '{"retention_ms":86400000}' http://hub.lan/api/t/notify.kenny/retention
+curl -X PUT -d '{"keep_forever":true}'     http://hub.lan/api/t/print.receipt/retention
+```
+
+Retention never collects a message an active subscription is still holding,
+however old it is — a consumer offline for a fortnight comes back to a
+complete backlog.
 
 ## Development
 

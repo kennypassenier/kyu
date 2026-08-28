@@ -119,6 +119,32 @@ pub fn validate(stored: StoredPolicy) -> Result<(), (&'static str, String)> {
                 .to_string(),
         ));
     }
+    for (field, value) in [
+        ("idle_flag_ms", stored.idle_flag_ms),
+        ("idle_archive_ms", stored.idle_archive_ms),
+    ] {
+        if let Some(threshold) = value
+            && threshold <= 0
+        {
+            return Err((
+                field,
+                "an idle threshold must be longer than zero milliseconds, or the \
+                 subscription would be flagged the moment it is created. Omit it to \
+                 follow the hub-wide default."
+                    .to_string(),
+            ));
+        }
+    }
+    if let (Some(flag), Some(archive)) = (stored.idle_flag_ms, stored.idle_archive_ms)
+        && archive < flag
+    {
+        return Err((
+            "idle_archive_ms",
+            "archiving must not come before flagging, or the warning would never be \
+             seen. Set idle_archive_ms above idle_flag_ms."
+                .to_string(),
+        ));
+    }
     Ok(())
 }
 

@@ -23,7 +23,11 @@ const SNAPSHOTS_KEPT: usize = 2;
 
 /// The schema, one entry per version. Append only — never edit a
 /// published entry, or databases in the field diverge from new ones.
-pub const MIGRATIONS: &[&str] = &[MIGRATION_1_INITIAL_SCHEMA, MIGRATION_2_EVENTS_TOPIC];
+pub const MIGRATIONS: &[&str] = &[
+    MIGRATION_1_INITIAL_SCHEMA,
+    MIGRATION_2_EVENTS_TOPIC,
+    MIGRATION_3_PER_SUBSCRIPTION_IDLE,
+];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
 /// (AR7). `STRICT` makes SQLite enforce the column types instead of
@@ -98,6 +102,14 @@ CREATE INDEX messages_by_topic
 /// `created_at` is 0: it has been there since the schema was.
 const MIGRATION_2_EVENTS_TOPIC: &str = r#"
 INSERT INTO topics (name, retention_ms, created_at) VALUES ('mailbox.events', NULL, 0);
+"#;
+
+/// K11's idle thresholds start as hub-wide defaults, but the knowledge that
+/// a consumer only polls monthly lives with that consumer — so they are
+/// overridable per subscription, like every other policy field (K7).
+const MIGRATION_3_PER_SUBSCRIPTION_IDLE: &str = r#"
+ALTER TABLE subscriptions ADD COLUMN idle_flag_ms INTEGER;
+ALTER TABLE subscriptions ADD COLUMN idle_archive_ms INTEGER;
 "#;
 
 /// Brings `conn` up to the current schema version, returning it.

@@ -751,8 +751,9 @@ impl Engine {
             }
 
             // K11 · idle lifecycle.
-            let flag_cutoff = now.saturating_sub(self.defaults.idle_flag_ms);
-            for subscription in queries::subscriptions_to_flag(tx, flag_cutoff, batch_limit)? {
+            for subscription in
+                queries::subscriptions_to_flag(tx, now, self.defaults.idle_flag_ms, batch_limit)?
+            {
                 queries::set_subscription_state(tx, subscription.id, "flagged")?;
                 report.flagged += 1;
                 let woken = events::emit(
@@ -762,15 +763,18 @@ impl Engine {
                     &Event::SubscriptionFlagged {
                         topic: subscription.topic.clone(),
                         subscription: subscription.name.clone(),
-                        idle_ms: self.defaults.idle_flag_ms,
+                        idle_ms: subscription.idle_ms,
                     },
                 )?;
                 report.wake_events(woken);
             }
 
-            let archive_cutoff = now.saturating_sub(self.defaults.idle_archive_ms);
-            for subscription in queries::subscriptions_to_archive(tx, archive_cutoff, batch_limit)?
-            {
+            for subscription in queries::subscriptions_to_archive(
+                tx,
+                now,
+                self.defaults.idle_archive_ms,
+                batch_limit,
+            )? {
                 queries::set_subscription_state(tx, subscription.id, "archived")?;
                 let lapsed = queries::lapse_outstanding(tx, subscription.id)?;
                 report.archived += 1;

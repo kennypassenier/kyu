@@ -15,6 +15,16 @@ services:
       MAILBOX_LISTEN: 0.0.0.0:8080
       MAILBOX_DATA_DIR: /data
       MAILBOX_LOG: info
+      # MAILBOX_LOG_FORMAT: json          # one JSON object per line, for Loki
+      #
+      # Hub-wide defaults. Every one of these can be overridden per topic or
+      # per subscription through the API, so these are the starting point
+      # rather than the rule:
+      #   MAILBOX_RETENTION_MS      604800000 (7d), or "never" to keep forever
+      #   MAILBOX_IDLE_FLAG_MS      604800000 (7d) before a quiet subscription is flagged
+      #   MAILBOX_IDLE_ARCHIVE_MS  2592000000 (30d) before it is archived
+      # A consumer with a slower rhythm sets its own idle_flag_ms and
+      # idle_archive_ms in its subscription policy — see the README.
     # The healthcheck is defined in the Dockerfile and inherited here:
     # the binary probes itself, because this image has no shell to run
     # curl from (W6, T9).

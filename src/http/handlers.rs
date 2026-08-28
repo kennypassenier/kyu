@@ -497,9 +497,18 @@ pub async fn get_policy(
     Path((topic, subscription)): Path<(String, String)>,
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
+    let defaults = engine.defaults();
     let (effective, stored) = spawn_engine(move || engine.policy(&topic, &subscription)).await?;
+    let idle = (
+        stored.idle_flag_ms.unwrap_or(defaults.idle_flag_ms),
+        stored.idle_archive_ms.unwrap_or(defaults.idle_archive_ms),
+    );
 
-    Ok((StatusCode::OK, axum::Json(policy_json(effective, stored))).into_response())
+    Ok((
+        StatusCode::OK,
+        axum::Json(policy_json(effective, stored, idle)),
+    )
+        .into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -508,6 +517,10 @@ pub struct PolicyBody {
     pub max_attempts: Option<i64>,
     pub backoff_ms: Option<i64>,
     pub ttl_ms: Option<i64>,
+    /// K11 · this subscription's own idle thresholds, for a consumer whose
+    /// normal rhythm is slower than the hub's default.
+    pub idle_flag_ms: Option<i64>,
+    pub idle_archive_ms: Option<i64>,
 }
 
 /// K7 · `PUT /api/t/{topic}/subs/{sub}/policy`
@@ -536,12 +549,19 @@ pub async fn put_policy(
         max_attempts: parsed.max_attempts,
         backoff_ms: parsed.backoff_ms,
         ttl_ms: parsed.ttl_ms,
+        idle_flag_ms: parsed.idle_flag_ms,
+        idle_archive_ms: parsed.idle_archive_ms,
     };
 
     let engine = state.engine.clone();
+    let defaults = engine.defaults();
     let topic_for_log = topic.clone();
     let subscription_for_log = subscription.clone();
     let effective = spawn_engine(move || engine.set_policy(&topic, &subscription, stored)).await?;
+    let idle = (
+        stored.idle_flag_ms.unwrap_or(defaults.idle_flag_ms),
+        stored.idle_archive_ms.unwrap_or(defaults.idle_archive_ms),
+    );
 
     tracing::info!(
         topic = %topic_for_log,
@@ -553,10 +573,14 @@ pub async fn put_policy(
         "subscription policy set"
     );
 
-    Ok((StatusCode::OK, axum::Json(policy_json(effective, stored))).into_response())
+    Ok((
+        StatusCode::OK,
+        axum::Json(policy_json(effective, stored, idle)),
+    )
+        .into_response())
 }
 
-fn policy_json(effective: Policy, stored: StoredPolicy) -> serde_json::Value {
+fn policy_json(effective: Policy, stored: StoredPolicy, idle: (i64, i64)) -> serde_json::Value {
     // Reporting both means the dashboard can show "30000 (default)" instead
     // of leaving you to guess where a number came from.
     json!({
@@ -565,12 +589,16 @@ fn policy_json(effective: Policy, stored: StoredPolicy) -> serde_json::Value {
             "max_attempts": effective.max_attempts,
             "backoff_ms": effective.backoff_ms,
             "ttl_ms": effective.ttl_ms,
+            "idle_flag_ms": idle.0,
+            "idle_archive_ms": idle.1,
         },
         "explicit": {
             "lease_ms": stored.lease_ms,
             "max_attempts": stored.max_attempts,
             "backoff_ms": stored.backoff_ms,
             "ttl_ms": stored.ttl_ms,
+            "idle_flag_ms": stored.idle_flag_ms,
+            "idle_archive_ms": stored.idle_archive_ms,
         },
         "retry_schedule_ms": (1..effective.max_attempts.max(1))
             .map(|attempt| effective.retry_delay_ms(attempt))

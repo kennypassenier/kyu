@@ -288,6 +288,10 @@ pub struct StoredPolicy {
     pub max_attempts: Option<i64>,
     pub backoff_ms: Option<i64>,
     pub ttl_ms: Option<i64>,
+    /// K11 · how long this subscription may go unpolled before it is
+    /// flagged, then archived. `None` follows the hub-wide default.
+    pub idle_flag_ms: Option<i64>,
+    pub idle_archive_ms: Option<i64>,
 }
 
 /// A claimed delivery whose lease ran out, with everything the engine needs
@@ -329,7 +333,8 @@ pub enum RequeueOutcome {
 
 pub fn subscription_policy(tx: &Transaction, sub_id: i64) -> Result<StoredPolicy> {
     tx.query_row(
-        "SELECT lease_ms, max_attempts, backoff_ms, ttl_ms FROM subscriptions WHERE id = ?1",
+        "SELECT lease_ms, max_attempts, backoff_ms, ttl_ms, idle_flag_ms, idle_archive_ms
+           FROM subscriptions WHERE id = ?1",
         [sub_id],
         |row| {
             Ok(StoredPolicy {
@@ -337,6 +342,8 @@ pub fn subscription_policy(tx: &Transaction, sub_id: i64) -> Result<StoredPolicy
                 max_attempts: row.get(1)?,
                 backoff_ms: row.get(2)?,
                 ttl_ms: row.get(3)?,
+                idle_flag_ms: row.get(4)?,
+                idle_archive_ms: row.get(5)?,
             })
         },
     )
@@ -349,7 +356,8 @@ pub fn subscription_policy(tx: &Transaction, sub_id: i64) -> Result<StoredPolicy
 pub fn set_subscription_policy(tx: &Transaction, sub_id: i64, policy: StoredPolicy) -> Result<()> {
     tx.execute(
         "UPDATE subscriptions
-            SET lease_ms = ?2, max_attempts = ?3, backoff_ms = ?4, ttl_ms = ?5
+            SET lease_ms = ?2, max_attempts = ?3, backoff_ms = ?4, ttl_ms = ?5,
+                idle_flag_ms = ?6, idle_archive_ms = ?7
           WHERE id = ?1",
         (
             sub_id,
@@ -357,6 +365,8 @@ pub fn set_subscription_policy(tx: &Transaction, sub_id: i64, policy: StoredPoli
             policy.max_attempts,
             policy.backoff_ms,
             policy.ttl_ms,
+            policy.idle_flag_ms,
+            policy.idle_archive_ms,
         ),
     )
     .context("cannot store the subscription policy")?;
@@ -369,7 +379,8 @@ pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec
     let mut statement = tx
         .prepare(
             "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
-                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
+                    s.idle_flag_ms, s.idle_archive_ms
                FROM deliveries d
                JOIN subscriptions s ON s.id = d.sub_id
                JOIN topics t ON t.id = s.topic_id
@@ -393,6 +404,8 @@ pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec
                     max_attempts: row.get(7)?,
                     backoff_ms: row.get(8)?,
                     ttl_ms: row.get(9)?,
+                    idle_flag_ms: row.get(10)?,
+                    idle_archive_ms: row.get(11)?,
                 },
             })
         })
@@ -407,7 +420,8 @@ pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<V
     let mut statement = tx
         .prepare(
             "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
-                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
+                    s.idle_flag_ms, s.idle_archive_ms
                FROM deliveries d
                JOIN subscriptions s ON s.id = d.sub_id
                JOIN topics t ON t.id = s.topic_id
@@ -433,6 +447,8 @@ pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<V
                     max_attempts: row.get(7)?,
                     backoff_ms: row.get(8)?,
                     ttl_ms: row.get(9)?,
+                    idle_flag_ms: row.get(10)?,
+                    idle_archive_ms: row.get(11)?,
                 },
             })
         })
@@ -528,7 +544,8 @@ pub fn nack_claimed(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<N
 pub fn delivery_of(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Option<Overdue>> {
     tx.query_row(
         "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
-                s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+                s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
+                s.idle_flag_ms, s.idle_archive_ms
            FROM deliveries d
            JOIN subscriptions s ON s.id = d.sub_id
            JOIN topics t ON t.id = s.topic_id
@@ -548,6 +565,8 @@ pub fn delivery_of(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Op
                     max_attempts: row.get(7)?,
                     backoff_ms: row.get(8)?,
                     ttl_ms: row.get(9)?,
+                    idle_flag_ms: row.get(10)?,
+                    idle_archive_ms: row.get(11)?,
                 },
             })
         },
@@ -629,6 +648,8 @@ pub struct SubscriptionRef {
     pub id: i64,
     pub topic: String,
     pub name: String,
+    /// The threshold that actually applied, so the event can say which.
+    pub idle_ms: i64,
 }
 
 pub fn set_topic_retention(
@@ -721,22 +742,25 @@ pub fn backfill_deliveries(
     Ok(inserted)
 }
 
-/// Subscriptions that have not polled since `cutoff`, in one of `states`.
+/// Subscriptions idle longer than their own threshold, or the hub's default
+/// when they have not set one.
 fn idle_subscriptions(
     tx: &Transaction,
     sql: &'static str,
-    cutoff: Millis,
+    now: Millis,
+    default_ms: Millis,
     limit: usize,
 ) -> Result<Vec<SubscriptionRef>> {
     let mut statement = tx
         .prepare(sql)
         .context("cannot scan for idle subscriptions")?;
     let rows = statement
-        .query_map((cutoff, limit as i64), |row| {
+        .query_map((now, default_ms, limit as i64), |row| {
             Ok(SubscriptionRef {
                 id: row.get(0)?,
                 topic: row.get(1)?,
                 name: row.get(2)?,
+                idle_ms: row.get(3)?,
             })
         })
         .context("cannot scan for idle subscriptions")?
@@ -749,16 +773,19 @@ fn idle_subscriptions(
 /// stands in for a subscription that has never polled at all.
 pub fn subscriptions_to_flag(
     tx: &Transaction,
-    cutoff: Millis,
+    now: Millis,
+    default_ms: Millis,
     limit: usize,
 ) -> Result<Vec<SubscriptionRef>> {
     idle_subscriptions(
         tx,
-        "SELECT s.id, t.name, s.name
+        "SELECT s.id, t.name, s.name, COALESCE(s.idle_flag_ms, ?2)
            FROM subscriptions s JOIN topics t ON t.id = s.topic_id
-          WHERE s.state = 'active' AND COALESCE(s.last_poll_at, s.created_at) <= ?1
-          ORDER BY s.id LIMIT ?2",
-        cutoff,
+          WHERE s.state = 'active'
+            AND COALESCE(s.last_poll_at, s.created_at) <= ?1 - COALESCE(s.idle_flag_ms, ?2)
+          ORDER BY s.id LIMIT ?3",
+        now,
+        default_ms,
         limit,
     )
 }
@@ -766,17 +793,19 @@ pub fn subscriptions_to_flag(
 /// K11 · subscriptions idle long enough to stop accumulating messages.
 pub fn subscriptions_to_archive(
     tx: &Transaction,
-    cutoff: Millis,
+    now: Millis,
+    default_ms: Millis,
     limit: usize,
 ) -> Result<Vec<SubscriptionRef>> {
     idle_subscriptions(
         tx,
-        "SELECT s.id, t.name, s.name
+        "SELECT s.id, t.name, s.name, COALESCE(s.idle_archive_ms, ?2)
            FROM subscriptions s JOIN topics t ON t.id = s.topic_id
           WHERE s.state IN ('active', 'flagged')
-            AND COALESCE(s.last_poll_at, s.created_at) <= ?1
-          ORDER BY s.id LIMIT ?2",
-        cutoff,
+            AND COALESCE(s.last_poll_at, s.created_at) <= ?1 - COALESCE(s.idle_archive_ms, ?2)
+          ORDER BY s.id LIMIT ?3",
+        now,
+        default_ms,
         limit,
     )
 }
@@ -910,7 +939,8 @@ pub fn subscription_summaries(
                     (SELECT min(m.published_at) FROM deliveries d
                        JOIN messages m ON m.seq = d.msg_seq
                       WHERE d.sub_id = s.id AND d.state IN ('pending', 'claimed')),
-                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms
+                    s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
+                    s.idle_flag_ms, s.idle_archive_ms
                FROM subscriptions s
               WHERE s.topic_id = ?1
               ORDER BY s.name",
@@ -931,6 +961,8 @@ pub fn subscription_summaries(
                     max_attempts: row.get(8)?,
                     backoff_ms: row.get(9)?,
                     ttl_ms: row.get(10)?,
+                    idle_flag_ms: row.get(11)?,
+                    idle_archive_ms: row.get(12)?,
                 },
             })
         })

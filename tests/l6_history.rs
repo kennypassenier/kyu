@@ -431,7 +431,7 @@ fn l6_events_about_the_events_topic_are_logged_not_republished() {
                 max_attempts: Some(1),
                 lease_ms: Some(1),
                 backoff_ms: Some(0),
-                ttl_ms: None,
+                ..StoredPolicy::default()
             },
         )
         .expect("a policy");
@@ -498,4 +498,93 @@ fn l6_defaults_are_hub_wide_and_configurable() {
         30_000,
         "per-subscription policy is untouched by hub-wide defaults"
     );
+}
+
+// ─── K11 · idle thresholds are defaults, not laws ───────────────────────────
+
+#[test]
+fn l6_a_subscription_can_set_its_own_idle_thresholds() {
+    let f = fixture_with(Defaults {
+        retention_ms: None,
+        ..Defaults::default()
+    });
+    f.bootstrap("reports.monthly", "monthly-report");
+    f.bootstrap("notify.kenny", "ordinary");
+
+    // A consumer whose normal rhythm is monthly would be archived by the
+    // hub-wide 30 days. It says so instead.
+    f.engine
+        .set_policy(
+            "reports.monthly",
+            "monthly-report",
+            StoredPolicy {
+                idle_flag_ms: Some(60 * DAY),
+                idle_archive_ms: Some(180 * DAY),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("its own thresholds");
+
+    f.clock.advance(40 * DAY);
+    f.engine.sweep(100).expect("a sweep");
+
+    assert_eq!(
+        f.state_of("ordinary"),
+        "archived",
+        "the hub default still applies to everyone who has not overridden it"
+    );
+    assert_eq!(
+        f.state_of("monthly-report"),
+        "active",
+        "while a subscription that declared a slower rhythm is left alone"
+    );
+
+    f.clock.advance(25 * DAY);
+    f.engine.sweep(100).expect("a sweep");
+    assert_eq!(
+        f.state_of("monthly-report"),
+        "flagged",
+        "and its own threshold is what eventually applies"
+    );
+}
+
+#[test]
+fn l6_an_idle_policy_that_cannot_work_is_refused() {
+    let f = fixture();
+    f.bootstrap("notify.kenny", "printer");
+
+    let error = f
+        .engine
+        .set_policy(
+            "notify.kenny",
+            "printer",
+            StoredPolicy {
+                idle_flag_ms: Some(30 * DAY),
+                idle_archive_ms: Some(7 * DAY),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect_err("archiving before flagging must be refused");
+    assert!(
+        format!("{error}").contains("idle_archive_ms"),
+        "it names the field: {error}"
+    );
+    assert!(
+        error.remedy().len() > 20,
+        "and says what to do: {}",
+        error.remedy()
+    );
+
+    let zero = f
+        .engine
+        .set_policy(
+            "notify.kenny",
+            "printer",
+            StoredPolicy {
+                idle_flag_ms: Some(0),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect_err("a zero threshold would flag it immediately");
+    assert!(format!("{zero}").contains("idle_flag_ms"));
 }
