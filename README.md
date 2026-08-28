@@ -115,10 +115,13 @@ Two things that are deliberately *not* automatic:
   homelab preset it also carries `com.homelab.update.policy=auto`, so the
   nightly run updates it and rolls back on a failed health check.
 
-One unverified detail, carried over from the homelab guide and repeated here
-so nobody has to rediscover it: that guide says the GHCR package is created
-**private** even on a public repo and has to be flipped to public once. It
-has never been checked against a real package. The first tag settles it.
+The published package is linked to this repository and takes its visibility,
+so a public repo yields a package the homelab host can pull anonymously —
+nothing to flip by hand. (An earlier draft of this section repeated a claim
+from the homelab guide that the package is created private regardless; Kenny
+checked, and it is wrong. The same sentence is still in
+`~/Projects/homelab/docs/PRESET_GUIDE.md` and in its
+`templates/rust-service/release-image.yml`, and should go there too.)
 
 ## Backups
 

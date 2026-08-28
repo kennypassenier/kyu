@@ -6,12 +6,15 @@
 #
 # Tag to release:  git tag v0.1.0 && git push origin v0.1.0
 #
-# UNVERIFIED, carried over from the homelab guide: it claims the GHCR package
-# is created PRIVATE even on a public repo, and must be flipped to public once
-# (repo -> Packages -> package settings -> Change visibility) before the
-# homelab host can pull it anonymously. Nobody has confirmed this against a
-# real package yet. If the first tag produces a public package, this note and
-# the one in the homelab guide should both go.
+# On package visibility: a package published this way is linked to the
+# repository and takes its visibility, so a public repo yields a package the
+# homelab host can pull anonymously. An earlier version of this comment
+# repeated a claim from the homelab guide that the package is created PRIVATE
+# and must be flipped by hand; Kenny checked and that is wrong, so it is gone
+# rather than left to send someone hunting for a setting.
+#
+# If the host ever cannot pull it: repo -> Packages -> package settings is
+# where visibility lives.
 name: release-image
 
 on:
