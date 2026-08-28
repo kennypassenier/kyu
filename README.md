@@ -248,26 +248,42 @@ A commit is refused unless `cargo fmt --check`, `cargo clippy -D
 warnings` and `cargo test --all` pass, no string-built SQL appears in
 `src/`, and the message names the feature IDs it implements.
 
-### Protecting `main` (not enabled — a deliberate open item)
+### Protecting `main`
 
 The commit hooks are local: a clone without `core.hooksPath` has none, and
-nothing on GitHub stops a push whose CI then goes red. That happened twice on
-2026-08-28, once while a release tag was about to be cut.
+nothing on GitHub stopped a push whose CI then went red. That happened twice
+on 2026-08-28, once while a release tag was about to be cut.
 
-Closing it is four clicks nobody can do for you — Settings → Branches → Add
-branch ruleset for `main`:
+Settings → Branches → branch protection rule for `main`:
 
-1. **Require status checks to pass** → add `fmt · clippy · tests`,
-   `container build` and `cargo-deny (advisories · licenses · bans)`.
-2. **Require branches to be up to date before merging.**
-3. Leave **Require a pull request** *off* unless you want that friction: on a
-   one-person repo it means every change goes through a PR. With it off, the
-   status checks still gate a direct push.
-4. Do **not** tick "Allow specified actors to bypass" for yourself — that is
-   the setting that turns the whole thing into decoration.
+- ✅ **Require status checks to pass before merging**, then select
+  `fmt · clippy · tests`, `container build` and
+  `cargo-deny (advisories · licenses · bans)`. **Not**
+  `coverage (informational)` — it runs with `continue-on-error`, so it would
+  always report success and gate nothing.
+- ✅ **Require branches to be up to date before merging.**
+- ✅ **Do not allow bypassing the above settings.** Without it the repo owner
+  is exempt and the whole rule is decoration.
+- ❌ **Require a pull request** — deliberately off (see the workflow below).
+- ❌ **Require signed commits** (nothing here is signed), **Lock branch**
+  (read-only), **Require conversation resolution**, **Require deployments**.
 
-Deliberately not enabled as of 1.0.0 (Kenny's call at the Phase 9 gate:
-after the release, not before it).
+**What this does to your day.** Requiring status checks means a direct push
+of a fresh commit to `main` is refused — the commit has no check result yet,
+with or without the pull-request setting. So the flow becomes:
+
+```bash
+git switch -c work
+git push -u origin work          # CI runs here
+gh run watch                     # wait for green
+git switch main && git merge --ff-only work && git push
+git branch -d work && git push origin --delete work
+```
+
+The protection you want lives entirely in the status checks; the
+pull-request requirement would add review ceremony to a repo with one
+reviewer. Turn it on if you catch yourself pushing before the checks
+finish.
 
 ### Toolchain
 

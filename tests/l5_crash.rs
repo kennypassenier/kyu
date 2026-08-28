@@ -41,10 +41,33 @@ impl Drop for Hub {
     }
 }
 
-/// Grabs a free port by binding and releasing it.
+/// A port no other test in this binary will pick.
+///
+/// Every other suite hands its bound listener straight to the server, so it
+/// never lets go of the port. This one cannot: it spawns the real binary,
+/// which must bind the port itself. Asking the kernel for port 0 and then
+/// releasing it leaves a window, and on a loaded machine two tests running
+/// concurrently were handed the SAME port — one then talked to the other's
+/// hub. It surfaced as "exactly the unacked half comes back: left 50, right
+/// 10" in a test that publishes 21 messages; the 50 belonged to the
+/// 70-message test next door.
+///
+/// The counter is what actually fixes it: two calls in this binary cannot
+/// return the same number, whatever the timing. The bind check only skips
+/// ports something outside this process already holds.
 fn free_port() -> u16 {
-    let listener = TcpListener::bind("127.0.0.1:0").expect("a free port");
-    listener.local_addr().expect("an address").port()
+    use std::sync::atomic::{AtomicU16, Ordering};
+    // Above the ephemeral range Linux hands out by default, so the kernel is
+    // not competing with us for these numbers.
+    static NEXT: AtomicU16 = AtomicU16::new(61_000);
+
+    for _ in 0..500 {
+        let candidate = NEXT.fetch_add(1, Ordering::Relaxed);
+        if TcpListener::bind(("127.0.0.1", candidate)).is_ok() {
+            return candidate;
+        }
+    }
+    panic!("no free port in the test range — is something holding 61000+?");
 }
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
