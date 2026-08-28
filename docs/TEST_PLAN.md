@@ -90,6 +90,16 @@ choices to skip work.
   stays open by design is `/healthz` and `/metrics`, so a LAN observer can
   still learn topic and subscription *names* and their counts, never a
   payload. Proven by `p7_no_token_reaches_the_metrics_or_any_page_in_the_clear`.
+- **The copy button is not covered by an automated test.** Both clipboard
+  paths — `navigator.clipboard.writeText` and the `execCommand` fallback —
+  require a focused document and a real user gesture, by specification. A
+  headless or background tab has neither (`document.hasFocus() === false`,
+  `navigator.userActivation.hasBeenActive === false`), so an automated click
+  always fails there and would prove nothing either way. What *is* covered:
+  the command placed in `data-secret` is the real, working one
+  (`p7_the_snippet_carries_a_working_token_that_is_masked_on_screen`), and
+  the reveal/hide path was exercised end to end against the shipped `app.js`
+  in a real browser on 2026-08-28. The button itself needs a human click.
 - **Single node, no clustering** (N1). Nothing tests failover because
   there is none.
 - **Exactly-once delivery is not offered** (N4). The suites assert

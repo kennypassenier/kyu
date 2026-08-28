@@ -392,11 +392,21 @@ impl Snippets {
     }
 }
 
+/// The cache-busting fingerprint every page appends to its asset URLs.
+fn asset_version() -> &'static str {
+    crate::http::handlers::ASSET_VERSION.as_str()
+}
+
 pub fn render_topics(topics: Vec<TopicView>, now: Millis, protected: bool) -> Result<String> {
     ENVIRONMENT
         .get_template("topics.html")
         .context("the topics template is missing")?
-        .render(minijinja::context! { topics => topics, now => now, protected => protected })
+        .render(minijinja::context! {
+            topics => topics,
+            now => now,
+            protected => protected,
+            assets => asset_version(),
+        })
         .context("cannot render the topic list")
 }
 
@@ -405,7 +415,7 @@ pub fn render_login(error: Option<&str>) -> Result<String> {
     ENVIRONMENT
         .get_template("login.html")
         .context("the login template is missing")?
-        .render(minijinja::context! { error => error })
+        .render(minijinja::context! { error => error, assets => asset_version() })
         .context("cannot render the login page")
 }
 
@@ -461,6 +471,7 @@ pub fn render_apps(apps: &[AppView], error: Option<&str>) -> Result<String> {
             error => error,
             protected => true,
             reveal_seconds => crate::config::REVEAL_SECONDS,
+            assets => asset_version(),
         })
         .context("cannot render the apps page")
 }
@@ -489,6 +500,7 @@ pub fn render_topic(
             protected => protected,
             app_names => app_names,
             reveal_seconds => crate::config::REVEAL_SECONDS,
+            assets => asset_version(),
         })
         .context("cannot render the topic page")
 }

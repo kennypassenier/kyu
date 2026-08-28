@@ -1250,6 +1250,24 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
 const APP_JS: &str = include_str!("../../static/app.js");
 
+/// A short fingerprint of the assets, appended to their URLs in the
+/// templates.
+///
+/// Without it the year-long cache header below would serve yesterday's
+/// JavaScript after an upgrade — which is exactly how a fixed bug appears
+/// not to be fixed. The assets only ever change when the binary does, so
+/// hashing their contents at first use is both sufficient and free.
+pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    // FNV-1a: not cryptographic, and does not need to be — this answers
+    // "did these bytes change", nothing more (T6: no crate for six lines).
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in BOOTSTRAP_CSS.bytes().chain(APP_JS.bytes()) {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+});
+
 /// `GET /static/{file}` — served from memory, never from disk.
 ///
 /// An explicit match rather than a path join: a lookup that builds a path
@@ -1271,10 +1289,10 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
     (
         [
             (header::CONTENT_TYPE, content_type),
-            // Immutable for a day: these change only when the binary does,
-            // and a dashboard that refetches 230 kB on every page view is
-            // needlessly slow over wifi.
-            (header::CACHE_CONTROL, "public, max-age=86400"),
+            // Cached hard, because the URL carries a fingerprint of the
+            // contents (see ASSET_VERSION): a new binary means a new URL,
+            // so there is nothing stale to serve.
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
         ],
         body,
     )

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}mailbox{% endblock %}</title>
-<link rel="stylesheet" href="/static/bootstrap.min.css">
+<link rel="stylesheet" href="/static/bootstrap.min.css?v={{ assets }}">
 <style>
 /* Bootstrap covers the furniture; these are the few things it cannot know
    about — payload cells that must not stretch a table off the page, and the
@@ -17,7 +17,7 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 .secret { font-family: var(--bs-font-monospace); overflow-wrap: anywhere; }
 .tabular { font-variant-numeric: tabular-nums; }
 </style>
-<script src="/static/app.js" defer></script>
+<script src="/static/app.js?v={{ assets }}" defer></script>
 </head>
 <body>
 <nav class="navbar navbar-expand border-bottom mb-4">

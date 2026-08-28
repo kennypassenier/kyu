@@ -4,16 +4,24 @@
 // forms. This file exists for exactly two controls, which is why htmx was
 // dropped rather than actually shipped (T4 amendment).
 //
-// The one thing worth knowing before editing: navigator.clipboard is
-// undefined here. It is gated behind a secure context, and the hub is plain
-// HTTP on a LAN, so the deprecated execCommand path is not laziness — it is
-// the only one that works. It is fed from a textarea placed off-screen
-// rather than hidden, because a display:none element cannot be selected.
+// Copying needs both paths, and which one runs depends on the URL you use:
+//
+// - navigator.clipboard exists only in a "secure context". https qualifies,
+//   and so does http://localhost — so it IS available when you open the hub
+//   on the machine it runs on, and is NOT when you open it at
+//   http://mailbox.lan:8080 from your laptop. Both are normal ways to use
+//   this dashboard, so both paths have to be here.
+// - The execCommand fallback works on plain http, but only inside a real
+//   user gesture. That is fine for a button someone clicks, and it is why an
+//   automated click in a console reports failure while a real one succeeds.
+//
+// The scratch textarea is positioned off-screen rather than hidden, because
+// a display:none element cannot be selected.
 
 (function () {
   "use strict";
 
-  function copyText(text) {
+  function copyLegacy(text) {
     var scratch = document.createElement("textarea");
     scratch.value = text;
     scratch.setAttribute("readonly", "");
@@ -29,6 +37,24 @@
     }
     document.body.removeChild(scratch);
     return copied;
+  }
+
+  // Reports success through a callback rather than a return value, because
+  // the modern path is asynchronous and the legacy one is not.
+  function copyText(text, done) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        function () {
+          done(true);
+        },
+        function () {
+          // Permission refused or no gesture: the old way may still work.
+          done(copyLegacy(text));
+        }
+      );
+      return;
+    }
+    done(copyLegacy(text));
   }
 
   function flash(button, message) {
@@ -47,7 +73,11 @@
       // The secret lives in a data attribute, never in the visible text, so
       // copying works while the value is still masked on screen.
       var text = source ? source.dataset.secret || source.textContent : "";
-      flash(button, copyText(text) ? "Copied" : "Press Ctrl+C");
+      copyText(text, function (copied) {
+        // The honest failure message. Telling someone to press Ctrl+C when
+        // the value on screen is masked would have them copying bullets.
+        flash(button, copied ? "Copied" : "Copy failed — use Reveal");
+      });
       return;
     }
 
