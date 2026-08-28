@@ -3,9 +3,10 @@
 What is proven, where, and what is deliberately not covered. Written at
 the Phase 7 gate on 2026-08-28 and maintained from here on.
 
-**189 tests.** 131 integration tests across thirteen suites, 58 unit tests
+**190 tests.** 131 integration tests across thirteen suites, 59 unit tests
 inside the modules they belong to. *(Was 148 at the Phase 7 gate; the 2026-08-28
-W2 mini-round added the door and its suite.)* Every suite runs on every commit (the
+W2 mini-round added the door and its suite, and the toolchain pin added one
+more after CI caught what the local gate could not.)* Every suite runs on every commit (the
 git hooks refuse a commit whose tests fail) and again in CI.
 
 ## Principles these suites follow

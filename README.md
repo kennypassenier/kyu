@@ -5,10 +5,13 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: in development (L0 of 9).** The walking skeleton builds,
-> serves `/healthz` and ships as a container; the message API itself does
-> not exist yet. This README will only ever claim what the code
-> actually does — the honest pass happens in Phase 8.
+> **Status: feature-complete, not yet released.** Every frozen feature is
+> built and under test (190 tests, CI green on every push). What has *not*
+> happened: no version has been tagged, so no image exists on GHCR yet, and
+> the hub has not run anywhere but a test container. This README claims only
+> what the code does — the honesty pass this line used to promise was done on
+> 2026-08-28, and it found this very block claiming the message API did not
+> exist.
 
 ## The idea
 
@@ -210,6 +213,18 @@ complete backlog.
 
 ## Development
 
+**If you are using mailbox**, these are the ones you want:
+[USER_GUIDE.md](docs/USER_GUIDE.md) (every feature with a command you can
+paste, and where each claim is proven),
+[OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) (numbered procedures:
+deploy, upgrade, back up, restore, rotate tokens),
+[DEBUGGING_GUIDE.md](docs/DEBUGGING_GUIDE.md) (symptom → cause → fix).
+
+**If you are changing mailbox**, add
+[ARCHITECTURE_REFERENCE.md](docs/ARCHITECTURE_REFERENCE.md) (the system as
+built) and [TEST_PLAN.md](docs/TEST_PLAN.md) (what is proven where, and what
+is deliberately not covered).
+
 This project follows a staged procedure; the paper trail is in `docs/`:
 [SCOPE.md](docs/SCOPE.md) (goals and non-goals),
 [FEATURES.md](docs/FEATURES.md) (the frozen feature list),
@@ -227,6 +242,11 @@ git config core.hooksPath .githooks
 A commit is refused unless `cargo fmt --check`, `cargo clippy -D
 warnings` and `cargo test --all` pass, no string-built SQL appears in
 `src/`, and the message names the feature IDs it implements.
+
+The Rust version is pinned in `rust-toolchain.toml` and CI asks for that same
+version rather than for "stable". Without that, a green gate here did not
+predict a green build there — which stopped being theoretical the day 1.98
+added a lint 1.97 had never heard of.
 
 ## License
 
