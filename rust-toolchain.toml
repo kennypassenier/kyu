@@ -1,0 +1,15 @@
+# The one Rust this project builds with, here and in CI (Kenny's decision,
+# 2026-08-28 mini-round M4).
+#
+# Without this file CI took whatever "stable" was that day while this machine
+# stayed on 1.97, so `.claude/hooks/gates.sh` could pass locally and the same
+# commit fail on GitHub — which is exactly what happened when 1.98 added a
+# lint the local clippy did not have. A gate that does not predict the build
+# is not a gate.
+#
+# Raising it is a deliberate act: bump the channel here and Cargo.toml's
+# rust-version together, run the gates, and fix whatever the newer clippy
+# has learned to complain about.
+[toolchain]
+channel = "1.97"
+components = ["rustfmt", "clippy"]
