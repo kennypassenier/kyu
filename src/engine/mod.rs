@@ -798,13 +798,13 @@ impl Engine {
                 queries::collect_retained(tx, now, self.defaults.retention_ms, batch_limit)?;
             if collected > 0 {
                 report.collected = collected;
-                let woken = events::emit(
-                    tx,
-                    &mut ids,
-                    now,
-                    &Event::MessagesCollected { count: collected },
-                )?;
-                report.wake_events(woken);
+                // Logged rather than published, deliberately. Retention is
+                // the hub's own housekeeping, and an event about it lands on
+                // mailbox.events — where it becomes a message that retention
+                // must eventually collect, emitting another. The topic would
+                // never reach quiescence. The count is on the dashboard and
+                // in the metrics; this is the loud-enough place for it.
+                tracing::info!(collected, "retention collected messages");
             }
             report.more_work = report.more_work
                 || collected >= batch_limit

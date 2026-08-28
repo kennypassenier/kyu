@@ -58,17 +58,32 @@ impl PayloadView {
     pub fn of(payload: &[u8]) -> Self {
         let bytes = payload.len();
         let shown = bytes.min(PAYLOAD_DISPLAY_LIMIT);
-        match std::str::from_utf8(&payload[..shown]) {
-            Ok(text) => Self {
+        let truncated = bytes > shown;
+
+        let text = match std::str::from_utf8(&payload[..shown]) {
+            Ok(text) => Some(text),
+            // `error_len() == None` means the slice ends in the middle of a
+            // character, which is what truncation does to any non-ASCII
+            // payload. Backing off to the last whole character is the
+            // difference between a readable message and one that claims to
+            // be binary.
+            Err(error) if truncated && error.error_len().is_none() => {
+                std::str::from_utf8(&payload[..error.valid_up_to()]).ok()
+            }
+            Err(_) => None,
+        };
+
+        match text {
+            Some(text) => Self {
                 text: text.to_string(),
                 bytes,
-                truncated: bytes > shown,
+                truncated,
                 binary: false,
             },
-            Err(_) => Self {
+            None => Self {
                 text: String::new(),
                 bytes,
-                truncated: bytes > shown,
+                truncated,
                 binary: true,
             },
         }
@@ -278,6 +293,38 @@ pub fn render_topic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn p7_a_character_split_by_the_display_cap_does_not_look_like_binary() {
+        // 4095 ASCII bytes then a two-byte character: the cut lands in the
+        // middle of it. Reported as binary, a perfectly ordinary Dutch
+        // message would be unreadable on the page.
+        let mut payload = "x".repeat(PAYLOAD_DISPLAY_LIMIT - 1).into_bytes();
+        payload.extend_from_slice("é".as_bytes());
+
+        let view = PayloadView::of(&payload);
+
+        assert!(
+            !view.binary,
+            "text must stay text even when truncation lands mid-character"
+        );
+        assert!(view.truncated);
+        assert_eq!(
+            view.text.len(),
+            PAYLOAD_DISPLAY_LIMIT - 1,
+            "the display backs off to the last whole character"
+        );
+        assert_eq!(view.bytes, PAYLOAD_DISPLAY_LIMIT + 1);
+    }
+
+    #[test]
+    fn p7_genuinely_invalid_bytes_are_still_reported_as_binary() {
+        // The fix for the boundary case must not turn every binary payload
+        // into a half-rendered string.
+        let payload = vec![0x41, 0x42, 0xff, 0xfe];
+        let view = PayloadView::of(&payload);
+        assert!(view.binary, "invalid bytes in the middle are not text");
+    }
 
     #[test]
     fn l7_a_text_payload_is_shown_as_text() {

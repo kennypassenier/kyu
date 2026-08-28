@@ -49,14 +49,17 @@ pub enum Event {
         topic: String,
         subscription: String,
     },
-    MessagesCollected {
-        count: usize,
-    },
 }
 
 impl Event {
     /// The topic the event is *about*, which is what the loop-breaker keys
-    /// on. `None` for events that are not about one topic.
+    /// on.
+    ///
+    /// Every event has one, and that is the point: an event with no subject
+    /// could never be suppressed, so it would publish onto `mailbox.events`
+    /// unconditionally. Retention collecting those events used to do exactly
+    /// that, refilling the topic it had just emptied. Housekeeping is logged
+    /// instead.
     fn subject_topic(&self) -> Option<&str> {
         match self {
             Self::DeadLettered { topic, .. }
@@ -64,7 +67,6 @@ impl Event {
             | Self::SubscriptionFlagged { topic, .. }
             | Self::SubscriptionArchived { topic, .. }
             | Self::SubscriptionUnarchived { topic, .. } => Some(topic),
-            Self::MessagesCollected { .. } => None,
         }
     }
 
@@ -75,7 +77,6 @@ impl Event {
             Self::SubscriptionFlagged { .. } => "subscription.flagged",
             Self::SubscriptionArchived { .. } => "subscription.archived",
             Self::SubscriptionUnarchived { .. } => "subscription.unarchived",
-            Self::MessagesCollected { .. } => "messages.collected",
         }
     }
 
@@ -111,7 +112,6 @@ impl Event {
                 topic,
                 subscription,
             } => json!({ "topic": topic, "subscription": subscription }),
-            Self::MessagesCollected { count } => json!({ "count": count }),
         };
         let map = body.as_object_mut().expect("a JSON object");
         map.insert("event".to_string(), json!(self.kind()));

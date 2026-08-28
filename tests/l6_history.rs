@@ -588,3 +588,50 @@ fn l6_an_idle_policy_that_cannot_work_is_refused() {
         .expect_err("a zero threshold would flag it immediately");
     assert!(format!("{zero}").contains("idle_flag_ms"));
 }
+
+#[test]
+fn p7_collecting_the_events_topic_does_not_feed_itself() {
+    // Retention short enough that a hub event outlives its own window
+    // during this test.
+    let f = fixture_with(Defaults {
+        retention_ms: Some(2 * DAY),
+        ..Defaults::default()
+    });
+
+    // Cause one real event: a subscription goes idle and is flagged.
+    f.bootstrap("notify.kenny", "someone");
+    f.clock.advance(8 * DAY);
+    f.engine.sweep(1000).expect("a sweep");
+
+    let events_on_topic = || {
+        f.count(
+            "SELECT count(*) FROM messages m JOIN topics t ON t.id = m.topic_id \
+             WHERE t.name = 'mailbox.events'",
+        )
+    };
+    assert!(events_on_topic() > 0, "an event was published");
+
+    // Nobody consumes the events topic, so retention is free to collect the
+    // events themselves once they age out.
+    f.clock.advance(10 * DAY);
+    f.engine.sweep(1000).expect("a collecting sweep");
+    let after_first = events_on_topic();
+
+    // Sweep repeatedly with nothing else happening. If collecting events
+    // publishes an event about the collection, the topic refills itself for
+    // ever and retention never reaches quiescence.
+    for _ in 0..5 {
+        f.clock.advance(10 * DAY);
+        f.engine.sweep(1000).expect("a sweep");
+    }
+    let after_repeats = events_on_topic();
+
+    assert_eq!(
+        after_first, 0,
+        "once collected, the events topic should be empty — it refilled itself"
+    );
+    assert_eq!(
+        after_repeats, 0,
+        "and repeated quiet sweeps must not keep producing new events"
+    );
+}
