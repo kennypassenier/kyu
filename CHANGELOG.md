@@ -79,8 +79,10 @@ management, never exposed to the internet. See `docs/SCOPE.md` (N1–N6).
 
 ### Known limitations at release
 
-- The tag → image path has **never run**. It is wired but unproven until this
-  first tag; the container itself is proven by `scripts/container-smoke.sh`.
+- ~~The tag → image path has **never run**.~~ It ran on this tag and was
+  verified before the release was published: the image pulls anonymously
+  after `docker logout ghcr.io`, answers `/healthz`, refuses a tokenless
+  publish with 401, and carries a message through publish → receive → ack.
 - The dashboard's copy button is not covered by an automated test — both
   clipboard paths need a real click in a focused window. What is tested is
   that the command it copies is the real working one.

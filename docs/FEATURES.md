@@ -122,10 +122,13 @@ job — no GHCR reference, no release action, no tag trigger — and the repo
 had no tags and no releases. The claim is removed rather than softened.
 `release-image.yml` now exists, taken from the homelab's
 `templates/rust-service/`, so every one of Kenny's Rust repos ships the
-same way. It stays **unproven until the first real tag**, which is a
-Phase 9 act behind Kenny's explicit go. Note for that moment: `Cargo.toml`
-still says `version = "0.0.0"`, and a `v0.1.0` tag should bump it in the
-same commit.
+same way.
+
+**Proven on 2026-08-28** by the `v1.0.0` tag: the workflow ran, published
+`ghcr.io/kennypassenier/mailbox:1.0.0` and `:latest`, and the image was
+pulled anonymously and exercised — health, a refused tokenless publish, and
+a message through publish → receive → ack — before the GitHub Release was
+written. The claim this entry once made falsely is now true and dated.
 
 One part of the wording above is still unmet and is left visible rather
 than quietly dropped: the adopted workflow publishes the **image**, not a

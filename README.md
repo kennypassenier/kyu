@@ -9,8 +9,9 @@ documentation.
 > CI green on every push). 1.0.0 is a promise about the HTTP contract — the
 > three verbs, their parameters and response shapes, and the environment
 > variables: breaking those means 2.0.0. The dashboard's HTML and the on-disk
-> schema are not part of that promise. Still true and worth knowing: the hub
-> has not yet run anywhere but a test container.
+> schema are not part of that promise. Published as
+> `ghcr.io/kennypassenier/mailbox:1.0.0`. Still true and worth knowing: it has
+> not yet run anywhere but test containers — no real traffic has touched it.
 
 ## The idea
 

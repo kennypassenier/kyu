@@ -13,9 +13,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 9 · Release |
-| Last completed gate | Phase 9 gate (2026-08-28): 1.0.0, changelog approved, Kenny's go to tag |
-| Next gate | Phase 10 · Retrospective |
+| Current phase | 10 · Retrospective |
+| Last completed gate | Phase 9 (2026-08-28): v1.0.0 tagged, image published and verified, GitHub Release written |
+| Next gate | Phase 10 · Retrospective (diff on dev-procedure) |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
