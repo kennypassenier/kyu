@@ -88,3 +88,12 @@ management, never exposed to the internet. See `docs/SCOPE.md` (N1–N6).
   that the command it copies is the real working one.
 - `/metrics` is open by design, so anyone who can reach the hub can learn
   topic and subscription **names** and their counts. Never a payload.
+
+### Verified after release, on real hardware
+
+Deployed from the published image into a temporary LXC on the Proxmox host
+(2026-08-28), then destroyed: publish → receive → ack round-trips, an
+unacknowledged message comes back after a container restart, `/healthz` and
+`/metrics` answer without a token while the dashboard redirects to its login
+page, the static assets are inside the image, and `/static/../etc/passwd`
+resolves to nothing. Resident memory under that load: **1.9 MiB**.

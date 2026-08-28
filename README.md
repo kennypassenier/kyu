@@ -10,8 +10,10 @@ documentation.
 > three verbs, their parameters and response shapes, and the environment
 > variables: breaking those means 2.0.0. The dashboard's HTML and the on-disk
 > schema are not part of that promise. Published as
-> `ghcr.io/kennypassenier/mailbox:1.0.0`. Still true and worth knowing: it has
-> not yet run anywhere but test containers — no real traffic has touched it.
+> `ghcr.io/kennypassenier/mailbox:1.0.0` and deployed from that image into a
+> throwaway LXC on the real Proxmox host on 2026-08-28: three verbs, an
+> unacked message surviving a container restart, monitoring open, dashboard
+> behind its door. Still true: no production traffic has touched it yet.
 
 ## The idea
 
@@ -245,6 +247,29 @@ git config core.hooksPath .githooks
 A commit is refused unless `cargo fmt --check`, `cargo clippy -D
 warnings` and `cargo test --all` pass, no string-built SQL appears in
 `src/`, and the message names the feature IDs it implements.
+
+### Protecting `main` (not enabled — a deliberate open item)
+
+The commit hooks are local: a clone without `core.hooksPath` has none, and
+nothing on GitHub stops a push whose CI then goes red. That happened twice on
+2026-08-28, once while a release tag was about to be cut.
+
+Closing it is four clicks nobody can do for you — Settings → Branches → Add
+branch ruleset for `main`:
+
+1. **Require status checks to pass** → add `fmt · clippy · tests`,
+   `container build` and `cargo-deny (advisories · licenses · bans)`.
+2. **Require branches to be up to date before merging.**
+3. Leave **Require a pull request** *off* unless you want that friction: on a
+   one-person repo it means every change goes through a PR. With it off, the
+   status checks still gate a direct push.
+4. Do **not** tick "Allow specified actors to bypass" for yourself — that is
+   the setting that turns the whole thing into decoration.
+
+Deliberately not enabled as of 1.0.0 (Kenny's call at the Phase 9 gate:
+after the release, not before it).
+
+### Toolchain
 
 The Rust version is pinned in `rust-toolchain.toml` and CI asks for that same
 version rather than for "stable". Without that, a green gate here did not
