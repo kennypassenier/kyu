@@ -262,6 +262,16 @@ Settings → Branches → branch protection rule for `main`:
   `coverage (informational)` — it runs with `continue-on-error`, so it would
   always report success and gate nothing.
 - ✅ **Require branches to be up to date before merging.**
+
+  **Check afterwards that all three actually stuck.** Setting them in one go
+  silently dropped `cargo-deny (advisories · licenses · bans)` — the one
+  whose name contains parentheses — leaving two required checks where three
+  were asked for, with nothing reporting a problem. Adding it on its own
+  worked. Verify with:
+
+  ```bash
+  gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks --jq .contexts
+  ```
 - ✅ **Do not allow bypassing the above settings.** Without it the repo owner
   is exempt and the whole rule is decoration.
 - ❌ **Require a pull request** — deliberately off (see the workflow below).
