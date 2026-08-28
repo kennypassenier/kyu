@@ -61,8 +61,10 @@ impl SecretKey {
                 trimmed.len()
             );
         }
+        let bytes = trimmed.as_bytes();
         let mut key = [0u8; KEY_BYTES];
-        for (index, pair) in trimmed.as_bytes().chunks_exact(2).enumerate() {
+        for index in 0..KEY_BYTES {
+            let pair = &bytes[index * 2..index * 2 + 2];
             let text = std::str::from_utf8(pair).unwrap_or("??");
             key[index] = u8::from_str_radix(text, 16).map_err(|_| {
                 anyhow::anyhow!(
@@ -234,6 +236,16 @@ mod tests {
             SecretKey::parse_hex(&key).is_err(),
             "non-hexadecimal characters must be refused rather than coerced"
         );
+    }
+
+    #[test]
+    fn p7_a_key_of_multibyte_characters_is_refused_without_panicking() {
+        // 32 two-byte characters is 64 BYTES, which passes the length check.
+        // Slicing that as text would land mid-character and panic; the parse
+        // walks bytes for exactly this reason.
+        let key = "é".repeat(KEY_BYTES);
+        assert_eq!(key.len(), KEY_BYTES * 2, "the length check is satisfied");
+        assert!(SecretKey::parse_hex(&key).is_err());
     }
 
     #[test]
