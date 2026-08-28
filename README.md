@@ -256,18 +256,23 @@ on 2026-08-28, once while a release tag was about to be cut.
 
 Settings → Branches → branch protection rule for `main`:
 
-- ✅ **Require status checks to pass before merging**, then select
-  `fmt · clippy · tests`, `container build` and
-  `cargo-deny (advisories · licenses · bans)`. **Not**
-  `coverage (informational)` — it runs with `continue-on-error`, so it would
-  always report success and gate nothing.
+- ✅ **Require status checks to pass before merging**, then select exactly
+  two: `fmt · clippy · tests` and `container build`.
+
+  **Deliberately not required** (Kenny, 2026-08-28), and left running:
+  - `cargo-deny (advisories · licenses · bans)` still runs on every push but
+    does not gate a merge. Its verdict depends on an advisory database that
+    changes without you: someone files a report tonight about a crate four
+    levels down, and tomorrow a documentation fix will not merge for a
+    reason that has nothing to do with it.
+  - `coverage (informational)` runs with `continue-on-error`, so it always
+    reports success and would gate nothing while looking like it does.
 - ✅ **Require branches to be up to date before merging.**
 
-  **Check afterwards that all three actually stuck.** Setting them in one go
-  silently dropped `cargo-deny (advisories · licenses · bans)` — the one
-  whose name contains parentheses — leaving two required checks where three
-  were asked for, with nothing reporting a problem. Adding it on its own
-  worked. Verify with:
+  **Read the setting back after any change here.** Applying the checks in
+  one call once silently dropped `cargo-deny` — the only name containing
+  parentheses — with no error and a settings page that looked configured.
+  Confirm what actually landed:
 
   ```bash
   gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks --jq .contexts
