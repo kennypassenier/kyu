@@ -11,7 +11,24 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since the first release.
+Nothing since 1.0.1.
+
+## [1.0.1] — 2026-08-28
+
+### Fixed
+
+- **The command line no longer fails open.** Every argument except
+  `--healthcheck` was ignored, so `mailbox --version` printed nothing and
+  started the hub instead — found while deploying 1.0.0 onto its LXC, where
+  the invocation simply never returned. Unknown flags and stray positional
+  arguments are now refused with exit code 2 and a remedy, and `--version`
+  and `--help` exist. The risk this closes is not the missing flag: it is a
+  typo in a unit file or deploy script starting a second hub on the same
+  store instead of complaining (standing rules 11 and 12).
+
+`--help` documents the environment variables, because someone reaching for
+`--help` is usually looking for the configuration and there is no config
+file to find.
 
 ## [1.0.0] — 2026-08-28
 

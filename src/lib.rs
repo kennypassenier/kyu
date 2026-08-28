@@ -14,6 +14,7 @@
 //! shell concerns — configuration read once before anything can start, and
 //! the timer that drives the engine's background transitions.
 
+pub mod cli;
 pub mod config;
 pub mod crypto;
 pub mod dashboard;

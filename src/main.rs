@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use mailbox::cli;
 use mailbox::config::Config;
 use mailbox::engine::Engine;
 use mailbox::engine::clock::{Clock, SystemClock};
@@ -14,10 +15,29 @@ use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // The runtime image has no shell, so the container healthcheck cannot
-    // call curl: the binary probes itself instead (W6, T9).
-    if std::env::args().any(|argument| argument == "--healthcheck") {
-        return healthcheck();
+    // Anything the command line does not recognise is refused rather than
+    // ignored (cli, 1.0.1): before that, `mailbox --version` started the hub
+    // and sat there, and a typo in a unit file would have started a second
+    // one on the same store.
+    match cli::parse(std::env::args().skip(1)) {
+        Ok(cli::Action::Serve) => {}
+        // The runtime image has no shell, so the container healthcheck cannot
+        // call curl: the binary probes itself instead (W6, T9).
+        Ok(cli::Action::Healthcheck) => return healthcheck(),
+        Ok(cli::Action::Version) => {
+            println!("mailbox {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Ok(cli::Action::Help) => {
+            println!("{}", cli::HELP);
+            return Ok(());
+        }
+        Err(refused) => {
+            eprintln!("{refused}");
+            // 2, the conventional "you used me wrong", so a script can tell
+            // this apart from the hub failing at runtime.
+            std::process::exit(2);
+        }
     }
 
     init_tracing();
