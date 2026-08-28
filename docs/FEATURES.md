@@ -4,14 +4,15 @@
 form R1–R3 all approved). Changes only via mini-rounds
 (FORM_PROTOCOL §5), recorded here as dated amendments.
 
-Tally: 15 Essential · 6 Desired · 3 Later · 0 Don't do.
+Tally: 16 Essential · 6 Desired · 2 Later · 0 Don't do.
+*(W2 promoted from Later to Essential by the 2026-08-28 mini-round.)*
 IDs are permanent: they appear in commits, test names, docs and forms.
 
 Ratings use the canonical English scale (Essential/Desired/Later/Don't
 do); the forms rendered them in Dutch (Onmisbaar/Gewenst/Later/Niet
 doen) per FORM_PROTOCOL.
 
-## Essential (15)
+## Essential (16)
 
 ### K1 · Publish
 `POST /t/<topic>` with arbitrary JSON/bytes body. Topic auto-created on
@@ -127,6 +128,40 @@ Rated Essential by Kenny (above Claude's Desired recommendation) — K6
 and K11 announcements are built on it from the start.
 **Proven by:** event-emitted assertions inside the K6/K11 suites.
 
+### W2 · Shared-token auth *(promoted at the 2026-08-28 mini-round)*
+
+Rated **Later** at the Phase 2 freeze on the reasoning that a LAN-only
+hub with a single admin needs no door (N3). Kenny closed it at the
+Phase 7 hardening gate and specified the shape across three rounds:
+
+- **Guarded:** the three verbs (K1/K2/K3), the dashboard (K10) and its
+  two write buttons. **Open:** `/healthz` (W6) and `/metrics` (W1), so
+  Uptime Kuma and Grafana keep working untouched — a monitoring stack
+  that fails closed lies to you during an outage, which is exactly when
+  you believe it.
+- **No token configured:** the hub starts anyway, with a warning on
+  every startup and a banner on every dashboard page. Refusing to start
+  turns a forgotten variable into an outage; starting silently is the
+  failure this decision exists to prevent.
+- **Browser access:** a small login page with a remember-me cookie and
+  a logout button, not browser-native basic auth (no way to log out of
+  that without clearing browser data).
+- **App management:** a dashboard section to register an app and
+  generate a token for it, and to revoke one. Tokens are stored
+  **encrypted** (AR11 amendment) so the dashboard can always reproduce
+  a working command. The encryption key (`MAILBOX_SECRET_KEY`) is
+  mandatory alongside the token, so rotating a leaked bootstrap token
+  never silently orphans every app token.
+- **Snippets:** the copy-paste commands carry a real, working token. It
+  is masked on screen; a reveal button shows it for 10 seconds and a
+  copy button puts the whole command on the clipboard without ever
+  displaying it — protection against someone glancing at the screen,
+  not against someone who already logged in.
+
+**Plaintext-scan test is mandatory** (carried over from the original
+rating): no token may appear in logs, metric labels or any rendered
+page except behind the reveal control.
+
 ## Desired (6)
 
 ### W1 · Prometheus metrics
@@ -158,11 +193,8 @@ backup-under-load → restore → invariants-hold E2E test.
 Per-topic form, payload prefilled with last real payload, send button.
 **Proven by:** UI route test → message lands on topic.
 
-## Later (3)
+## Later (2)
 
-- **W2 · Shared-token auth** — optional `Authorization: Bearer`;
-  additive, can land any time. Dashboard would render examples with
-  token (S1 preserved). Plaintext-scan tests mandatory when built.
 - **W3 · Companion CLI** — `mailbox send/tail/ls`; only if the
   curl+dashboard bet proves insufficient.
 - **W10 · Public peek endpoint** — `GET /t/<topic>/peek?n=`; dashboard

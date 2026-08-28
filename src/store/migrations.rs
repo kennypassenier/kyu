@@ -27,6 +27,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_1_INITIAL_SCHEMA,
     MIGRATION_2_EVENTS_TOPIC,
     MIGRATION_3_PER_SUBSCRIPTION_IDLE,
+    MIGRATION_4_APPS,
 ];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
@@ -110,6 +111,27 @@ INSERT INTO topics (name, retention_ms, created_at) VALUES ('mailbox.events', NU
 const MIGRATION_3_PER_SUBSCRIPTION_IDLE: &str = r#"
 ALTER TABLE subscriptions ADD COLUMN idle_flag_ms INTEGER;
 ALTER TABLE subscriptions ADD COLUMN idle_archive_ms INTEGER;
+"#;
+
+/// W2's registered apps. `token` holds the ciphertext from
+/// `crypto::SecretKey::seal`, never the token itself — the column is a BLOB
+/// because that is what it is, and calling it anything friendlier would
+/// invite someone to read it.
+///
+/// Revoking keeps the row and stamps `revoked_at`, rather than deleting it:
+/// "this app used to exist and I turned it off" is the thing you want to
+/// see six months later, and a deleted row cannot tell you that. The unique
+/// index therefore covers live apps only, so a revoked name can be reused.
+const MIGRATION_4_APPS: &str = r#"
+CREATE TABLE apps (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT    NOT NULL,
+    token      BLOB    NOT NULL,
+    created_at INTEGER NOT NULL,
+    revoked_at INTEGER
+) STRICT;
+
+CREATE UNIQUE INDEX apps_live_name ON apps (name) WHERE revoked_at IS NULL;
 "#;
 
 /// Brings `conn` up to the current schema version, returning it.

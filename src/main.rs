@@ -41,10 +41,24 @@ async fn main() -> Result<()> {
         Arc::new(clock),
         config.defaults,
     ));
-    let state = AppState::new(
+    // W2 · say out loud which of the two modes this is. An unprotected hub
+    // is a legitimate choice; a hub you *think* is protected is not, and the
+    // only defence against that is saying so on every single startup.
+    if config.auth.is_protected() {
+        tracing::info!("this hub requires a token (MAILBOX_TOKEN)");
+    } else {
+        tracing::warn!(
+            "this hub has NO token: anyone who can reach it can read every \
+             message, publish, and use the dashboard buttons. Set MAILBOX_TOKEN \
+             and MAILBOX_SECRET_KEY to protect it."
+        );
+    }
+
+    let state = AppState::with_auth(
         engine.clone(),
         Limits::from_config(&config),
         heartbeat.clone(),
+        config.auth.clone(),
     );
 
     // The sweeper is what makes delivery at-least-once rather than

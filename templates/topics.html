@@ -1,32 +1,49 @@
 {% extends "layout.html" %}
 {% block title %}mailbox — topics{% endblock %}
 {% block content %}
-<h1>mailbox</h1>
-<p class="sub">Every topic on this hub. A topic exists once something publishes to it.</p>
+<h1 class="h3">Topics</h1>
+<p class="text-secondary">Every topic on this hub. A topic exists once something publishes to it.</p>
 
 {% if topics %}
-<table>
-  <tr>
-    <th>Topic</th><th class="num">Messages</th><th class="num">Subscriptions</th>
-    <th class="num">Backlog</th><th class="num">Dead</th><th>Last published</th>
-  </tr>
+<div class="table-responsive">
+<table class="table table-hover align-middle">
+  <thead>
+    <tr>
+      <th>Topic</th>
+      <th class="text-end">Messages</th>
+      <th class="text-end">Subscriptions</th>
+      <th class="text-end">Backlog</th>
+      <th class="text-end">Dead</th>
+      <th>Last published</th>
+    </tr>
+  </thead>
+  <tbody>
   {% for topic in topics %}
   <tr>
     <td><a href="/t/{{ topic.name }}/dashboard">{{ topic.name }}</a></td>
-    <td class="num">{{ topic.messages }}</td>
-    <td class="num">{{ topic.subscriptions }}</td>
-    <td class="num">{{ topic.backlog }}</td>
-    <td class="num">{% if topic.dead > 0 %}<strong>{{ topic.dead }}</strong>{% else %}0{% endif %}</td>
-    <td>{% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="empty">never</span>{% endif %}</td>
+    <td class="text-end tabular">{{ topic.messages }}</td>
+    <td class="text-end tabular">{{ topic.subscriptions }}</td>
+    <td class="text-end tabular">{{ topic.backlog }}</td>
+    <td class="text-end tabular">
+      {% if topic.dead > 0 %}<span class="badge text-bg-danger">{{ topic.dead }}</span>{% else %}0{% endif %}
+    </td>
+    <td class="tabular">
+      {% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="text-secondary fst-italic">never</span>{% endif %}
+    </td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
 {% else %}
-<p class="empty">No topics yet.</p>
+<p class="text-secondary fst-italic">No topics yet.</p>
 {% endif %}
 
-<h2>Start a topic</h2>
-<p class="sub">A topic exists as soon as something publishes to it:</p>
-<pre>curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
-<p class="sub">Then open the topic to see the receive and acknowledge commands, filled in with its own data.</p>
+<h2 class="h5 mt-4">Start a topic</h2>
+<p class="text-secondary">A topic exists as soon as something publishes to it:</p>
+<pre class="snippet">curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
+<p class="text-secondary mt-2">
+  Then open the topic to see the receive and acknowledge commands, filled in
+  with its own data{% if protected %} and a working token{% endif %}.
+</p>
 {% endblock %}

@@ -15,6 +15,7 @@ publish = false
 anyhow = "1"                                                    # error context at the binary edge (AR4)
 axum = "0.8"                                                    # HTTP surface (T1)
 base64 = "0.23.1"
+chacha20poly1305 = "0.10"                                       # app-token encryption at rest (W2, AR11 amendment)
 minijinja = "2.24.0"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }

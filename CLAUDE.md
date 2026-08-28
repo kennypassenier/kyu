@@ -14,14 +14,15 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | 7 · Hardening |
-| Last completed gate | Phase 7 gap decisions (2026-08-28): 16 gaps, all closed; 144 tests |
-| Next gate | Phase 7 report, then queued mini-rounds from the 2026-08-28 procedure update |
+| Last completed gate | W2 mini-round (2026-08-28): shared-token auth built; 189 tests |
+| Next gate | Remaining queued mini-rounds, then Phase 8 |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
+| Shared-token auth (W2) | **DONE** 2026-08-28 — mini-round over three rounds; door, per-app tokens, login page, masked snippets |
 | Update & distribution mechanism | covered in substance by K13 (tag → GitHub Release → ghcr image, pulled by compose); to be recorded formally |
 | Ecosystem integration | NOT discussed — mailbox ships a compose file but no homelab v2 preset manifest |
 | Backup & restore | partially: W8 is a manual endpoint with an exercised restore; no AUTOMATIC scheduled backup |

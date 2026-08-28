@@ -84,6 +84,9 @@ impl From<EngineError> for ApiError {
             | EngineError::NotDead { .. } => StatusCode::CONFLICT,
             EngineError::InvalidPolicy { .. } => StatusCode::BAD_REQUEST,
             EngineError::SubscriptionArchived { .. } => StatusCode::CONFLICT,
+            EngineError::AppExists { .. } => StatusCode::CONFLICT,
+            EngineError::UnknownApp { .. } => StatusCode::NOT_FOUND,
+            EngineError::Unprotected => StatusCode::CONFLICT,
             EngineError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 

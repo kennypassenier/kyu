@@ -1,36 +1,52 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}mailbox{% endblock %}</title>
-<script src="/static/htmx.min.js" defer></script>
+<link rel="stylesheet" href="/static/bootstrap.min.css">
 <style>
-:root { color-scheme: light dark; --line: #8883; --dim: #7b7b7b; }
-* { box-sizing: border-box; }
-body { margin: 0; padding: 1.5rem; font: 15px/1.6 ui-sans-serif, system-ui, sans-serif; }
-main { max-width: 62rem; margin: 0 auto; }
-h1 { font-size: 1.4rem; margin: 0 0 .25rem; }
-h2 { font-size: 1.05rem; margin: 2rem 0 .5rem; }
-a { color: inherit; }
-.sub { color: var(--dim); margin: 0 0 1.5rem; }
-table { width: 100%; border-collapse: collapse; margin-bottom: .5rem; }
-th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--dim); }
-td.num { text-align: right; font-variant-numeric: tabular-nums; }
-code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
-pre { background: #8881; border: 1px solid var(--line); border-radius: 6px; padding: .7rem .9rem; overflow-x: auto; margin: .35rem 0 .9rem; }
-.state { font-size: .78rem; padding: .1rem .45rem; border-radius: 999px; border: 1px solid var(--line); }
-.state-flagged { background: #f5a5; }
-.state-archived { background: #8885; }
-.note { background: #f5a3; border: 1px solid #f5a8; border-radius: 6px; padding: .6rem .8rem; margin: .6rem 0; }
-.empty { color: var(--dim); font-style: italic; }
-form.publish textarea { width: 100%; min-height: 5rem; font-family: ui-monospace, monospace; font-size: .85rem; }
-button { font: inherit; padding: .3rem .8rem; }
+/* Bootstrap covers the furniture; these are the few things it cannot know
+   about — payload cells that must not stretch a table off the page, and the
+   masked-secret treatment. */
+body { padding: 1.5rem 0 4rem; }
+code, pre { font-size: .85rem; }
+pre.snippet { background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color);
+  border-radius: .375rem; padding: .7rem .9rem; margin: 0; overflow-x: auto; }
+td.payload { max-width: 28rem; overflow-wrap: anywhere; }
+.secret { font-family: var(--bs-font-monospace); overflow-wrap: anywhere; }
+.tabular { font-variant-numeric: tabular-nums; }
 </style>
+<script src="/static/app.js" defer></script>
 </head>
 <body>
-<main>
+<nav class="navbar navbar-expand border-bottom mb-4">
+  <div class="container">
+    <a class="navbar-brand" href="/">mailbox</a>
+    <div class="navbar-nav me-auto">
+      <a class="nav-link" href="/">Topics</a>
+      {% if protected %}<a class="nav-link" href="/apps">Apps</a>{% endif %}
+    </div>
+    {% if protected %}
+    <form method="post" action="/logout" class="m-0">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Log out</button>
+    </form>
+    {% endif %}
+  </div>
+</nav>
+
+<main class="container">
+{% if not protected %}
+<div class="alert alert-warning d-flex align-items-start gap-2" role="alert">
+  <div>
+    <strong>This hub has no token.</strong>
+    Anyone who can reach it can read every message, publish, and use the
+    buttons on these pages. That is a valid choice for a hub nobody else can
+    reach — but if you meant to protect it, set <code>MAILBOX_TOKEN</code> and
+    <code>MAILBOX_SECRET_KEY</code> in your compose file and restart.
+  </div>
+</div>
+{% endif %}
 {% block content %}{% endblock %}
 </main>
 </body>

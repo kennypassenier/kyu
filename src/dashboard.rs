@@ -44,6 +44,12 @@ static ENVIRONMENT: LazyLock<Environment<'static>> = LazyLock::new(|| {
         .add_template("topic.html", include_str!("../templates/topic.html"))
         .expect("the topic template must compile");
     environment
+        .add_template("login.html", include_str!("../templates/login.html"))
+        .expect("the login template must compile");
+    environment
+        .add_template("apps.html", include_str!("../templates/apps.html"))
+        .expect("the apps template must compile");
+    environment
 });
 
 /// How a payload is shown: text as text, binary announced as binary, and
@@ -278,11 +284,40 @@ fn is_plain_media_type(value: &str) -> bool {
 /// you skim; your own data is what you trust (S1).
 #[derive(Debug, Clone, Serialize)]
 pub struct Snippets {
-    pub publish: String,
-    pub receive_raw: String,
-    pub receive_envelope: String,
-    pub ack: String,
+    pub publish: Snippet,
+    pub receive_raw: Snippet,
+    pub receive_envelope: Snippet,
+    pub ack: Snippet,
     pub bootstrap_note: Option<String>,
+    /// Which app's token the commands carry, for the selector on the page.
+    pub app: Option<String>,
+}
+
+/// One copy-paste command in two forms (W2).
+///
+/// `shown` is what the page displays, with the token masked; `full` is what
+/// the copy button puts on the clipboard. Keeping them apart is the whole
+/// point of Kenny's requirement: pasting works immediately, but someone
+/// glancing at the screen over your shoulder learns nothing.
+#[derive(Debug, Clone, Serialize)]
+pub struct Snippet {
+    pub shown: String,
+    pub full: String,
+}
+
+impl Snippet {
+    /// Builds both forms from a command that may carry a token.
+    ///
+    /// The masked form is produced by substituting the token, not by
+    /// re-rendering: any future edit to the command shape then cannot make
+    /// the two drift apart and accidentally print a real token.
+    fn new(full: String, token: Option<&str>) -> Self {
+        let shown = match token {
+            Some(token) if !token.is_empty() => full.replace(token, &mask_token(token)),
+            _ => full.clone(),
+        };
+        Self { shown, full }
+    }
 }
 
 impl Snippets {
@@ -292,6 +327,8 @@ impl Snippets {
         subscription: Option<&str>,
         example_payload: Option<&PayloadView>,
         content_type: Option<&str>,
+        token: Option<&str>,
+        app: Option<&str>,
     ) -> Self {
         let payload = match example_payload {
             Some(view) if !view.binary && !view.text.is_empty() => {
@@ -311,17 +348,38 @@ impl Snippets {
             .unwrap_or("application/json");
         let name = subscription.unwrap_or("my-consumer");
 
+        // One extra argument line when the hub has a door, and none at all
+        // when it does not — an unprotected hub must not print an
+        // authorization header that would only confuse whoever pastes it.
+        let auth = match token {
+            Some(token) if !token.is_empty() => {
+                format!("-H 'authorization: Bearer {token}' \\\n     ")
+            }
+            _ => String::new(),
+        };
+
         Self {
-            publish: format!(
-                "curl -s -H 'content-type: {content_type}' \\\n     -d '{payload}' \\\n     {base_url}/t/{topic}"
+            publish: Snippet::new(
+                format!(
+                    "curl -s {auth}-H 'content-type: {content_type}' \\\n     -d '{payload}' \\\n     {base_url}/t/{topic}"
+                ),
+                token,
             ),
-            receive_raw: format!(
-                "curl -s -D- -o message.body \"{base_url}/t/{topic}/next?as={name}\""
+            receive_raw: Snippet::new(
+                format!(
+                    "curl -s {auth}-D- -o message.body \"{base_url}/t/{topic}/next?as={name}\""
+                ),
+                token,
             ),
-            receive_envelope: format!(
-                "curl -s \"{base_url}/t/{topic}/next?as={name}&envelope=json\""
+            receive_envelope: Snippet::new(
+                format!("curl -s {auth}\"{base_url}/t/{topic}/next?as={name}&envelope=json\""),
+                token,
             ),
-            ack: format!("curl -s -X POST \"{base_url}/t/{topic}/ack/<id>?as={name}\""),
+            ack: Snippet::new(
+                format!("curl -s -X POST {auth}\"{base_url}/t/{topic}/ack/<id>?as={name}\""),
+                token,
+            ),
+            app: app.map(str::to_string),
             bootstrap_note: subscription.is_none().then(|| {
                 format!(
                     "no subscription has polled {topic} yet. A subscription starts existing \
@@ -334,12 +392,77 @@ impl Snippets {
     }
 }
 
-pub fn render_topics(topics: Vec<TopicView>, now: Millis) -> Result<String> {
+pub fn render_topics(topics: Vec<TopicView>, now: Millis, protected: bool) -> Result<String> {
     ENVIRONMENT
         .get_template("topics.html")
         .context("the topics template is missing")?
-        .render(minijinja::context! { topics => topics, now => now })
+        .render(minijinja::context! { topics => topics, now => now, protected => protected })
         .context("cannot render the topic list")
+}
+
+/// W2 · the login page. `error` is shown above the form after a refusal.
+pub fn render_login(error: Option<&str>) -> Result<String> {
+    ENVIRONMENT
+        .get_template("login.html")
+        .context("the login template is missing")?
+        .render(minijinja::context! { error => error })
+        .context("cannot render the login page")
+}
+
+/// W2 · one registered app as the apps page shows it.
+///
+/// `token` is the value the copy button puts on the clipboard and `masked`
+/// is what the page displays until someone reveals it. Both are rendered
+/// into the HTML — which is exactly why this page is behind the door.
+#[derive(Debug, Clone, Serialize)]
+pub struct AppView {
+    pub name: String,
+    pub token: String,
+    pub masked: String,
+    pub live: bool,
+    pub created_at: String,
+    pub revoked_at: Option<String>,
+}
+
+/// Shows enough of a token to tell two of them apart, and no more.
+pub fn mask_token(token: &str) -> String {
+    const SHOWN: usize = 4;
+    if token.len() <= SHOWN {
+        return "\u{2022}".repeat(8);
+    }
+    format!("{}{}", "\u{2022}".repeat(8), &token[token.len() - SHOWN..])
+}
+
+/// A coarse age. The rest of the dashboard prints raw millisecond stamps;
+/// for "when did I create this token" the only question anyone actually has
+/// is how long ago, and a 13-digit number does not answer it.
+pub fn human_age(now: Millis, then: Millis) -> String {
+    let elapsed = (now - then).max(0);
+    let minutes = elapsed / 60_000;
+    let hours = minutes / 60;
+    let days = hours / 24;
+    match (days, hours, minutes) {
+        (0, 0, 0) => "just now".to_string(),
+        (0, 0, 1) => "1 minute ago".to_string(),
+        (0, 0, m) => format!("{m} minutes ago"),
+        (0, 1, _) => "1 hour ago".to_string(),
+        (0, h, _) => format!("{h} hours ago"),
+        (1, _, _) => "yesterday".to_string(),
+        (d, _, _) => format!("{d} days ago"),
+    }
+}
+
+pub fn render_apps(apps: &[AppView], error: Option<&str>) -> Result<String> {
+    ENVIRONMENT
+        .get_template("apps.html")
+        .context("the apps template is missing")?
+        .render(minijinja::context! {
+            apps => apps,
+            error => error,
+            protected => true,
+            reveal_seconds => crate::config::REVEAL_SECONDS,
+        })
+        .context("cannot render the apps page")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -350,6 +473,8 @@ pub fn render_topic(
     dead_letters: Vec<DeadLetterView>,
     snippets: Snippets,
     now: Millis,
+    protected: bool,
+    app_names: Vec<String>,
 ) -> Result<String> {
     ENVIRONMENT
         .get_template("topic.html")
@@ -361,6 +486,9 @@ pub fn render_topic(
             dead_letters => dead_letters,
             snippets => snippets,
             now => now,
+            protected => protected,
+            app_names => app_names,
+            reveal_seconds => crate::config::REVEAL_SECONDS,
         })
         .context("cannot render the topic page")
 }
@@ -446,19 +574,34 @@ mod tests {
             Some("printer"),
             Some(&payload),
             Some("application/json"),
+            None,
+            None,
         );
 
-        assert!(snippets.publish.contains("notify.kenny"));
-        assert!(snippets.publish.contains(r#"{"title":"Backup klaar"}"#));
-        assert!(snippets.receive_raw.contains("as=printer"));
-        assert!(snippets.receive_envelope.contains("envelope=json"));
-        assert!(snippets.ack.contains("as=printer"));
+        assert!(snippets.publish.full.contains("notify.kenny"));
+        assert!(
+            snippets
+                .publish
+                .full
+                .contains(r#"{"title":"Backup klaar"}"#)
+        );
+        assert!(snippets.receive_raw.full.contains("as=printer"));
+        assert!(snippets.receive_envelope.full.contains("envelope=json"));
+        assert!(snippets.ack.full.contains("as=printer"));
         assert!(snippets.bootstrap_note.is_none());
     }
 
     #[test]
     fn l7_a_topic_without_consumers_explains_the_bootstrap_order() {
-        let snippets = Snippets::build("http://hub.lan", "notify.kenny", None, None, None);
+        let snippets = Snippets::build(
+            "http://hub.lan",
+            "notify.kenny",
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
         let note = snippets
             .bootstrap_note
             .expect("a topic nobody polls must explain the order");
@@ -471,11 +614,19 @@ mod tests {
     #[test]
     fn l7_a_quote_in_a_payload_cannot_break_out_of_the_snippet() {
         let payload = PayloadView::of(b"it's a trap");
-        let snippets = Snippets::build("http://hub.lan", "t", Some("s"), Some(&payload), None);
+        let snippets = Snippets::build(
+            "http://hub.lan",
+            "t",
+            Some("s"),
+            Some(&payload),
+            None,
+            None,
+            None,
+        );
         assert!(
-            snippets.publish.contains(r"'\''"),
+            snippets.publish.full.contains(r"'\''"),
             "a single quote must be escaped for the shell: {}",
-            snippets.publish
+            snippets.publish.full
         );
     }
 }

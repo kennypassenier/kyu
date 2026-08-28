@@ -41,6 +41,55 @@ docker compose up -d
 curl localhost:8080/healthz
 ```
 
+## The door
+
+Out of the box mailbox has **no authentication**, which is a real choice for
+a hub on a network nothing else reaches — and one it will not let you make
+by accident: it warns on every startup and puts a banner on every dashboard
+page saying so.
+
+To put a token on it, set both of these and restart:
+
+```bash
+MAILBOX_TOKEN=$(openssl rand -hex 24)        # what you log in with
+MAILBOX_SECRET_KEY=$(openssl rand -hex 32)   # encrypts per-app tokens
+```
+
+One without the other refuses to start, and the error prints a generated key
+you can paste. With them set:
+
+- **Scripts** send `-H 'authorization: Bearer <token>'`. The dashboard prints
+  the whole command for you, token included.
+- **You** get a login page with a remember-me box and a logout button.
+- `/healthz` and `/metrics` stay **open**, so Uptime Kuma and Grafana keep
+  working without changes. Neither exposes a payload.
+
+### Per-app tokens
+
+The dashboard's **Apps** page registers an app and generates a token for it.
+Giving each program its own means you can revoke one without touching the
+others, and revocation takes effect on the very next request. On a topic page
+you can switch which app's token the printed commands carry.
+
+Tokens are shown masked. **Copy** puts the whole working command on your
+clipboard without ever displaying it; **Reveal** shows it for ten seconds.
+That protects against someone glancing at your screen — not against someone
+who has already logged in, which is by design.
+
+### Which value to rotate
+
+`MAILBOX_TOKEN` and `MAILBOX_SECRET_KEY` do different jobs, and the
+difference bites exactly once:
+
+- Rotating **`MAILBOX_TOKEN`** is safe. App tokens keep working; you just log
+  in with a new value.
+- Rotating **`MAILBOX_SECRET_KEY`** makes every stored app token unreadable.
+  The apps page will show them as `unreadable`; revoke and re-issue.
+
+That is precisely why the key is a separate variable rather than derived from
+the token: so that rotating a leaked password does not silently take every
+integration down with it.
+
 ## Configuration
 
 Two layers, and the distinction matters: the **environment** configures the
@@ -57,6 +106,8 @@ consumer is an environment variable.
 | `MAILBOX_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
 | `MAILBOX_LOG` | `info` | Log filter (`tracing` syntax). |
 | `MAILBOX_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |
+| `MAILBOX_TOKEN` | *(none)* | The token you log in with and that scripts send. Unset means no door at all. |
+| `MAILBOX_SECRET_KEY` | *(none)* | 64 hex characters. Encrypts per-app tokens. Required whenever `MAILBOX_TOKEN` is set. |
 | `MAILBOX_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
 | `MAILBOX_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
 | `MAILBOX_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
@@ -126,3 +177,12 @@ warnings` and `cargo test --all` pass, no string-built SQL appears in
 ## License
 
 MIT OR Apache-2.0, at your option.
+
+`static/bootstrap.min.css` is Bootstrap 5.3.3, copyright 2011-2024 The
+Bootstrap Authors, MIT licensed. It is vendored rather than loaded from a CDN
+so the hub works on a network with no route to the internet, and so opening
+the dashboard tells nobody outside that you did. Verified on download against
+the published integrity hash
+`sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH`.
+Note that `cargo-deny` does not police it — it is not a crate — so bumping it
+is a manual, deliberate act.

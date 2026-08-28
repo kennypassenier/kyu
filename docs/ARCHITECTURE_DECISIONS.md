@@ -50,6 +50,20 @@ Rejected: askama (compile-time safety, but Kenny prefers template
 iteration without recompiles); embedded SPA (second toolchain, npm
 churn — the re-entry tax this project exists to avoid).
 
+**Amendment (2026-08-28 mini-round, W2):** htmx is dropped. It was
+never actually wired up — `layout.html` loaded `/static/htmx.min.js`,
+a route and a file that never existed, so every dashboard page issued a
+request that 404'd and no template ever carried an `hx-` attribute. The
+auto-refreshing counts and the W9 test-publish form this decision cited
+were built as plain server-rendered pages and forms instead, and work.
+W2's reveal and copy-to-clipboard buttons need a few lines of script,
+which now ship as one small first-party file served from a real
+`/static` route, embedded in the binary like the templates. Shipping a
+library for two buttons is the dependency this project exists to avoid.
+Note for anyone reading the code: `navigator.clipboard` is unavailable
+here because the hub is plain HTTP on a LAN (not a secure context), so
+the copy button uses the legacy selection-based path deliberately.
+
 ## T5 · Logging: tracing
 
 tracing + tracing-subscriber 0.3.x. Structured fields (topic,
@@ -363,5 +377,37 @@ cannot kill a migration mid-flight.
   W9 prefills text payloads only.
 - mailbox stores no secrets today; if W2 lands, token via env only,
   never logged, with a mandatory plaintext-scan test.
+
+**Amendment (2026-08-28 mini-round, W2) — "token via env only" no
+longer holds.** Kenny asked for per-app tokens managed from the
+dashboard, which means the hub stores them. Decided:
+
+- The **bootstrap token** still comes from the environment
+  (`MAILBOX_TOKEN`, AR6) and is what you log in with. Something has to
+  open the door before any app exists.
+- **App tokens live in the store, encrypted at rest**
+  (ChaCha20-Poly1305, key from `MAILBOX_SECRET_KEY`). Reversible rather
+  than hashed — a hash cannot be turned back into a working command,
+  and rendering a working command is the whole point of the dashboard
+  (S1). The trade accepted: store file alone is useless; store file
+  *plus* compose file is total compromise, which on a single-admin LAN
+  hub whose compose file already holds the bootstrap token changes
+  nothing an attacker did not have.
+- **`MAILBOX_SECRET_KEY` is mandatory whenever `MAILBOX_TOKEN` is set**
+  (Kenny, 2026-08-28). The rejected alternative was deriving the
+  encryption key from the bootstrap token when the key was absent: it
+  works until the day you rotate a leaked bootstrap token, at which
+  point every stored app token silently becomes undecryptable and every
+  integration fails at once. A separate key makes that rotation safe.
+  A token without a key is a configuration error and the hub refuses to
+  start, naming the variable and printing a freshly generated key to
+  paste — a ten-second fix beats a trap sprung months later. Running
+  with no token at all remains allowed (unprotected mode, loud
+  warning): that is a deployment choice, not a half-finished one.
+- The plaintext-scan test stays mandatory and now also covers the store:
+  no token in logs, metric labels, or any rendered page except behind
+  the reveal control.
+- **No permissions or roles.** Which app may use which topic stays
+  permanently out of scope (N2); a token is admission, not authority.
 - SQL exclusively parameterized (rusqlite params); no string-built SQL
   anywhere, enforced by review plus a grep gate in CI.

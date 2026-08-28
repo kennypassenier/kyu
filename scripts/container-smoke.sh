@@ -76,4 +76,59 @@ STILL=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0"
 
 docker exec "$NAME" /usr/local/bin/mailbox --healthcheck
 
-printf '\nOK: three verbs, healthcheck, restart and upgrade all behaved.\n'
+say "the door: a protected hub, in the real image (W2)"
+# A second container, this one with a token. The point is not to re-test the
+# auth logic — the Rust suite does that — but to prove the two variables
+# actually reach the binary through compose-style env, that the static assets
+# the login page needs are inside the image, and that monitoring still works
+# without a token.
+DOOR="${NAME}-door"
+DOOR_VOLUME="${VOLUME}-door"
+DOOR_PORT=$((PORT + 1))
+DOOR_HUB="http://localhost:${DOOR_PORT}"
+TOKEN="smoke-token-$(date +%s)-abcdefgh"
+KEY=$(openssl rand -hex 32)
+
+cleanup_door() {
+    docker rm -f "$DOOR" >/dev/null 2>&1 || true
+    docker volume rm "$DOOR_VOLUME" >/dev/null 2>&1 || true
+}
+trap 'cleanup; cleanup_door' EXIT
+
+docker run -d --name "$DOOR" -p "${DOOR_PORT}:8080" -v "${DOOR_VOLUME}:/data" \
+    -e "MAILBOX_TOKEN=${TOKEN}" -e "MAILBOX_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+    if curl -sf -o /dev/null "${DOOR_HUB}/healthz"; then break; fi
+    sleep 0.5
+done
+curl -sf -o /dev/null "${DOOR_HUB}/healthz" \
+    || { echo "the protected hub never became healthy"; docker logs "$DOOR"; exit 1; }
+
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
+         -d '{"title":"no token"}' "${DOOR_HUB}/t/notify.kenny")
+[ "$STATUS" = "401" ] || { echo "a tokenless publish was not refused (status $STATUS)"; exit 1; }
+
+STATUS=$(curl -s -o /dev/null -w '%{http_code}' -H "authorization: Bearer ${TOKEN}" \
+         -H 'content-type: application/json' -d '{"title":"with token"}' "${DOOR_HUB}/t/notify.kenny")
+[ "$STATUS" = "201" ] || { echo "a good token was refused (status $STATUS)"; exit 1; }
+
+for PATH_ in /healthz /metrics; do
+    STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${DOOR_HUB}${PATH_}")
+    [ "$STATUS" = "200" ] || { echo "${PATH_} must stay open for monitoring (status $STATUS)"; exit 1; }
+done
+
+# The login page is useless without its stylesheet, and the stylesheet only
+# exists inside the binary — this is the check that would have caught the
+# templates/ omission in the Dockerfile the first time round.
+for ASSET in bootstrap.min.css app.js; do
+    STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${DOOR_HUB}/static/${ASSET}")
+    [ "$STATUS" = "200" ] || { echo "the image is missing ${ASSET} (status $STATUS)"; exit 1; }
+done
+
+# A half-configured door must refuse to start rather than run open.
+if docker run --rm -e "MAILBOX_TOKEN=${TOKEN}" "$IMAGE" >/dev/null 2>&1; then
+    echo "a token without a secret key started anyway, which it must never do"
+    exit 1
+fi
+
+printf '\nOK: three verbs, healthcheck, restart, upgrade and the door all behaved.\n'

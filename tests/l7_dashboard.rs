@@ -290,9 +290,16 @@ async fn l7_the_snippets_the_dashboard_prints_actually_work() {
     // about the hub, it is the hub describing itself.
     let body = unescape(&page(&hub, "/t/notify.kenny/dashboard").await);
 
+    // The command as the page displays it, not as it is stashed in the
+    // reveal/copy data attributes: those hold the same text, so the line has
+    // to be pinned to the one a reader would actually see and retype.
     let receive = body
         .lines()
-        .find(|line| line.contains("/next?as=") && line.contains("envelope=json"))
+        .find(|line| {
+            line.trim_start().starts_with("curl")
+                && line.contains("/next?as=")
+                && line.contains("envelope=json")
+        })
         .expect("the envelope snippet must be on the page")
         .to_string();
     assert!(

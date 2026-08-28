@@ -1,8 +1,11 @@
 //! Cross-origin protection for state-changing requests.
 //!
-//! mailbox has no authentication (N2/W2: a shared token is rated Later), and
-//! the threat model assumes the LAN is trusted (N3). A browser breaks that
-//! assumption: a page anywhere on the internet can make the owner's browser
+//! This layer predates the door (W2) and still earns its place after it: a
+//! hub may deliberately run with no token at all, and even a protected one
+//! carries a session cookie that a cross-site form post would otherwise ride
+//! on. The threat model assumes the LAN is trusted (N3); a browser breaks
+//! that assumption, because a page anywhere on the internet can make the
+//! owner's browser
 //! POST to `http://hub.lan:8080/...`, and a form post is a "simple request"
 //! that needs no preflight and no readable response — the side effect has
 //! already happened. That is how an internet-side attacker reaches an
@@ -61,7 +64,9 @@ pub async fn same_origin_only(request: Request, next: Next) -> Response {
         StatusCode::FORBIDDEN,
         format!("this request came from another origin ({origin})"),
         "mailbox refuses state-changing requests that a browser reports as \
-         cross-origin, because it has no authentication to fall back on. \
+         cross-origin: an unprotected hub has nothing else to fall back on, \
+         and a protected one would otherwise let a foreign page ride your \
+         session cookie. \
          Call the API from a script or a terminal — those send no Origin \
          header — or use the dashboard served by the hub itself.",
     )

@@ -17,6 +17,26 @@ services:
       MAILBOX_LOG: info
       # MAILBOX_LOG_FORMAT: json          # one JSON object per line, for Loki
       #
+      # --- The door (W2) -------------------------------------------------
+      # Leave both unset and the hub runs with no door at all: anyone who can
+      # reach it can read every message and publish. That is a real choice for
+      # a hub nothing else can reach, and the hub says so loudly on every
+      # startup and on every dashboard page, so it can never be a surprise.
+      #
+      # Set them and you get a login page, per-app tokens, and an
+      # Authorization header on every command the dashboard prints. BOTH are
+      # required together — one without the other refuses to start:
+      #
+      #   MAILBOX_TOKEN: <what you log in with>        openssl rand -hex 24
+      #   MAILBOX_SECRET_KEY: <64 hex characters>      openssl rand -hex 32
+      #
+      # They do different jobs, and the difference matters exactly once:
+      # MAILBOX_TOKEN is the password you type; MAILBOX_SECRET_KEY encrypts
+      # the per-app tokens in the store. Rotating the token is therefore safe
+      # and rotating the key is not — change the key and every app token
+      # becomes unreadable, and you re-issue them on the apps page. Keep both
+      # here, and keep a copy somewhere you will find it again.
+      #
       # Hub-wide defaults. Every one of these can be overridden per topic or
       # per subscription through the API, so these are the starting point
       # rather than the rule:

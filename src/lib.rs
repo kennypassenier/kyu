@@ -15,6 +15,7 @@
 //! the timer that drives the engine's background transitions.
 
 pub mod config;
+pub mod crypto;
 pub mod dashboard;
 pub mod engine;
 pub mod events;

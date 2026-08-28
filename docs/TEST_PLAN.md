@@ -3,8 +3,9 @@
 What is proven, where, and what is deliberately not covered. Written at
 the Phase 7 gate on 2026-08-28 and maintained from here on.
 
-**148 tests.** 116 integration tests across twelve suites, 32 unit tests
-inside the modules they belong to. Every suite runs on every commit (the
+**189 tests.** 131 integration tests across thirteen suites, 58 unit tests
+inside the modules they belong to. *(Was 148 at the Phase 7 gate; the 2026-08-28
+W2 mini-round added the door and its suite.)* Every suite runs on every commit (the
 git hooks refuse a commit whose tests fail) and again in CI.
 
 ## Principles these suites follow
@@ -34,6 +35,7 @@ git hooks refuse a commit whose tests fail) and again in CI.
 | `l7_dashboard.rs` | 9 | Every page rendered with seeded state — the compensation owed for runtime templates (T4). A script tag in a payload renders inert; binary and oversized payloads are announced rather than mangled; a topic nobody polls explains the bootstrap order; **the printed curl snippets are pulled off the page and executed**. |
 | `l8_ops.rs` | 7 | Metrics expose per-subscription backlog and the sweeper's age; delayed delivery is durable immediately and survives a restart without firing early; two answers to "when" are refused; **a backup taken under load restores into a working hub that delivers a message**; JSON logs parse as one object per line. |
 | `p7_hardening.rs` | 23 | The gaps the Phase 7 audit found: a broken migration rolls back whole; eight kills at startup leave a migratable store; a store that cannot grow refuses publishes loudly and stays up; lapsed deliveries stay lapsed and let retention reclaim; settled deliveries refuse every further transition; replay over HTTP; the retention and unarchive endpoints; payload edges (empty, at-limit, NUL); **payloads never reach the logs or the metric labels**; the awkward dashboard states; `/healthz` at 503; the events topic as an ordinary topic; the dead-letter view and its requeue button; 120 messages through five consumers, a publisher and a live sweeper. |
+| `p7_auth.rs` | 13 | The door (W2): the three verbs need a token while `/healthz` and `/metrics` deliberately do not; a browser is redirected to the login page and a script gets a 401 it can act on; a wrong token starts no session; an app token works and stops working the *instant* it is revoked; a live app name is taken and a revoked one is free again; the printed command carries a working token that is masked on screen; an unprotected hub says so on its own pages; the apps page is unreachable without logging in; the static assets are open and nothing traverses through them; **no token reaches `/metrics`, `/healthz` or the login page in the clear**; a token from one hub does not open another. |
 | `p7_security.rs` | 4 | The security review's findings: a hostile content type cannot escape the copy-paste snippet; cross-origin state-changing requests are refused while scripts are unaffected; a payload cannot render itself in the hub's origin. |
 | Unit tests (32) | | Configuration parsing and its remedies (5); payload display and snippet building (8); the write probe (2); the injected clock (3); monotonic ids under a backwards clock (4); name validation (4); policy resolution and validation (6). |
 
@@ -78,10 +80,16 @@ choices to skip work.
   the store, publishes until it refuses, and asserts a 503 whose remedy
   names free space first.
 - **Cross-origin protection depends on the browser.** Refusing requests
-  that announce a foreign `Origin` stops the drive-by case. It is not
-  authentication: anything on the LAN that speaks HTTP directly can still
-  do anything, which is the documented threat model (N3 LAN-only, W2 auth
-  rated Later).
+  that announce a foreign `Origin` stops the drive-by case, and on a
+  protected hub it also stops a foreign page riding your session cookie.
+  It is not authentication in itself.
+  *Amended 2026-08-28:* the sentence that used to close this entry —
+  "anything on the LAN that speaks HTTP directly can still do anything" —
+  is now true only of a hub deliberately run without a token. With
+  `MAILBOX_TOKEN` set, the verbs and the dashboard need one (W2). What
+  stays open by design is `/healthz` and `/metrics`, so a LAN observer can
+  still learn topic and subscription *names* and their counts, never a
+  payload. Proven by `p7_no_token_reaches_the_metrics_or_any_page_in_the_clear`.
 - **Single node, no clustering** (N1). Nothing tests failover because
   there is none.
 - **Exactly-once delivery is not offered** (N4). The suites assert

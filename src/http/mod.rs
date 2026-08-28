@@ -1,6 +1,7 @@
 //! The HTTP surface (AR2). Routes translate HTTP into engine calls and
 //! back; business logic stays in [`crate::engine`].
 
+pub mod auth;
 pub mod csrf;
 pub mod error;
 pub mod handlers;
@@ -12,7 +13,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::routing::{get, post};
 
-use crate::config::Config;
+use crate::config::{Auth, Config};
 use crate::engine::Engine;
 use crate::sweeper::Heartbeat;
 
@@ -53,21 +54,46 @@ pub struct AppState {
     /// Shared with the sweeper so the health endpoint can tell whether the
     /// background work is still happening (W6).
     pub heartbeat: Heartbeat,
+    /// The door policy (W2). `Arc` because every request reads it.
+    pub auth: Arc<Auth>,
 }
 
 impl AppState {
+    /// An unprotected hub. Tests that are not about the door use this;
+    /// `main` always goes through [`Self::with_auth`].
     pub fn new(engine: Arc<Engine>, limits: Limits, heartbeat: Heartbeat) -> Self {
+        Self::with_auth(engine, limits, heartbeat, Auth::Unprotected)
+    }
+
+    pub fn with_auth(
+        engine: Arc<Engine>,
+        limits: Limits,
+        heartbeat: Heartbeat,
+        auth: Auth,
+    ) -> Self {
         Self {
             engine,
             notifiers: Arc::new(Notifiers::new()),
             limits,
             heartbeat,
+            auth: Arc::new(auth),
         }
     }
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    // Open by design and by review: monitoring, the login page itself, and
+    // the two static assets the pages need. Everything else lives in the
+    // protected router below, so forgetting to think about a new route
+    // fails closed rather than open (W2).
+    let open = Router::new()
+        .route("/healthz", get(handlers::healthz))
+        .route("/metrics", get(handlers::metrics))
+        .route("/static/{file}", get(handlers::static_asset))
+        .route("/login", get(handlers::login_form).post(handlers::login))
+        .route("/logout", post(handlers::logout));
+
+    let protected = Router::new()
         .route("/", get(handlers::dashboard_index))
         .route("/t/{topic}/dashboard", get(handlers::dashboard_topic))
         .route(
@@ -78,8 +104,9 @@ pub fn router(state: AppState) -> Router {
             "/t/{topic}/dashboard/requeue",
             post(handlers::dashboard_requeue),
         )
-        .route("/healthz", get(handlers::healthz))
-        .route("/metrics", get(handlers::metrics))
+        .route("/apps", get(handlers::apps_page))
+        .route("/apps/create", post(handlers::apps_create))
+        .route("/apps/revoke", post(handlers::apps_revoke))
         .route("/api/backup", post(handlers::backup))
         .route("/t/{topic}", post(handlers::publish))
         .route("/t/{topic}/next", get(handlers::receive))
@@ -105,6 +132,12 @@ pub fn router(state: AppState) -> Router {
             "/api/t/{topic}/retention",
             get(handlers::get_retention).put(handlers::put_retention),
         )
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_token,
+        ));
+
+    open.merge(protected)
         .layer(axum::middleware::from_fn(csrf::same_origin_only))
         .with_state(state)
 }

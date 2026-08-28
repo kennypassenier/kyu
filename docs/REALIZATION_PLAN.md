@@ -5,9 +5,15 @@ eighteen standing rules and the enforcement configuration accepted
 without changes. Enforcement was installed immediately after the gate
 and before any feature code (see "Enforcement" below).
 
-21 of the 24 frozen features are in this plan. W2 (shared-token auth),
-W3 (companion CLI) and W10 (public peek endpoint) are rated Later and
-are deliberately absent.
+21 of the 24 frozen features are in this plan. W3 (companion CLI) and
+W10 (public peek endpoint) are rated Later and are deliberately absent.
+
+**Amendment (2026-08-28 mini-round):** W2 (shared-token auth) was also
+absent for that reason. Kenny closed it at the Phase 7 hardening gate and
+it is now built — the door, per-app tokens managed from the dashboard, a
+login page, and masked copy-paste commands. It arrived after L8 rather
+than in a milestone of its own; see FEATURES.md for the specified shape
+and `tests/p7_auth.rs` for what is proven.
 
 ## Status table
 

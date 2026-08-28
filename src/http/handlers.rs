@@ -866,6 +866,7 @@ const DEAD_LETTERS_SHOWN: usize = 50;
 /// K10 · `GET /` — every topic on the hub.
 pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
+    let protected = state.auth.is_protected();
     let page = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
         let topics = engine
             .store()
@@ -873,7 +874,7 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<Strin
             .into_iter()
             .map(TopicView::from)
             .collect();
-        dashboard::render_topics(topics, engine.now_ms())
+        dashboard::render_topics(topics, engine.now_ms(), protected)
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
@@ -882,13 +883,51 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<Strin
     Ok(Html(page))
 }
 
+/// `?app=` on the topic page: whose token the printed commands carry (W2).
+#[derive(Debug, Deserialize, Default)]
+pub struct TopicPageQuery {
+    pub app: Option<String>,
+}
+
 /// K10 · `GET /t/{topic}/dashboard` — one topic in detail.
 pub async fn dashboard_topic(
     State(state): State<AppState>,
     Path(topic): Path<String>,
+    Query(query): Query<TopicPageQuery>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
     let topic_name = topic.clone();
+    let protected = state.auth.is_protected();
+
+    // Which token the copy-paste commands carry. `?app=` picks a registered
+    // app; without it the commands use the bootstrap token, which always
+    // exists on a protected hub — so a pasted command works on the first try
+    // even before any app is registered.
+    let (token, app) = match (state.auth.key(), query.app.as_deref()) {
+        (Some(key), Some(name)) => {
+            let found = engine
+                .app_token(name, key)
+                .map_err(ApiError::from)?
+                .ok_or_else(|| {
+                    ApiError::from(EngineError::UnknownApp {
+                        name: name.to_string(),
+                    })
+                })?;
+            (Some(found), Some(name.to_string()))
+        }
+        _ => (state.auth.token().map(str::to_string), None),
+    };
+
+    let app_names = match state.auth.key() {
+        Some(key) => engine
+            .list_apps(key)
+            .map_err(ApiError::from)?
+            .into_iter()
+            .filter(|app| app.is_live())
+            .map(|app| app.name)
+            .collect(),
+        None => Vec::new(),
+    };
 
     let page = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<String>> {
         engine.store().read(|conn| {
@@ -932,6 +971,8 @@ pub async fn dashboard_topic(
                     .map(|subscription| subscription.name.as_str()),
                 example.map(|message| &message.payload),
                 example.and_then(|message| message.content_type.as_deref()),
+                token.as_deref(),
+                app.as_deref(),
             );
 
             Ok(Some(dashboard::render_topic(
@@ -941,6 +982,8 @@ pub async fn dashboard_topic(
                 dead_letters,
                 snippets,
                 engine.now_ms(),
+                protected,
+                app_names,
             )?))
         })
     })
@@ -1194,5 +1237,205 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
             "check free space and that the data directory is writable. mailbox keeps \
              serving either way; a failed backup does not affect delivery.",
         )),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// W2 · the door: static assets, login, logout and app management.
+// ---------------------------------------------------------------------------
+
+/// The two files the pages need, compiled into the binary like the
+/// templates (T4 amendment) so the container stays one artifact and the
+/// distroless image needs no filesystem layout.
+const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
+const APP_JS: &str = include_str!("../../static/app.js");
+
+/// `GET /static/{file}` — served from memory, never from disk.
+///
+/// An explicit match rather than a path join: a lookup that builds a path
+/// from user input is how a static handler turns into a file-disclosure
+/// bug, and there are exactly two files.
+pub async fn static_asset(Path(file): Path<String>) -> Response {
+    let (body, content_type) = match file.as_str() {
+        "bootstrap.min.css" => (BOOTSTRAP_CSS, "text/css; charset=utf-8"),
+        "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
+        _ => {
+            return ApiError::new(
+                StatusCode::NOT_FOUND,
+                format!("mailbox serves no asset named {file:?}"),
+                "the dashboard needs only bootstrap.min.css and app.js.".to_string(),
+            )
+            .into_response();
+        }
+    };
+    (
+        [
+            (header::CONTENT_TYPE, content_type),
+            // Immutable for a day: these change only when the binary does,
+            // and a dashboard that refetches 230 kB on every page view is
+            // needlessly slow over wifi.
+            (header::CACHE_CONTROL, "public, max-age=86400"),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+/// `GET /login` — the form. Already-authenticated visitors are sent on
+/// rather than shown a login page they do not need.
+pub async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    if !state.auth.is_protected() {
+        return Redirect::to("/").into_response();
+    }
+    if let Some(candidate) = super::auth::session_cookie(&headers)
+        && super::auth::authenticate(&state, &candidate).is_some()
+    {
+        return Redirect::to("/").into_response();
+    }
+    match dashboard::render_login(None) {
+        Ok(page) => Html(page).into_response(),
+        Err(error) => ApiError::from(EngineError::Internal(error)).into_response(),
+    }
+}
+
+/// `POST /login` — check the token, set the cookie.
+///
+/// A wrong token re-renders the form with a message and **200**, not 401:
+/// the response is a page, and a browser handling a 401 by popping its own
+/// credential dialog on top of our form is a confusing mess.
+pub async fn login(State(state): State<AppState>, body: axum::body::Bytes) -> Response {
+    let form = FormFields::parse(&body);
+    let token = form.get("token").unwrap_or_default();
+    let remember = form.get("remember").is_some();
+
+    if super::auth::authenticate(&state, &token).is_none() {
+        // Deliberately vague, and deliberately slow to be worth guessing:
+        // the token is long enough that online guessing is hopeless, so no
+        // artificial delay is added — but nothing here says whether the
+        // token was wrong, expired or revoked.
+        tracing::warn!("a login attempt was refused");
+        return match dashboard::render_login(Some(
+            "That token was not accepted. Check the value of MAILBOX_TOKEN in \
+             your compose file, or use a token from the apps page.",
+        )) {
+            Ok(page) => (StatusCode::OK, Html(page)).into_response(),
+            Err(error) => ApiError::from(EngineError::Internal(error)).into_response(),
+        };
+    }
+
+    tracing::info!(remember, "a dashboard session started");
+    (
+        [(
+            header::SET_COOKIE,
+            super::auth::set_cookie_value(&token, remember),
+        )],
+        Redirect::to("/"),
+    )
+        .into_response()
+}
+
+/// `POST /logout` — drop the cookie.
+pub async fn logout() -> Response {
+    (
+        [(header::SET_COOKIE, super::auth::clear_cookie_value())],
+        Redirect::to("/login"),
+    )
+        .into_response()
+}
+
+/// `GET /apps` — register, inspect and revoke the apps that may talk to the
+/// hub (W2). Tokens render masked; the reveal and copy controls live in
+/// `app.js`.
+pub async fn apps_page(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
+    let Some(key) = state.auth.key().cloned() else {
+        return Err(ApiError::from(EngineError::Unprotected));
+    };
+    let engine = state.engine.clone();
+    let now = engine.now_ms();
+    let apps = spawn_engine(move || engine.list_apps(&key)).await?;
+    let views: Vec<dashboard::AppView> = apps
+        .into_iter()
+        .map(|app| dashboard::AppView {
+            masked: dashboard::mask_token(&app.token),
+            live: app.is_live(),
+            created_at: dashboard::human_age(now, app.created_at),
+            revoked_at: app.revoked_at.map(|at| dashboard::human_age(now, at)),
+            name: app.name,
+            token: app.token,
+        })
+        .collect();
+    let page = dashboard::render_apps(&views, None)
+        .map_err(|error| ApiError::from(EngineError::Internal(error)))?;
+    Ok(Html(page))
+}
+
+/// `POST /apps/create` — register an app and generate its token.
+pub async fn apps_create(
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let Some(key) = state.auth.key().cloned() else {
+        return Err(ApiError::from(EngineError::Unprotected));
+    };
+    let name = FormFields::parse(&body).get("name").unwrap_or_default();
+
+    let engine = state.engine.clone();
+    let name_for_engine = name.clone();
+    let created = spawn_engine(move || engine.register_app(&name_for_engine, &key)).await;
+
+    match created {
+        Ok(app) => {
+            tracing::info!(app = %app.name, "an app was registered");
+            // Anchor on the new row so a long list does not hide what just
+            // happened.
+            Ok(Redirect::to(&format!("/apps#app-{}", app.name)).into_response())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+/// `POST /apps/revoke` — turn an app off, keeping the record that it existed.
+pub async fn apps_revoke(
+    State(state): State<AppState>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    if !state.auth.is_protected() {
+        return Err(ApiError::from(EngineError::Unprotected));
+    }
+    let name = FormFields::parse(&body).get("name").unwrap_or_default();
+
+    let engine = state.engine.clone();
+    let name_for_engine = name.clone();
+    spawn_engine(move || engine.revoke_app(&name_for_engine)).await?;
+    tracing::info!(app = %name, "an app was revoked");
+    Ok(Redirect::to("/apps").into_response())
+}
+
+/// A urlencoded form body, decoded once.
+///
+/// The existing handlers each picked their one field out of the raw string;
+/// three fields across two forms is where that stops being cheaper than
+/// parsing properly.
+struct FormFields(Vec<(String, String)>);
+
+impl FormFields {
+    fn parse(body: &[u8]) -> Self {
+        let raw = String::from_utf8_lossy(body);
+        Self(
+            raw.split('&')
+                .filter(|pair| !pair.is_empty())
+                .map(|pair| {
+                    let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
+                    (urldecode(name), urldecode(value))
+                })
+                .collect(),
+        )
+    }
+
+    fn get(&self, name: &str) -> Option<String> {
+        self.0
+            .iter()
+            .find(|(key, _)| key == name)
+            .map(|(_, value)| value.clone())
     }
 }
