@@ -183,6 +183,30 @@ deliver a message out of it.
 
 **Through the homelab** this is a first-class operation — choose snapshot,
 quiesce, restore, restart, verify — with a restore drill scheduled quarterly.
+
+### Moving or renaming a store
+
+The database is three files, not one. In WAL mode most recent writes live in
+`kyu.db-wal` until a checkpoint folds them back, so the main `kyu.db` can be a
+few kilobytes while the log beside it holds everything. SQLite derives the log's
+name from the database's, so the three names must stay in step.
+
+- **Moving a store to another path:** move `kyu.db`, `kyu.db-wal` and
+  `kyu.db-shm` together.
+- **Renaming the database file:** rename all three to match
+  (`x.db`, `x.db-wal`, `x.db-shm`). SQLite then finds the log and replays it on
+  the next open.
+- **Restoring a backup** is the one case where the log is deleted rather than
+  carried: a `VACUUM INTO` backup is already complete, and a stale log beside it
+  describes a different database. That is what §4 step 2 says.
+
+Learned the hard way on 2026-08-29, during the rename from `mailbox` to `kyu`:
+`mailbox.db` was moved to `kyu.db` and its 800 KB log was left behind, so the
+hub came up on a 4 KB database — six topics and fourteen messages short, the
+Home Assistant backlog among them. Nothing was lost, because a `VACUUM INTO`
+backup taken minutes earlier and the orphaned log independently reconstructed
+the identical state, and both were checked against each other before either was
+installed. Take the backup first; it is what makes a mistake here survivable.
 Use that rather than these steps when the hub is deployed there.
 
 **On LXC 109** there are two things to restore from, and which one you want
