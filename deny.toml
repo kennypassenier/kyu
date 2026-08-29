@@ -5,7 +5,7 @@
 yanked = "deny"
 
 [licenses]
-# mailbox itself is MIT OR Apache-2.0 (T7); dependencies must be
+# kyu itself is MIT OR Apache-2.0 (T7); dependencies must be
 # permissive. A copyleft dependency is a decision, not an accident:
 # adding one requires editing this list in a reviewed commit.
 allow = [

@@ -5,7 +5,7 @@
 //! - `Authorization: Bearer <token>` — what every script, curl call and
 //!   integration uses. The token is either the bootstrap token from the
 //!   environment or one generated for a registered app.
-//! - A `mailbox_session` cookie — what a browser gets after logging in,
+//! - A `kyu_session` cookie — what a browser gets after logging in,
 //!   because a browser will not attach a bearer header on its own.
 //!
 //! What is deliberately left open: `/healthz` and `/metrics`. A monitoring
@@ -31,7 +31,7 @@ use crate::config::Auth;
 /// into a payload cannot read it (AR11 treats payloads as untrusted), `Lax`
 /// so following a link to the dashboard still works while a cross-site form
 /// post does not carry it.
-pub const SESSION_COOKIE: &str = "mailbox_session";
+pub const SESSION_COOKIE: &str = "kyu_session";
 /// How long "remember me" lasts. Long enough that you are not logging in
 /// every day, short enough that a borrowed laptop forgets eventually.
 pub const REMEMBER_SECONDS: i64 = 60 * 60 * 24 * 30;
@@ -52,7 +52,7 @@ pub fn clear_cookie_value() -> String {
 /// Pulls the session cookie out of a `Cookie` header.
 ///
 /// Hand-rolled rather than pulling in a cookie crate for one lookup (T6).
-/// Matching is on the exact name, so `not_mailbox_session=` cannot be
+/// Matching is on the exact name, so `not_kyu_session=` cannot be
 /// mistaken for ours.
 pub fn session_cookie(headers: &axum::http::HeaderMap) -> Option<String> {
     let raw = headers.get(header::COOKIE)?.to_str().ok()?;
@@ -197,15 +197,15 @@ mod tests {
 
     #[test]
     fn p7_the_session_cookie_is_found_among_others() {
-        let map = headers(&[("cookie", "theme=dark; mailbox_session=abc123; other=1")]);
+        let map = headers(&[("cookie", "theme=dark; kyu_session=abc123; other=1")]);
         assert_eq!(session_cookie(&map).as_deref(), Some("abc123"));
     }
 
     #[test]
     fn p7_a_cookie_whose_name_merely_ends_in_ours_is_ignored() {
-        // "not_mailbox_session" ends with our name; a sloppy `contains`
+        // "not_kyu_session" ends with our name; a sloppy `contains`
         // check would accept it and let any site name a cookie into the hub.
-        let map = headers(&[("cookie", "not_mailbox_session=abc123")]);
+        let map = headers(&[("cookie", "not_kyu_session=abc123")]);
         assert_eq!(session_cookie(&map), None);
     }
 
@@ -230,7 +230,7 @@ mod tests {
     fn p7_clearing_the_cookie_expires_it_immediately() {
         let cleared = clear_cookie_value();
         assert!(cleared.contains("Max-Age=0"), "{cleared}");
-        assert!(cleared.starts_with("mailbox_session=;"), "{cleared}");
+        assert!(cleared.starts_with("kyu_session=;"), "{cleared}");
     }
 
     #[test]

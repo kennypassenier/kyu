@@ -27,12 +27,12 @@ use super::error::ApiError;
 /// Headers carrying the metadata a raw-body response cannot put in the
 /// body (AR2). Lowercase on the wire either way; HTTP/2 and proxies
 /// normalise the case, so clients must match case-insensitively.
-const HEADER_ID: &str = "mailbox-id";
-const HEADER_TOPIC: &str = "mailbox-topic";
-const HEADER_ATTEMPT: &str = "mailbox-attempt";
-const HEADER_PUBLISHED_AT: &str = "mailbox-published-at";
+const HEADER_ID: &str = "kyu-id";
+const HEADER_TOPIC: &str = "kyu-topic";
+const HEADER_ATTEMPT: &str = "kyu-attempt";
+const HEADER_PUBLISHED_AT: &str = "kyu-published-at";
 /// Says out loud what would otherwise be an unexplained empty answer.
-const HEADER_NOTICE: &str = "mailbox-notice";
+const HEADER_NOTICE: &str = "kyu-notice";
 
 /// A fresh subscription's first poll cannot see anything published before
 /// it existed (G7). Saying so turns a confusing 204 into a lesson about how
@@ -105,7 +105,7 @@ pub async fn healthz(State(state): State<AppState>) -> Response {
             json!(
                 "check free space on the data volume first, then that it is still \
                  mounted, writable by this user and not locked by another process. \
-                 mailbox reports itself unhealthy rather than accepting publishes it \
+                 kyu reports itself unhealthy rather than accepting publishes it \
                  cannot store, and recovers by itself once writes succeed again."
             ),
         );
@@ -182,7 +182,7 @@ pub async fn publish(
     })?;
 
     // Stored verbatim, including a content type the client got wrong:
-    // `curl -d` sends form-urlencoded unless told otherwise (AR2). mailbox
+    // `curl -d` sends form-urlencoded unless told otherwise (AR2). kyu
     // reports what it was given rather than guessing.
     let content_type = headers
         .get(header::CONTENT_TYPE)
@@ -220,7 +220,7 @@ pub async fn publish(
 pub struct ReceiveQuery {
     /// The subscription name. `as` is a Rust keyword, hence the rename.
     ///
-    /// Optional here so that leaving it out produces mailbox's own error
+    /// Optional here so that leaving it out produces kyu's own error
     /// with a remedy, rather than the framework's bare rejection text
     /// (standing rule 11).
     #[serde(rename = "as")]
@@ -1143,35 +1143,33 @@ pub async fn metrics(State(state): State<AppState>) -> Result<Response, ApiError
             .unwrap_or(0);
 
             let mut out = String::new();
-            out.push_str("# HELP mailbox_topics Topics on this hub.\n");
-            out.push_str("# TYPE mailbox_topics gauge\n");
-            out.push_str(&format!("mailbox_topics {topics}\n"));
-            out.push_str("# HELP mailbox_subscriptions Subscriptions across all topics.\n");
-            out.push_str("# TYPE mailbox_subscriptions gauge\n");
-            out.push_str(&format!("mailbox_subscriptions {subscriptions}\n"));
-            out.push_str("# HELP mailbox_messages Messages currently retained.\n");
-            out.push_str("# TYPE mailbox_messages gauge\n");
-            out.push_str(&format!("mailbox_messages {messages}\n"));
-            out.push_str("# HELP mailbox_store_bytes Size of the store on disk.\n");
-            out.push_str("# TYPE mailbox_store_bytes gauge\n");
-            out.push_str(&format!("mailbox_store_bytes {bytes}\n"));
-            out.push_str(
-                "# HELP mailbox_deliveries Deliveries by topic, subscription and state.\n",
-            );
-            out.push_str("# TYPE mailbox_deliveries gauge\n");
+            out.push_str("# HELP kyu_topics Topics on this hub.\n");
+            out.push_str("# TYPE kyu_topics gauge\n");
+            out.push_str(&format!("kyu_topics {topics}\n"));
+            out.push_str("# HELP kyu_subscriptions Subscriptions across all topics.\n");
+            out.push_str("# TYPE kyu_subscriptions gauge\n");
+            out.push_str(&format!("kyu_subscriptions {subscriptions}\n"));
+            out.push_str("# HELP kyu_messages Messages currently retained.\n");
+            out.push_str("# TYPE kyu_messages gauge\n");
+            out.push_str(&format!("kyu_messages {messages}\n"));
+            out.push_str("# HELP kyu_store_bytes Size of the store on disk.\n");
+            out.push_str("# TYPE kyu_store_bytes gauge\n");
+            out.push_str(&format!("kyu_store_bytes {bytes}\n"));
+            out.push_str("# HELP kyu_deliveries Deliveries by topic, subscription and state.\n");
+            out.push_str("# TYPE kyu_deliveries gauge\n");
             for count in counts {
                 out.push_str(&format!(
-                    "mailbox_deliveries{{topic=\"{}\",subscription=\"{}\",state=\"{}\"}} {}\n",
+                    "kyu_deliveries{{topic=\"{}\",subscription=\"{}\",state=\"{}\"}} {}\n",
                     escape_label(&count.topic),
                     escape_label(&count.subscription),
                     count.state,
                     count.count
                 ));
             }
-            out.push_str("# HELP mailbox_sweeper_age_ms Time since the sweeper last ran.\n");
-            out.push_str("# TYPE mailbox_sweeper_age_ms gauge\n");
+            out.push_str("# HELP kyu_sweeper_age_ms Time since the sweeper last ran.\n");
+            out.push_str("# TYPE kyu_sweeper_age_ms gauge\n");
             out.push_str(&format!(
-                "mailbox_sweeper_age_ms {}\n",
+                "kyu_sweeper_age_ms {}\n",
                 now.saturating_sub(heartbeat.last_beat_ms())
             ));
             Ok(out)
@@ -1209,7 +1207,7 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
         let directory = path.parent().unwrap_or(std::path::Path::new("."));
         // Named for the moment it was taken, so several backups coexist and
         // the newest is obvious from a directory listing.
-        let target = directory.join(format!("mailbox.backup-{}.db", engine.now_ms()));
+        let target = directory.join(format!("kyu.backup-{}.db", engine.now_ms()));
         let bytes = store.backup_to(&target)?;
         Ok((target.display().to_string(), bytes))
     })
@@ -1224,8 +1222,8 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
                 axum::Json(json!({
                     "backup": path,
                     "bytes": bytes,
-                    "restore": "stop the hub, replace mailbox.db with this file (removing any \
-                                mailbox.db-wal and mailbox.db-shm beside it), then start it \
+                    "restore": "stop the hub, replace kyu.db with this file (removing any \
+                                kyu.db-wal and kyu.db-shm beside it), then start it \
                                 again. The backup is a complete database, not a partial copy.",
                 })),
             )
@@ -1234,7 +1232,7 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
         Err(error) => Err(ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             format!("the backup failed: {error:#}"),
-            "check free space and that the data directory is writable. mailbox keeps \
+            "check free space and that the data directory is writable. kyu keeps \
              serving either way; a failed backup does not affect delivery.",
         )),
     }
@@ -1280,7 +1278,7 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
         _ => {
             return ApiError::new(
                 StatusCode::NOT_FOUND,
-                format!("mailbox serves no asset named {file:?}"),
+                format!("kyu serves no asset named {file:?}"),
                 "the dashboard needs only bootstrap.min.css and app.js.".to_string(),
             )
             .into_response();
@@ -1333,7 +1331,7 @@ pub async fn login(State(state): State<AppState>, body: axum::body::Bytes) -> Re
         // token was wrong, expired or revoked.
         tracing::warn!("a login attempt was refused");
         return match dashboard::render_login(Some(
-            "That token was not accepted. Check the value of MAILBOX_TOKEN in \
+            "That token was not accepted. Check the value of KYU_TOKEN in \
              your compose file, or use a token from the apps page.",
         )) {
             Ok(page) => (StatusCode::OK, Html(page)).into_response(),

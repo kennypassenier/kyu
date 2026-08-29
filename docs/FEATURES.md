@@ -1,4 +1,4 @@
-# mailbox — Features
+# kyu — Features
 
 **FROZEN 2026-08-12** via the Phase 2 gate (rating rounds 1+2, report
 form R1–R3 all approved). Changes only via mini-rounds
@@ -93,7 +93,7 @@ walkthrough as scripted manual test (Phase 8).
 ### K11 · Idle-subscription lifecycle
 Unpolled for X days → ⚠ flag on dashboard; after Y days → archived
 (stops accumulating, keeps what it had), announced via log and W11
-`mailbox.events`. Unarchive is one click.
+`kyu.events`. Unarchive is one click.
 **Proven by:** mocked-clock lifecycle transitions
 (active→flagged→archived→unarchived); announcement-emitted assertions.
 
@@ -125,7 +125,7 @@ had no tags and no releases. The claim is removed rather than softened.
 same way.
 
 **Proven on 2026-08-28** by the `v1.0.0` tag: the workflow ran, published
-`ghcr.io/kennypassenier/mailbox:1.0.0` and `:latest`, and the image was
+`ghcr.io/kennypassenier/kyu:1.0.0` and `:latest`, and the image was
 pulled anonymously and exercised — health, a refused tokenless publish, and
 a message through publish → receive → ack — before the GitHub Release was
 written. The claim this entry once made falsely is now true and dated.
@@ -143,7 +143,7 @@ chose.
 Feeds Uptime Kuma and the Docker healthcheck in K13's compose.
 **Proven by:** healthy and degraded (read-only store → non-200) tests.
 
-### W11 · `mailbox.events` system topic
+### W11 · `kyu.events` system topic
 The hub publishes its own noteworthy events as ordinary messages:
 dead-lettered, subscription flagged/archived, TTL batch expired.
 Consumed via K2 like any topic (e.g. HA automation → office light).
@@ -172,7 +172,7 @@ Phase 7 hardening gate and specified the shape across three rounds:
 - **App management:** a dashboard section to register an app and
   generate a token for it, and to revoke one. Tokens are stored
   **encrypted** (AR11 amendment) so the dashboard can always reproduce
-  a working command. The encryption key (`MAILBOX_SECRET_KEY`) is
+  a working command. The encryption key (`KYU_SECRET_KEY`) is
   mandatory alongside the token, so rotating a leaked bootstrap token
   never silently orphans every app token.
 - **Snippets:** the copy-paste commands carry a real, working token. It
@@ -218,7 +218,7 @@ Per-topic form, payload prefilled with last real payload, send button.
 
 ## Later (2)
 
-- **W3 · Companion CLI** — `mailbox send/tail/ls`; only if the
+- **W3 · Companion CLI** — `kyu send/tail/ls`; only if the
   curl+dashboard bet proves insufficient.
 - **W10 · Public peek endpoint** — `GET /t/<topic>/peek?n=`; dashboard
   uses the capability internally regardless.

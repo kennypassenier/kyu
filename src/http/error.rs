@@ -31,8 +31,8 @@ impl ApiError {
             StatusCode::PAYLOAD_TOO_LARGE,
             format!("the message body is larger than the {limit} byte limit"),
             format!(
-                "publish a smaller payload, or raise MAILBOX_MAX_BODY_BYTES (currently \
-                 {limit}) and restart the hub. mailbox refuses an oversized message rather \
+                "publish a smaller payload, or raise KYU_MAX_BODY_BYTES (currently \
+                 {limit}) and restart the hub. kyu refuses an oversized message rather \
                  than storing part of it."
             ),
         )
@@ -98,7 +98,7 @@ impl From<EngineError> for ApiError {
 
         let remedy = error.remedy();
         let message = match &error {
-            EngineError::Internal(_) => "mailbox hit an internal error".to_string(),
+            EngineError::Internal(_) => "kyu hit an internal error".to_string(),
             other => other.to_string(),
         };
 

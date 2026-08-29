@@ -10,11 +10,11 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::engine::clock::{Clock, MockClock, SystemClock};
-use mailbox::engine::{Defaults, Engine};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::clock::{Clock, MockClock, SystemClock};
+use kyu::engine::{Defaults, Engine};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 
 struct Hub {
@@ -109,17 +109,17 @@ async fn l8_metrics_expose_the_series_that_reveal_a_silent_failure() {
     );
 
     let body = response.text().await.expect("a body");
-    assert!(body.contains("# TYPE mailbox_deliveries gauge"));
+    assert!(body.contains("# TYPE kyu_deliveries gauge"));
     assert!(
         body.contains(
-            r#"mailbox_deliveries{topic="notify.kenny",subscription="printer",state="pending"} 2"#
+            r#"kyu_deliveries{topic="notify.kenny",subscription="printer",state="pending"} 2"#
         ),
         "the backlog is per topic and subscription, which is what an alert \
          needs to name the broken thing: {body}"
     );
-    assert!(body.contains("mailbox_store_bytes "));
+    assert!(body.contains("kyu_store_bytes "));
     assert!(
-        body.contains("mailbox_sweeper_age_ms "),
+        body.contains("kyu_sweeper_age_ms "),
         "a stalled sweeper must be alertable, not only visible on /healthz"
     );
 }
@@ -199,7 +199,7 @@ async fn l8_a_schedule_survives_a_restart() {
         .await
         .expect("a body");
     assert!(
-        metrics.contains("mailbox_messages 2"),
+        metrics.contains("kyu_messages 2"),
         "the message itself is durable from the moment it was accepted: {metrics}"
     );
 }
@@ -269,7 +269,7 @@ async fn l8_a_backup_taken_under_load_restores_to_a_working_store() {
 
     // Restore into a fresh data directory, exactly as the response says.
     let restored_dir = tempfile::tempdir().expect("a temp dir");
-    std::fs::copy(&path, restored_dir.path().join("mailbox.db")).expect("the restore copy");
+    std::fs::copy(&path, restored_dir.path().join("kyu.db")).expect("the restore copy");
 
     let restored = spawn_at(restored_dir.path()).await;
     let health = body_json(
@@ -320,11 +320,11 @@ async fn l8_logs_can_be_emitted_as_json_lines() {
         listener.local_addr().expect("an address").port()
     };
 
-    let output = Command::new(env!("CARGO_BIN_EXE_mailbox"))
-        .env("MAILBOX_DATA_DIR", dir.path())
-        .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-        .env("MAILBOX_LOG_FORMAT", "json")
-        .env("MAILBOX_LOG", "info")
+    let output = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_LOG_FORMAT", "json")
+        .env("KYU_LOG", "info")
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()

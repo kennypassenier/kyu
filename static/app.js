@@ -1,4 +1,4 @@
-// mailbox dashboard — reveal and copy (W2).
+// kyu dashboard — reveal and copy (W2).
 //
 // Everything else on this dashboard is server-rendered HTML and plain
 // forms. This file exists for exactly two controls, which is why htmx was
@@ -9,7 +9,7 @@
 // - navigator.clipboard exists only in a "secure context". https qualifies,
 //   and so does http://localhost — so it IS available when you open the hub
 //   on the machine it runs on, and is NOT when you open it at
-//   http://mailbox.lan:8080 from your laptop. Both are normal ways to use
+//   http://kyu.lan:8080 from your laptop. Both are normal ways to use
 //   this dashboard, so both paths have to be here.
 // - The execCommand fallback works on plain http, but only inside a real
 //   user gesture. That is fine for a button someone clicks, and it is why an

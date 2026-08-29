@@ -4,8 +4,8 @@
 
 use std::path::Path;
 
-use mailbox::engine::ids::MessageIds;
-use mailbox::store::{STORE_FILE_NAME, Store, migrations};
+use kyu::engine::ids::MessageIds;
+use kyu::store::{STORE_FILE_NAME, Store, migrations};
 use rusqlite::Connection;
 
 fn table_names(conn: &Connection) -> Vec<String> {
@@ -131,7 +131,7 @@ fn l1_a_newer_schema_is_refused_with_a_remedy() {
         let _ = Store::open(dir.path()).expect("create the store");
     }
 
-    // Pretend a future mailbox has been here.
+    // Pretend a future kyu has been here.
     {
         let conn = Connection::open(dir.path().join(STORE_FILE_NAME)).expect("reopen");
         conn.pragma_update(None, "user_version", 99)
@@ -140,9 +140,9 @@ fn l1_a_newer_schema_is_refused_with_a_remedy() {
 
     let error = Store::open(dir.path()).expect_err("a newer schema must not be opened");
     let message = format!("{error:#}");
-    assert!(message.contains("newer mailbox"), "explains what happened");
+    assert!(message.contains("newer kyu"), "explains what happened");
     assert!(
-        message.contains("mailbox.pre-v") || message.contains("Roll back"),
+        message.contains("kyu.pre-v") || message.contains("Roll back"),
         "carries a remedy: {message}"
     );
 }
@@ -168,12 +168,12 @@ fn l1_a_snapshot_is_written_before_migrating_a_populated_store() {
 
     assert_eq!(version, 2);
     assert!(
-        dir.path().join("mailbox.pre-v1.db").exists(),
+        dir.path().join("kyu.pre-v1.db").exists(),
         "migrating a populated store must leave a rollback point"
     );
 
     // The snapshot must be a usable database holding the pre-migration state.
-    let snapshot = Connection::open(dir.path().join("mailbox.pre-v1.db")).expect("open snapshot");
+    let snapshot = Connection::open(dir.path().join("kyu.pre-v1.db")).expect("open snapshot");
     let rows: i64 = snapshot
         .query_row("SELECT count(*) FROM probe", [], |row| row.get(0))
         .expect("the snapshot must be queryable");
@@ -193,7 +193,7 @@ fn snapshot_exists(dir: &Path) -> bool {
             entry
                 .file_name()
                 .to_str()
-                .is_some_and(|name| name.starts_with("mailbox.pre-v"))
+                .is_some_and(|name| name.starts_with("kyu.pre-v"))
         })
 }
 

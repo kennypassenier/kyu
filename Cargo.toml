@@ -1,11 +1,11 @@
 [package]
-name = "mailbox"
-version = "1.0.1"
+name = "kyu"
+version = "2.0.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
 description = "A self-documenting durable message hub for a homelab"
-repository = "https://github.com/kennypassenier/mailbox"
+repository = "https://github.com/kennypassenier/kyu"
 publish = false
 
 # Dependency policy T6 ("reluctant, policed"): each direct dependency is

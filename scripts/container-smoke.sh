@@ -4,9 +4,9 @@
 # survived. Run locally or in CI; it cleans up after itself.
 set -euo pipefail
 
-IMAGE="${1:-mailbox:smoke}"
-NAME="mailbox-smoke-$$"
-VOLUME="mailbox-smoke-data-$$"
+IMAGE="${1:-kyu:smoke}"
+NAME="kyu-smoke-$$"
+VOLUME="kyu-smoke-data-$$"
 PORT="${PORT:-18099}"
 HUB="http://localhost:${PORT}"
 
@@ -29,7 +29,7 @@ curl -sf -o /dev/null "${HUB}/healthz" || { echo "the hub never became healthy";
 
 say "the container reports itself healthy through its own binary"
 docker inspect --format '{{.State.Health.Status}}' "$NAME" 2>/dev/null || true
-docker exec "$NAME" /usr/local/bin/mailbox --healthcheck
+docker exec "$NAME" /usr/local/bin/kyu --healthcheck
 
 say "publish, subscribe, publish, receive, ack"
 curl -sf -o /dev/null -H 'content-type: application/json' -d '{"bootstrap":1}' "${HUB}/t/notify.kenny"
@@ -37,7 +37,7 @@ curl -sf -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0"
 ID=$(curl -sf -H 'content-type: application/json' -d '{"title":"smoke"}' "${HUB}/t/notify.kenny" \
      | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 GOT=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer" \
-      | tr -d '\r' | awk 'tolower($1)=="mailbox-id:"{print $2}')
+      | tr -d '\r' | awk 'tolower($1)=="kyu-id:"{print $2}')
 [ "$GOT" = "$ID" ] || { echo "expected $ID, received $GOT"; exit 1; }
 curl -sf -o /dev/null -X POST "${HUB}/t/notify.kenny/ack/${ID}?as=printer"
 
@@ -52,7 +52,7 @@ done
 
 say "state survived the restart"
 AFTER=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0" \
-        | tr -d '\r' | awk 'tolower($1)=="mailbox-id:"{print $2}')
+        | tr -d '\r' | awk 'tolower($1)=="kyu-id:"{print $2}')
 [ "$AFTER" = "$UNACKED" ] || { echo "expected the unacked $UNACKED, received '${AFTER}'"; exit 1; }
 
 STATUS=$(curl -sf -o /dev/null -w '%{http_code}' "${HUB}/t/notify.kenny/next?as=printer&wait=0" || true)
@@ -71,10 +71,10 @@ done
 curl -sf -o /dev/null "${HUB}/healthz" || { echo "the hub did not come back after an upgrade"; docker logs "$NAME"; exit 1; }
 
 STILL=$(curl -sf -D- -o /dev/null "${HUB}/t/notify.kenny/next?as=printer&wait=0" \
-        | tr -d '\r' | awk 'tolower($1)=="mailbox-id:"{print $2}')
+        | tr -d '\r' | awk 'tolower($1)=="kyu-id:"{print $2}')
 [ -z "$STILL" ] || { echo "the upgraded hub redelivered something already acked: $STILL"; exit 1; }
 
-docker exec "$NAME" /usr/local/bin/mailbox --healthcheck
+docker exec "$NAME" /usr/local/bin/kyu --healthcheck
 
 say "the door: a protected hub, in the real image (W2)"
 # A second container, this one with a token. The point is not to re-test the
@@ -96,7 +96,7 @@ cleanup_door() {
 trap 'cleanup; cleanup_door' EXIT
 
 docker run -d --name "$DOOR" -p "${DOOR_PORT}:8080" -v "${DOOR_VOLUME}:/data" \
-    -e "MAILBOX_TOKEN=${TOKEN}" -e "MAILBOX_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
+    -e "KYU_TOKEN=${TOKEN}" -e "KYU_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
 for _ in $(seq 1 60); do
     if curl -sf -o /dev/null "${DOOR_HUB}/healthz"; then break; fi
     sleep 0.5
@@ -126,7 +126,7 @@ for ASSET in bootstrap.min.css app.js; do
 done
 
 # A half-configured door must refuse to start rather than run open.
-if docker run --rm -e "MAILBOX_TOKEN=${TOKEN}" "$IMAGE" >/dev/null 2>&1; then
+if docker run --rm -e "KYU_TOKEN=${TOKEN}" "$IMAGE" >/dev/null 2>&1; then
     echo "a token without a secret key started anyway, which it must never do"
     exit 1
 fi

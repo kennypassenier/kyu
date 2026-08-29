@@ -1,4 +1,4 @@
-# mailbox — Architecture decisions
+# kyu — Architecture decisions
 
 Decisions T1–T9 (tech choice) were taken at the Phase 3 gate on
 2026-08-12; AR1–AR11 (architecture) were **FROZEN 2026-08-12** at the
@@ -99,7 +99,7 @@ Rejected: N-2 MSRV window (buys nothing for a self-deployed binary).
 
 Multi-stage build → static musl binary → `gcr.io/distroless/static`
 (~2 MB: CA certs + nonroot user included). The W6 Docker healthcheck
-uses a `--healthcheck` flag on the mailbox binary itself, since the
+uses a `--healthcheck` flag on the kyu binary itself, since the
 image has no shell. Rejected: scratch (hand-rolled certs/nonroot for
 2 MB), alpine (a shell and package manager the container doesn't
 need).
@@ -110,7 +110,7 @@ need).
 
 ## AR1 · Module layout: core/shell split
 
-One Cargo package: `mailbox` lib + thin `main.rs`.
+One Cargo package: `kyu` lib + thin `main.rs`.
 
 - `engine/` — ALL delivery semantics (publish, claim, ack, nack,
   redelivery, DLQ, TTL/retention/idle/due-time transitions). Pure
@@ -124,11 +124,11 @@ One Cargo package: `mailbox` lib + thin `main.rs`.
 - `dashboard/` — minijinja rendering + htmx fragment endpoints;
   read-only over engine/store, plus the W9 publish call.
 - `events/` — W11: engine emits typed events; this module publishes
-  them onto `mailbox.*` topics through the normal publish path.
+  them onto `kyu.*` topics through the normal publish path.
 
 **Loop-breaker (amendment, critic objection 12):** events *about*
-`mailbox.*` topics are logged only, never re-published as events —
-otherwise a broken consumer of `mailbox.events` dead-letters, which
+`kyu.*` topics are logged only, never re-published as events —
+otherwise a broken consumer of `kyu.events` dead-letters, which
 emits a dead-letter event onto the same topic, which dead-letters, ad
 infinitum. Dedicated test required.
 
@@ -150,8 +150,8 @@ generator live under `engine`, the schema and migrations under `store`.
   `{"id":"<ulid>"}`. Query `delay`/`at` (W4).
 - `GET /t/{topic}/next?as={sub}` — long-poll claim.
   - Default: 200 with the payload as the response body, verbatim,
-    metadata in headers (`Mailbox-Id`, `Mailbox-Topic`,
-    `Mailbox-Attempt`, `Mailbox-Published-At`, stored `Content-Type`).
+    metadata in headers (`Kyu-Id`, `Kyu-Topic`,
+    `Kyu-Attempt`, `Kyu-Published-At`, stored `Content-Type`).
   - `&envelope=json`: 200 with
     `{"id","topic","attempt","published_at","content_type","payload"}`;
     JSON payloads embed as JSON, non-JSON/binary payloads appear as
@@ -173,7 +173,7 @@ tested. Rejected: envelope-always (permanent base64 for binary, kills
 payload fidelity); headers-only (leaves the friction unaddressed).
 
 **Content-type rule (amendment, objection 5):** `curl -d` silently
-sends `application/x-www-form-urlencoded`; mailbox stores what it is
+sends `application/x-www-form-urlencoded`; kyu stores what it is
 sent, verbatim, so every rendered example and doc snippet carries an
 explicit `-H 'content-type: …'`. The dashboard sniffs content for
 *display* only, never rewriting stored metadata.
@@ -295,7 +295,7 @@ promotes a message, so redelivery does not wait for the next poll.
 
 ## AR6 · Configuration: environment only *(critic-cleared)*
 
-`MAILBOX_DATA_DIR`, `MAILBOX_LISTEN`, `MAILBOX_MAX_BODY_BYTES`, log
+`KYU_DATA_DIR`, `KYU_LISTEN`, `KYU_MAX_BODY_BYTES`, log
 level/format, plus global *defaults* (idle-flag/archive thresholds,
 default retention). Only what the process needs before it can open the
 store; all per-topic/per-subscription policy (K7, K9) lives in the
@@ -318,7 +318,7 @@ to look).
 ## AR8 · Names, limits, reserved space *(critic-cleared, unchanged)*
 
 Topic and subscription names `^[a-z0-9._-]{1,64}$`; dots namespace
-(`notify.kenny`, `jobs.transcode`). `mailbox.*` reserved for system
+(`notify.kenny`, `jobs.transcode`). `kyu.*` reserved for system
 topics (W11); external publish there → 403 with remedy. Payload cap 1
 MiB default (env-overridable) → 413 with remedy. `wait` ≤ 300 s,
 default 30 s.
@@ -355,7 +355,7 @@ forward-only migrations apply inside a transaction; opening a schema
 NEWER than the binary knows is refused with a remedy.
 
 **Amendment (objection 10):** before applying any migration the binary
-snapshots the store (`VACUUM INTO mailbox.pre-v{N}.db`, last two kept)
+snapshots the store (`VACUUM INTO kyu.pre-v{N}.db`, last two kept)
 — otherwise a bad image migrates the schema, misbehaves, and rolling
 the image tag back hits "refuse newer schema" with no snapshot to
 return to. Rollback = previous image + snapshot file, documented as a
@@ -375,18 +375,18 @@ because they are architecture, not implementation detail.
   more than a workflow tuned to this one. The GitHub Release stays a manual
   `gh release create`: the adopted template does not create one, and adding
   that would mean diverging from the shared shape unasked.
-- **Ecosystem (M2).** mailbox deploys through the homelab as a preset
-  (`presets/mailbox/` in that repo), which is the interface its own G9
+- **Ecosystem (M2).** kyu deploys through the homelab as a preset
+  (`presets/kyu/` in that repo), which is the interface its own G9
   feature defines: an image on GHCR plus a preset, and *zero orchestrator
   code*. Kenny asked whether the binary could run natively and update
   itself; the answer is that the homelab has no such path built or planned,
   its only systemd unit is its own daemon, and adding one would be the
-  orchestrator work G9 exists to avoid. For mailbox specifically the gain
+  orchestrator work G9 exists to avoid. For kyu specifically the gain
   would be close to zero — the binary is static musl and the image around it
   is empty — while the loss is the nightly update with rollback, the backups
   and the parking, all keyed on containers.
 - **Backup (M3).** The homelab's restic backup is the real one: encrypted,
-  off-site, 7d/4w/3m, with a quarterly restore drill. mailbox rides it by
+  off-site, 7d/4w/3m, with a quarterly restore drill. kyu rides it by
   binding its data under `/appdata/<stack>/` in the preset and carrying
   `com.homelab.backup.pause=true`, because SQLite copied mid-write does not
   restore. No scheduler was built into the hub: a copy beside the original,
@@ -401,10 +401,10 @@ because they are architecture, not implementation detail.
   did not predict a green build, which stopped being theoretical the day
   1.98 added a lint 1.97 did not have.
 - **Release shape (Phase 9 gate, 2026-08-28).** The procedure asks for
-  tag → build → *checksum manifest* → GitHub Release, and mailbox does
+  tag → build → *checksum manifest* → GitHub Release, and kyu does
   tag → build → image, with the GitHub Release written by hand. Both
   omissions are reasoned, not forgotten. A checksum manifest exists to let a
-  self-updating binary verify what it downloaded; mailbox ships no such
+  self-updating binary verify what it downloaded; kyu ships no such
   binary — updates arrive as a new image, whose integrity Docker already
   verifies by digest — so the manifest would be a file with no reader.
   Automating the release notes would mean diverging from the shared
@@ -429,7 +429,7 @@ because they are architecture, not implementation detail.
   hard cap (4 KiB shown) and a visible marker — *"truncated — N of M
   bytes"* / *"binary payload (N bytes)"* (G8: no silent truncation).
   W9 prefills text payloads only.
-- mailbox stores no secrets today; if W2 lands, token via env only,
+- kyu stores no secrets today; if W2 lands, token via env only,
   never logged, with a mandatory plaintext-scan test.
 
 **Amendment (2026-08-28 mini-round, W2) — "token via env only" no
@@ -437,17 +437,17 @@ longer holds.** Kenny asked for per-app tokens managed from the
 dashboard, which means the hub stores them. Decided:
 
 - The **bootstrap token** still comes from the environment
-  (`MAILBOX_TOKEN`, AR6) and is what you log in with. Something has to
+  (`KYU_TOKEN`, AR6) and is what you log in with. Something has to
   open the door before any app exists.
 - **App tokens live in the store, encrypted at rest**
-  (ChaCha20-Poly1305, key from `MAILBOX_SECRET_KEY`). Reversible rather
+  (ChaCha20-Poly1305, key from `KYU_SECRET_KEY`). Reversible rather
   than hashed — a hash cannot be turned back into a working command,
   and rendering a working command is the whole point of the dashboard
   (S1). The trade accepted: store file alone is useless; store file
   *plus* compose file is total compromise, which on a single-admin LAN
   hub whose compose file already holds the bootstrap token changes
   nothing an attacker did not have.
-- **`MAILBOX_SECRET_KEY` is mandatory whenever `MAILBOX_TOKEN` is set**
+- **`KYU_SECRET_KEY` is mandatory whenever `KYU_TOKEN` is set**
   (Kenny, 2026-08-28). The rejected alternative was deriving the
   encryption key from the bootstrap token when the key was absent: it
   works until the day you rotate a leaked bootstrap token, at which

@@ -4,7 +4,7 @@
 //! variables (AR6), so the command line only chooses *which of three things
 //! this invocation is*. The reason it exists at all is the failure it
 //! prevents — before 1.0.1 an unknown flag was silently ignored and the hub
-//! started anyway, so `mailbox --version` became a running server, and a
+//! started anyway, so `kyu --version` became a running server, and a
 //! typo in a unit file would have started a second hub on the same store.
 //! Standing rule 12: no silent fallbacks.
 
@@ -31,17 +31,17 @@ pub struct Refused {
 
 impl fmt::Display for Refused {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "mailbox does not understand {:?}.\n\n", self.argument)?;
+        write!(f, "kyu does not understand {:?}.\n\n", self.argument)?;
         if self.looks_like_a_flag {
-            write!(f, "Run mailbox --help to see the flags it does accept.")
+            write!(f, "Run kyu --help to see the flags it does accept.")
         } else {
             // The shape people actually get wrong: passing a config file,
             // because most daemons take one.
             write!(
                 f,
-                "mailbox takes no positional arguments and no config file — \
-                 everything is configured through MAILBOX_* environment \
-                 variables. Run mailbox --help for the list."
+                "kyu takes no positional arguments and no config file — \
+                 everything is configured through KYU_* environment \
+                 variables. Run kyu --help for the list."
             )
         }
     }
@@ -50,27 +50,27 @@ impl fmt::Display for Refused {
 /// The text `--help` prints. Names the environment, because that is where a
 /// reader who reached for `--help` is actually trying to go.
 pub const HELP: &str = "\
-mailbox — a durable message hub
+kyu — a durable message hub
 
 USAGE:
-    mailbox                 run the hub (configuration comes from the environment)
-    mailbox --healthcheck   probe a running hub and exit 0 if it is healthy
-    mailbox --version       print the version and exit
-    mailbox --help          print this and exit
+    kyu                 run the hub (configuration comes from the environment)
+    kyu --healthcheck   probe a running hub and exit 0 if it is healthy
+    kyu --version       print the version and exit
+    kyu --help          print this and exit
 
 CONFIGURATION (environment only — there is no config file):
-    MAILBOX_LISTEN          address to bind          default 0.0.0.0:8080
-    MAILBOX_DATA_DIR        where the store lives    default /data
-    MAILBOX_TOKEN           the token to require     default none (open hub)
-    MAILBOX_SECRET_KEY      encrypts per-app tokens  required with MAILBOX_TOKEN
-    MAILBOX_MAX_BODY_BYTES  largest accepted payload default 1048576
-    MAILBOX_LOG             log filter               default info
-    MAILBOX_LOG_FORMAT      set to json for Loki     default human-readable
-    MAILBOX_RETENTION_MS    default retention        default 604800000, or never
-    MAILBOX_IDLE_FLAG_MS    flag a quiet consumer    default 604800000
-    MAILBOX_IDLE_ARCHIVE_MS archive a quiet consumer default 2592000000
+    KYU_LISTEN          address to bind          default 0.0.0.0:8080
+    KYU_DATA_DIR        where the store lives    default /data
+    KYU_TOKEN           the token to require     default none (open hub)
+    KYU_SECRET_KEY      encrypts per-app tokens  required with KYU_TOKEN
+    KYU_MAX_BODY_BYTES  largest accepted payload default 1048576
+    KYU_LOG             log filter               default info
+    KYU_LOG_FORMAT      set to json for Loki     default human-readable
+    KYU_RETENTION_MS    default retention        default 604800000, or never
+    KYU_IDLE_FLAG_MS    flag a quiet consumer    default 604800000
+    KYU_IDLE_ARCHIVE_MS archive a quiet consumer default 2592000000
 
-Full documentation: https://github.com/kennypassenier/mailbox";
+Full documentation: https://github.com/kennypassenier/kyu";
 
 /// Decides what an invocation means, refusing anything it does not recognise.
 ///
@@ -130,11 +130,11 @@ mod tests {
     #[test]
     fn p7_a_positional_argument_is_refused_and_points_at_the_environment() {
         // Someone assumed a config file, because most daemons take one.
-        let refused = parse(["/etc/mailbox.conf"]).expect_err("must be refused");
+        let refused = parse(["/etc/kyu.conf"]).expect_err("must be refused");
         let message = refused.to_string();
-        assert!(message.contains("/etc/mailbox.conf"), "names it: {message}");
+        assert!(message.contains("/etc/kyu.conf"), "names it: {message}");
         assert!(
-            message.contains("MAILBOX_") && message.contains("no config file"),
+            message.contains("KYU_") && message.contains("no config file"),
             "says where configuration actually lives: {message}"
         );
     }

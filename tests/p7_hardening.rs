@@ -10,13 +10,13 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::engine::clock::{Clock, MockClock, SystemClock};
-use mailbox::engine::{Defaults, Engine};
-use mailbox::events::EVENTS_TOPIC;
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::queries::StoredPolicy;
-use mailbox::store::{Store, migrations};
-use mailbox::sweeper::{self, Heartbeat};
+use kyu::engine::clock::{Clock, MockClock, SystemClock};
+use kyu::engine::{Defaults, Engine};
+use kyu::events::EVENTS_TOPIC;
+use kyu::http::{AppState, Limits, router};
+use kyu::store::queries::StoredPolicy;
+use kyu::store::{Store, migrations};
+use kyu::sweeper::{self, Heartbeat};
 use serde_json::Value;
 
 const START: i64 = 1_700_000_000_000;
@@ -158,7 +158,7 @@ fn p7_g2_a_kill_before_the_snapshot_leaves_the_old_store_intact() {
     // version, or it changes nothing. A kill is modelled by a migration that
     // fails part-way, which is the same thing from the store's point of view.
     let dir = tempfile::tempdir().expect("a temp dir");
-    let path = dir.path().join("mailbox.db");
+    let path = dir.path().join("kyu.db");
     let mut conn = rusqlite::Connection::open(&path).expect("open");
 
     let v1 = ["CREATE TABLE probe (id INTEGER PRIMARY KEY) STRICT;"];
@@ -193,7 +193,7 @@ fn p7_g2_a_kill_before_the_snapshot_leaves_the_old_store_intact() {
 
     // And the rollback point exists, because the snapshot is taken first.
     assert!(
-        dir.path().join("mailbox.pre-v1.db").exists(),
+        dir.path().join("kyu.pre-v1.db").exists(),
         "the snapshot is written before the migration runs, so a bad upgrade \
          is reversible even when the migration itself explodes"
     );
@@ -211,10 +211,10 @@ async fn p7_g2_a_hard_kill_at_startup_leaves_a_migratable_store() {
     };
 
     for _ in 0..8 {
-        let mut process = Command::new(env!("CARGO_BIN_EXE_mailbox"))
-            .env("MAILBOX_DATA_DIR", dir.path())
-            .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-            .env("MAILBOX_LOG", "error")
+        let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+            .env("KYU_DATA_DIR", dir.path())
+            .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+            .env("KYU_LOG", "error")
             .spawn()
             .expect("start");
         tokio::time::sleep(Duration::from_millis(15)).await;
@@ -526,12 +526,9 @@ async fn p7_g6_replay_works_over_http_and_says_what_it_pulled_in() {
     // The documented recovery path, exercised the way the dashboard prints it.
     let response = receive(&hub, "notify.kenny", "as=rebuilt&from=beginning&wait=0").await;
     assert_eq!(response.status(), 200);
-    assert_eq!(
-        header(&response, "mailbox-id").as_deref(),
-        Some(first.as_str())
-    );
+    assert_eq!(header(&response, "kyu-id").as_deref(), Some(first.as_str()));
 
-    let notice = header(&response, "mailbox-notice").expect("a replay is never silent");
+    let notice = header(&response, "kyu-notice").expect("a replay is never silent");
     assert!(
         notice.contains("replayed") && notice.contains('2'),
         "the notice says how many messages it pulled in: {notice}"
@@ -540,7 +537,7 @@ async fn p7_g6_replay_works_over_http_and_says_what_it_pulled_in() {
     // Asking again is idempotent and reports no further backfill.
     let again = receive(&hub, "notify.kenny", "as=rebuilt&from=beginning&wait=0").await;
     assert_eq!(again.status(), 200);
-    assert!(header(&again, "mailbox-notice").is_none());
+    assert!(header(&again, "kyu-notice").is_none());
 }
 
 #[tokio::test]
@@ -549,7 +546,7 @@ async fn p7_g6_replay_on_an_empty_topic_answers_204_without_a_false_notice() {
     publish(&hub, "notify.kenny", r#"{"n":1}"#).await;
     // Drain it so the topic is empty but present.
     let response = receive(&hub, "notify.kenny", "as=drainer&from=beginning&wait=0").await;
-    let id = header(&response, "mailbox-id").expect("an id");
+    let id = header(&response, "kyu-id").expect("an id");
     reqwest::Client::new()
         .post(hub.url(&format!("/t/notify.kenny/ack/{id}?as=drainer")))
         .send()
@@ -559,7 +556,7 @@ async fn p7_g6_replay_on_an_empty_topic_answers_204_without_a_false_notice() {
     let empty = receive(&hub, "notify.kenny", "as=drainer&from=beginning&wait=0").await;
     assert_eq!(empty.status(), 204);
     assert!(
-        header(&empty, "mailbox-notice").is_none(),
+        header(&empty, "kyu-notice").is_none(),
         "nothing was replayed, so nothing is claimed to have been"
     );
 }
@@ -732,11 +729,11 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
         listener.local_addr().expect("an address").port()
     };
 
-    let mut process = Command::new(env!("CARGO_BIN_EXE_mailbox"))
-        .env("MAILBOX_DATA_DIR", dir.path())
-        .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-        .env("MAILBOX_LOG_FORMAT", "json")
-        .env("MAILBOX_LOG", "debug")
+    let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_LOG_FORMAT", "json")
+        .env("KYU_LOG", "debug")
         .stdout(std::process::Stdio::piped())
         .spawn()
         .expect("start");
@@ -911,7 +908,7 @@ fn p7_g12_the_events_topic_behaves_like_any_other() {
     assert!(
         events(&store) > 0,
         "a message an active subscription still holds is never collected, \
-         even on mailbox.events"
+         even on kyu.events"
     );
 
     // Drain the watcher completely. Its earlier claim had its lease expire
@@ -1008,7 +1005,7 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
                 empty_rounds = 0;
                 let id = response
                     .headers()
-                    .get("mailbox-id")
+                    .get("kyu-id")
                     .and_then(|v| v.to_str().ok())
                     .expect("an id")
                     .to_string();
@@ -1095,7 +1092,7 @@ async fn p7_g15_an_ack_at_the_lease_boundary_wins_against_the_live_sweeper() {
             if response.status() != 200 {
                 break;
             }
-            let leftover = header(&response, "mailbox-id").expect("an id");
+            let leftover = header(&response, "kyu-id").expect("an id");
             let _ = reqwest::Client::new()
                 .post(hub.url(&format!("/t/jobs.transcode/ack/{leftover}?as=worker")))
                 .send()
@@ -1225,7 +1222,7 @@ async fn p7_p1_the_dashboard_shows_dead_letters_and_requeues_them() {
     let redelivered = receive(&hub, "print.receipt", "as=printer&wait=0").await;
     assert_eq!(redelivered.status(), 200);
     assert_eq!(
-        header(&redelivered, "mailbox-attempt").as_deref(),
+        header(&redelivered, "kyu-attempt").as_deref(),
         Some("1"),
         "a requeued message starts its attempts over"
     );
@@ -1258,7 +1255,7 @@ async fn p7_p1_a_binary_dead_letter_is_announced_not_mangled() {
         201
     );
     let received = receive(&hub, "print.receipt", "as=printer&wait=0").await;
-    let id = header(&received, "mailbox-id").expect("an id");
+    let id = header(&received, "kyu-id").expect("an id");
     let _ = reqwest::Client::new()
         .post(hub.url(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true")))
         .send()

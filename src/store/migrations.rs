@@ -102,7 +102,7 @@ CREATE INDEX messages_by_topic
 ///
 /// `created_at` is 0: it has been there since the schema was.
 const MIGRATION_2_EVENTS_TOPIC: &str = r#"
-INSERT INTO topics (name, retention_ms, created_at) VALUES ('mailbox.events', NULL, 0);
+INSERT INTO topics (name, retention_ms, created_at) VALUES ('kyu.events', NULL, 0);
 "#;
 
 /// K11's idle thresholds start as hub-wide defaults, but the knowledge that
@@ -154,10 +154,10 @@ pub fn migrate_with(
 
     if current > target {
         bail!(
-            "this store was written by a newer mailbox: schema version {current}, \
+            "this store was written by a newer kyu: schema version {current}, \
              but this binary knows version {target}. Roll back to the newer image, \
              or restore the snapshot this version's migration wrote \
-             (mailbox.pre-v*.db in the data directory). mailbox never downgrades a \
+             (kyu.pre-v*.db in the data directory). kyu never downgrades a \
              schema, because guessing at an unknown layout risks the messages in it."
         );
     }
@@ -193,7 +193,7 @@ pub fn migrate_with(
 /// Copies the live database with `VACUUM INTO`, which is consistent
 /// without stopping traffic. Runs outside a transaction by necessity.
 fn snapshot(conn: &Connection, dir: &Path, from_version: u32) -> Result<()> {
-    let path = dir.join(format!("mailbox.pre-v{from_version}.db"));
+    let path = dir.join(format!("kyu.pre-v{from_version}.db"));
     if path.exists() {
         fs::remove_file(&path).with_context(|| {
             format!(
@@ -208,7 +208,7 @@ fn snapshot(conn: &Connection, dir: &Path, from_version: u32) -> Result<()> {
         .with_context(|| {
             format!(
                 "cannot write the pre-migration snapshot to {}. Check free space and \
-                 that the data directory is writable; mailbox refuses to migrate \
+                 that the data directory is writable; kyu refuses to migrate \
                  without one, so that a bad upgrade stays reversible.",
                 path.display()
             )
@@ -229,7 +229,7 @@ fn prune_snapshots(dir: &Path) -> Result<()> {
         .filter(|path| {
             path.file_name()
                 .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with("mailbox.pre-v") && name.ends_with(".db"))
+                .is_some_and(|name| name.starts_with("kyu.pre-v") && name.ends_with(".db"))
         })
         .collect();
 

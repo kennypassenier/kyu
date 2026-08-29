@@ -1,4 +1,4 @@
-# mailbox — Test plan
+# kyu — Test plan
 
 What is proven, where, and what is deliberately not covered. Written at
 the Phase 7 gate on 2026-08-28 and maintained from here on.
@@ -32,7 +32,7 @@ git hooks refuse a commit whose tests fail) and again in CI.
 | `l4_reliability.rs` | 15 | Every AR9 transition, by name, on the mock clock: claim, ack, lease expiry, backoff, dead-lettering at max attempts, TTL expiry, requeue with attempts reset, and the **expire-on-re-pend** rule that stops a half-hour-old doorbell being announced. Also: policy defaults, per-subscription policy, replace semantics, batch bounds, and an ack winning a race against a sweep. |
 | `l4_http.rs` | 7 | The reliability endpoints with the real sweeper running: the **S2 crash test** (a consumer killed before acking gets its message back as attempt 2), policy reporting effective vs explicit values, invalid policies refused with remedies, nack, dead-letter listing and requeue, and dead letters surviving a restart. |
 | `l5_crash.rs` | 9 | **The S4 suite.** The real binary, killed with SIGKILL: every confirmed publish present and in order; acks still acked; ten kills in a row needing no manual repair; a short outage leaving claimed messages claimed and a long one returning them; `/healthz` reporting a stalled sweeper; the `--healthcheck` flag exiting non-zero when the hub is gone. |
-| `l6_history.rs` | 16 | Retention collects what nobody needs and **never a backlog an active subscription still holds**; keep-forever; replay (`?from=beginning`) idempotent and bounded by what retention kept; the idle lifecycle flag → archive → unarchive with lapsed settlement; per-subscription idle thresholds; the hub's own events; and the **loop-breaker**, proven by letting a consumer of `mailbox.events` dead-letter an event and asserting nothing breeds from it. |
+| `l6_history.rs` | 16 | Retention collects what nobody needs and **never a backlog an active subscription still holds**; keep-forever; replay (`?from=beginning`) idempotent and bounded by what retention kept; the idle lifecycle flag → archive → unarchive with lapsed settlement; per-subscription idle thresholds; the hub's own events; and the **loop-breaker**, proven by letting a consumer of `kyu.events` dead-letter an event and asserting nothing breeds from it. |
 | `l7_dashboard.rs` | 9 | Every page rendered with seeded state — the compensation owed for runtime templates (T4). A script tag in a payload renders inert; binary and oversized payloads are announced rather than mangled; a topic nobody polls explains the bootstrap order; **the printed curl snippets are pulled off the page and executed**. |
 | `l8_ops.rs` | 7 | Metrics expose per-subscription backlog and the sweeper's age; delayed delivery is durable immediately and survives a restart without firing early; two answers to "when" are refused; **a backup taken under load restores into a working hub that delivers a message**; JSON logs parse as one object per line. |
 | `p7_hardening.rs` | 23 | The gaps the Phase 7 audit found: a broken migration rolls back whole; eight kills at startup leave a migratable store; a store that cannot grow refuses publishes loudly and stays up; lapsed deliveries stay lapsed and let retention reclaim; settled deliveries refuse every further transition; replay over HTTP; the retention and unarchive endpoints; payload edges (empty, at-limit, NUL); **payloads never reach the logs or the metric labels**; the awkward dashboard states; `/healthz` at 503; the events topic as an ordinary topic; the dead-letter view and its requeue button; 120 messages through five consumers, a publisher and a live sweeper. |
@@ -52,7 +52,7 @@ activity — each passed the whole suite before it was found.
    was displayed as "binary payload". Fixed by backing off to the last
    whole character, and only when the slice ends mid-character.
 2. **Retention events fed themselves.** Collecting messages published an
-   event onto `mailbox.events`, which became a message retention would
+   event onto `kyu.events`, which became a message retention would
    later collect, emitting another. The topic never reached quiescence.
    Housekeeping is now logged; every remaining event has a subject topic,
    so the loop-breaker always applies.
@@ -88,7 +88,7 @@ choices to skip work.
   *Amended 2026-08-28:* the sentence that used to close this entry —
   "anything on the LAN that speaks HTTP directly can still do anything" —
   is now true only of a hub deliberately run without a token. With
-  `MAILBOX_TOKEN` set, the verbs and the dashboard need one (W2). What
+  `KYU_TOKEN` set, the verbs and the dashboard need one (W2). What
   stays open by design is `/healthz` and `/metrics`, so a LAN observer can
   still learn topic and subscription *names* and their counts, never a
   payload. Proven by `p7_no_token_reaches_the_metrics_or_any_page_in_the_clear`.

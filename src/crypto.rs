@@ -4,7 +4,7 @@
 //! reversal of the usual advice, and it is the only way to keep the promise
 //! the dashboard is built on (S1): the page renders a command you can paste,
 //! and a hash cannot be turned back into one. The key lives in the compose
-//! file (`MAILBOX_SECRET_KEY`) and never in the store, so a stolen store
+//! file (`KYU_SECRET_KEY`) and never in the store, so a stolen store
 //! file on its own yields nothing.
 //!
 //! ChaCha20-Poly1305 rather than AES-GCM: no hardware acceleration is
@@ -55,7 +55,7 @@ impl SecretKey {
         let trimmed = raw.trim();
         if trimmed.len() != KEY_BYTES * 2 {
             bail!(
-                "MAILBOX_SECRET_KEY must be {} hex characters ({KEY_BYTES} bytes); \
+                "KYU_SECRET_KEY must be {} hex characters ({KEY_BYTES} bytes); \
                  this one is {}. Generate one with: openssl rand -hex {KEY_BYTES}",
                 KEY_BYTES * 2,
                 trimmed.len()
@@ -68,7 +68,7 @@ impl SecretKey {
             let text = std::str::from_utf8(pair).unwrap_or("??");
             key[index] = u8::from_str_radix(text, 16).map_err(|_| {
                 anyhow::anyhow!(
-                    "MAILBOX_SECRET_KEY contains {text:?}, which is not hexadecimal. \
+                    "KYU_SECRET_KEY contains {text:?}, which is not hexadecimal. \
                      Generate a valid key with: openssl rand -hex {KEY_BYTES}"
                 )
             })?;
@@ -117,7 +117,7 @@ impl SecretKey {
             .map_err(|_| {
                 anyhow::anyhow!(
                     "a stored app token cannot be decrypted with the current \
-                     MAILBOX_SECRET_KEY. If the key was changed, the tokens \
+                     KYU_SECRET_KEY. If the key was changed, the tokens \
                      created under the old one are unreadable: revoke them on \
                      the apps page and generate replacements."
                 )
@@ -203,7 +203,7 @@ mod tests {
             .open(&sealed)
             .expect_err("a different key must not decrypt");
         let message = format!("{error:#}");
-        assert!(message.contains("MAILBOX_SECRET_KEY"), "names the variable");
+        assert!(message.contains("KYU_SECRET_KEY"), "names the variable");
         assert!(message.contains("revoke"), "carries a remedy: {message}");
     }
 

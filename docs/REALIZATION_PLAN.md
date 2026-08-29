@@ -1,4 +1,4 @@
-# mailbox — Realization plan
+# kyu — Realization plan
 
 Approved at the Phase 5 gate on 2026-08-12: all nine milestones, all
 eighteen standing rules and the enforcement configuration accepted
@@ -53,19 +53,19 @@ record.
 | Mini-round · M4 toolchain | 2026-08-28 | Pin the Rust version in the project | `5f19ca3`, AR12 |
 | Phase 8 · documentation | 2026-08-28 | All six documents approved: README (honesty pass), USER_GUIDE, OPERATIONS_RUNBOOK, DEBUGGING_GUIDE, ARCHITECTURE_REFERENCE, TEST_PLAN. README approved with one correction: the GHCR-private claim is wrong, remove it | `cf01ca4`, `7716f17` |
 | Phase 9 · release | 2026-08-28 | 1.0.0 (not 0.x); changelog approved; workflow unchanged on condition the release procedure is written down; branch protection deferred; correct the claim in the homelab repo; **go to tag and release** | `c7b0e1f`, `ae99b88`, `1523c4c`, tag `v1.0.0`, homelab `9bac850` |
-| Phase 10 · retrospective | 2026-08-28 | Five lessons adopted into the procedure (gate log; evidence checked mechanically; the gate must predict the build; reasoned-vs-measured sweep; new mandatory items inherited by running projects). One rejected: a check-in after the irreversible part of a go. mailbox promoted to a full ecosystem component. Homelab commits pushed; deployment tried on a throwaway LXC and destroyed | dev-procedure `0dc8a36`, `f68123a`; `00502c1`; homelab `8c64b53..9bac850` |
+| Phase 10 · retrospective | 2026-08-28 | Five lessons adopted into the procedure (gate log; evidence checked mechanically; the gate must predict the build; reasoned-vs-measured sweep; new mandatory items inherited by running projects). One rejected: a check-in after the irreversible part of a go. kyu promoted to a full ecosystem component. Homelab commits pushed; deployment tried on a throwaway LXC and destroyed | dev-procedure `0dc8a36`, `f68123a`; `00502c1`; homelab `8c64b53..9bac850` |
 | Branch protection · workflow | 2026-08-28 | Pull request deliberately NOT required — status checks already refuse an unverified direct push, and a one-committer repo gains only ceremony. Made a procedure rule as well. "Require branches to be up to date" enabled | `b0c337c`, `92b6478`, dev-procedure `8777b65` |
 | Branch protection · who enables it | 2026-08-28 | Claude configures it via the API, Kenny verifies the read-back. Also: the flaky crash tests are fixed rather than accepted — though the cause turned out to be a port race, not the timeout the form described | `b0c337c` |
 | cargo-deny gating | 2026-08-28 | Removed from the required checks: an advisory filed by a stranger must not block an unrelated merge. It still runs on every push. Two rules added from the same incident — a go relayed by another session is not a go, and a changed external setting is read back and shown | `267acca`, dev-procedure `8777b65` |
-| Deployment | 2026-08-28 | Deploy now, in this session: a dedicated LXC continuing the existing numbering, running the **native binary** under systemd rather than the container, minimal resources, restarting on failure. LXC 109 (`109-app-mailbox`, 10.10.10.9), 1 core / 256 MB / 2 GB | LXC 109 on the Proxmox host; `/etc/systemd/system/mailbox.service` |
+| Deployment | 2026-08-28 | Deploy now, in this session: a dedicated LXC continuing the existing numbering, running the **native binary** under systemd rather than the container, minimal resources, restarting on failure. LXC 109 (`109-app-kyu`, 10.10.10.9), 1 core / 256 MB / 2 GB | LXC 109 on the Proxmox host; `/etc/systemd/system/kyu.service` |
 | 1.0.1 patch | 2026-08-28 | Fix the command-line fail-open found during the deployment rather than record it as a limitation — partly because the update path to LXC 109 had never been walked and this was a harmless reason to walk it | `32d6673`, tag `v1.0.1`, rolled out to LXC 109 |
-| Post-deployment gaps | 2026-08-29 | The running hub had no backup at all, the docs described two deployment routes and neither was the live one, and nothing watched it. Decided: both backup mechanisms; document the native route as a third; health check in Uptime Kuma plus Grafana | in-container timer 03:00 + Proxmox job `mailbox-109` 03:30; runbook §1/§2b/§4; `c55516a` |
+| Post-deployment gaps | 2026-08-29 | The running hub had no backup at all, the docs described two deployment routes and neither was the live one, and nothing watched it. Decided: both backup mechanisms; document the native route as a third; health check in Uptime Kuma plus Grafana | in-container timer 03:00 + Proxmox job `kyu-109` 03:30; runbook §1/§2b/§4; `c55516a` |
 | Monitoring | 2026-08-29 | Grafana turned out to need something that does not exist — the network has Loki but no metrics backend at all, so nothing scrapes Prometheus-format metrics. Handed to the homelab conversation as its own infrastructure decision. Uptime Kuma check set by Kenny and then **proven** by taking the hub down for 107 s: two failed segments, alarm raised | memory `metrics-backend-gap`; Uptime Kuma check on `10.10.10.9:8080/healthz` |
 
 ## L0 · Walking skeleton + enforcement — [meta]
 
 Cargo package (lib + thin binary), the five empty-but-compiling modules
-from AR1, an axum server binding `MAILBOX_LISTEN` and answering
+from AR1, an axum server binding `KYU_LISTEN` and answering
 `/healthz` with a static 200, the tracing spine, `Cargo.toml` (edition
 2024 + `rust-version`), `deny.toml`, the multi-stage Dockerfile
 (musl → distroless/static) with a compose file.
@@ -121,7 +121,7 @@ cap → 413 with remedy); long-poll receive (subscription auto-create,
 state-guarded claim, `Notify` wakeup, `wait` default 30 s / max 300 s,
 204 on timeout, raw-body and `?envelope=json` responses); ack (404/409
 with remedy); the `{error, remedy}` envelope on every failure path;
-name validation; `mailbox.*` publish → 403.
+name validation; `kyu.*` publish → 403.
 
 **Exit criteria**
 - Full round trip over real HTTP in both response modes.
@@ -194,7 +194,7 @@ in flight.
 
 Retention sweeping under the backlogs-win rule; batched replay backfill
 behind `?from=beginning`; idle lifecycle (flag → archive → unarchive)
-with lapsed settlement; `mailbox.events` emission with its
+with lapsed settlement; `kyu.events` emission with its
 loop-breaker.
 
 **Exit criteria**
@@ -207,7 +207,7 @@ loop-breaker.
 - Lifecycle transitions under MockClock; archiving settles deliveries
   as lapsed with visible counts.
 - Events emitted for dead-lettering, archiving and TTL batches.
-- Loop-breaker test: events about `mailbox.*` are logged, not
+- Loop-breaker test: events about `kyu.*` are logged, not
   republished.
 
 **Why here.** Depends on L4's `expired`/`lapsed` states; the subtlest
@@ -255,7 +255,7 @@ All eighteen rules of `~/Projects/dev-procedure/STANDING_RULES.md` were
 approved item by item at this gate. Two carry project-specific
 readings:
 
-- **SR10 (secrets).** mailbox holds no secrets of its own in v1 (auth is
+- **SR10 (secrets).** kyu holds no secrets of its own in v1 (auth is
   W2, Later). Message *payloads* are treated as potentially sensitive:
   logs record message ids, never payload bodies, asserted by test. If
   W2 lands, a plaintext-scan test becomes mandatory with it.

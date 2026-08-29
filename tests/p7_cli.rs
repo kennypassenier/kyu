@@ -1,6 +1,6 @@
 //! [P7] What the binary does when it is called wrong.
 //!
-//! Found while deploying 1.0.0 onto its LXC: `mailbox --version` did not
+//! Found while deploying 1.0.0 onto its LXC: `kyu --version` did not
 //! print a version and did not complain — it started the hub, which then sat
 //! there until someone noticed. Every unknown flag did the same, silently.
 //!
@@ -22,13 +22,13 @@ use std::time::{Duration, Instant};
 /// rather than fail.
 fn run(args: &[&str]) -> (Option<i32>, String) {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_mailbox"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .args(args)
-        .env("MAILBOX_DATA_DIR", dir.path())
+        .env("KYU_DATA_DIR", dir.path())
         // Port 0 is not bindable as a listener address here, so pick
         // something out of the way: if the binary wrongly starts serving, it
         // must not collide with anything real.
-        .env("MAILBOX_LISTEN", "127.0.0.1:59999")
+        .env("KYU_LISTEN", "127.0.0.1:59999")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -76,7 +76,7 @@ async fn p7_version_prints_a_version_and_exits() {
 async fn p7_help_lists_what_the_binary_accepts() {
     let (code, output) = run(&["--help"]);
     assert_eq!(code, Some(0), "--help must answer and exit: {output}");
-    for expected in ["--healthcheck", "--version", "MAILBOX_TOKEN"] {
+    for expected in ["--healthcheck", "--version", "KYU_TOKEN"] {
         assert!(
             output.contains(expected),
             "help must mention {expected}: {output}"
@@ -104,17 +104,17 @@ async fn p7_an_unknown_flag_is_refused_with_a_remedy() {
 
 #[tokio::test]
 async fn p7_a_stray_positional_argument_is_refused_too() {
-    // The shape a deploy script gets wrong: `mailbox /etc/mailbox.conf`,
+    // The shape a deploy script gets wrong: `kyu /etc/kyu.conf`,
     // written by someone who assumed a config file. Starting the hub and
     // ignoring the path is the worst of the available answers.
-    let (code, output) = run(&["/etc/mailbox.conf"]);
+    let (code, output) = run(&["/etc/kyu.conf"]);
     assert_eq!(code, Some(2), "a stray argument must be refused: {output}");
     assert!(
-        output.contains("/etc/mailbox.conf"),
+        output.contains("/etc/kyu.conf"),
         "the refusal names it: {output}"
     );
     assert!(
-        output.contains("MAILBOX_"),
+        output.contains("KYU_"),
         "and points at the environment, which is where configuration lives: {output}"
     );
 }

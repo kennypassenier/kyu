@@ -13,11 +13,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::SystemClock;
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::SystemClock;
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -142,20 +142,20 @@ async fn l2_round_trip_in_raw_mode() {
     let response = receive(&hub, "notify.kenny", "as=printer").await;
     assert_eq!(response.status(), 200);
     assert_eq!(
-        header(&response, "mailbox-id").as_deref(),
+        header(&response, "kyu-id").as_deref(),
         Some(id.as_str()),
         "the id travels in a header so the body stays the payload"
     );
     assert_eq!(
-        header(&response, "mailbox-topic").as_deref(),
+        header(&response, "kyu-topic").as_deref(),
         Some("notify.kenny")
     );
     assert_eq!(
-        header(&response, "mailbox-attempt").as_deref(),
+        header(&response, "kyu-attempt").as_deref(),
         Some("1"),
         "a first delivery is attempt 1"
     );
-    assert!(header(&response, "mailbox-published-at").is_some());
+    assert!(header(&response, "kyu-published-at").is_some());
     assert_eq!(
         header(&response, "content-type").as_deref(),
         Some("application/json")
@@ -276,10 +276,7 @@ async fn l2_a_message_published_mid_poll_arrives_at_once() {
     let elapsed = started.elapsed();
 
     assert_eq!(response.status(), 200);
-    assert_eq!(
-        header(&response, "mailbox-id").as_deref(),
-        Some(id.as_str())
-    );
+    assert_eq!(header(&response, "kyu-id").as_deref(), Some(id.as_str()));
     assert!(
         elapsed < Duration::from_secs(3),
         "the waiting poll must be woken by the publish, not by its own timeout \
@@ -296,7 +293,7 @@ async fn l2_a_new_subscription_starts_from_now_and_says_so() {
     // response explains why rather than leaving an unexplained 204 (G8).
     let response = receive(&hub, "notify.kenny", "as=latecomer&wait=0").await;
     assert_eq!(response.status(), 204);
-    let notice = header(&response, "mailbox-notice").expect("a notice header");
+    let notice = header(&response, "kyu-notice").expect("a notice header");
     assert!(
         notice.contains("latecomer") && notice.contains("from now on"),
         "the notice must name the subscription and its start position: {notice}"
@@ -309,11 +306,11 @@ async fn l2_a_new_subscription_starts_from_now_and_says_so() {
     let later = publish_json(&hub, "notify.kenny", r#"{"n":"later"}"#).await;
     let response = receive(&hub, "notify.kenny", "as=latecomer&wait=0").await;
     assert_eq!(response.status(), 200);
-    let got = header(&response, "mailbox-id").expect("an id");
+    let got = header(&response, "kyu-id").expect("an id");
     assert_eq!(got, later);
     assert_ne!(got, earlier);
     assert!(
-        header(&response, "mailbox-notice").is_none(),
+        header(&response, "kyu-notice").is_none(),
         "the notice belongs to the poll that created the subscription, not to later ones"
     );
 }
@@ -339,7 +336,7 @@ async fn l2_a_binary_payload_survives_the_round_trip() {
 
     let raw = receive(&hub, "print.receipt", "as=printer").await;
     assert_eq!(raw.status(), 200);
-    let id = header(&raw, "mailbox-id").expect("an id");
+    let id = header(&raw, "kyu-id").expect("an id");
     assert_eq!(
         raw.bytes().await.expect("bytes").to_vec(),
         bytes,
@@ -402,7 +399,7 @@ async fn l2_the_content_type_is_stored_verbatim() {
     bootstrap(&hub, "notify.kenny", "printer").await;
 
     // What `curl -d '{"a":1}'` actually sends: JSON bytes labelled as a
-    // form. mailbox hands back the label it was given (AR2) instead of
+    // form. kyu hands back the label it was given (AR2) instead of
     // quietly correcting it.
     assert_eq!(
         publish(
@@ -455,7 +452,7 @@ async fn l2_every_error_carries_a_remedy() {
         (
             "the reserved prefix",
             403,
-            client.post(hub.url("/t/mailbox.events")).body("{}"),
+            client.post(hub.url("/t/kyu.events")).body("{}"),
         ),
         (
             "an oversized payload",

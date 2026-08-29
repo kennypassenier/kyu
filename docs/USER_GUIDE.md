@@ -1,6 +1,6 @@
-# mailbox — user guide
+# kyu — user guide
 
-Everything mailbox does, one feature at a time, with commands you can paste.
+Everything kyu does, one feature at a time, with commands you can paste.
 Written in Phase 8 from the code and tests, not from intent: every claim here
 names where it is proven.
 
@@ -9,7 +9,7 @@ stop. That is the whole product; the rest is what happens when something goes
 wrong.
 
 **Every example assumes a hub at `http://hub.lan:8080`.** If the hub has a
-token (W2), add `-H "authorization: Bearer $MAILBOX_TOKEN"` to every command —
+token (W2), add `-H "authorization: Bearer $KYU_TOKEN"` to every command —
 the dashboard prints them that way for you, so you never have to remember.
 
 ---
@@ -26,7 +26,7 @@ curl -H 'content-type: application/json' \
 
 A topic starts existing the moment something publishes to it. The response is
 `201` with the message id. The payload is stored byte for byte and the content
-type verbatim — mailbox never rewrites what you sent.
+type verbatim — kyu never rewrites what you sent.
 
 Once the response is in your hand, the message is on disk. Not "queued for
 writing": a hard kill one millisecond later still delivers it.
@@ -41,7 +41,7 @@ curl -s -D- -o message.body \
      "http://hub.lan:8080/t/notify.kenny/next?as=printer"
 ```
 
-`as=` is the **subscription name**, and it is the only concept in mailbox you
+`as=` is the **subscription name**, and it is the only concept in kyu you
 have to understand:
 
 - **Different names** on one topic each get every message, independently.
@@ -50,7 +50,7 @@ have to understand:
   exactly one of them. That is load balancing.
 
 The payload comes back as the raw body; the metadata rides in headers
-(`mailbox-id`, `mailbox-topic`, `mailbox-attempt`, `mailbox-published-at`).
+(`kyu-id`, `kyu-topic`, `kyu-attempt`, `kyu-published-at`).
 Prefer one JSON document?
 
 ```bash
@@ -61,7 +61,7 @@ The call waits up to 30 seconds for a message (`&wait=` to change it, max
 300). A message published while you wait arrives at once rather than after the
 timeout. Nothing waiting when the window closes: `204`.
 
-**The one trap** (and the hub says so in a `mailbox-notice` header the first
+**The one trap** (and the hub says so in a `kyu-notice` header the first
 time): a subscription starts existing when it *first polls*, and it only sees
 what is published after that. Poll once before publishing the message you want
 it to catch — or use `&from=beginning` to pull in what the topic still retains.
@@ -251,9 +251,9 @@ or `503` with an `error` and a `remedy` when the store cannot be written or the
 sweeper has stopped. Both endpoints stay open even on a hub with a token, so
 Uptime Kuma and Grafana keep working unchanged.
 
-`/metrics` exposes `mailbox_topics`, `mailbox_subscriptions`, `mailbox_messages`,
-`mailbox_deliveries` (by state), `mailbox_store_bytes` and
-`mailbox_sweeper_age_ms`. The last one is the alertable series: a stalled
+`/metrics` exposes `kyu_topics`, `kyu_subscriptions`, `kyu_messages`,
+`kyu_deliveries` (by state), `kyu_store_bytes` and
+`kyu_sweeper_age_ms`. The last one is the alertable series: a stalled
 sweeper makes messages *hang* rather than fail, which is otherwise invisible.
 
 Payloads and tokens never reach a metric label. That is asserted, not assumed.
@@ -266,19 +266,19 @@ Payloads and tokens never reach a metric label. That is asserted, not assumed.
 
 ### W11 · The hub's own events
 
-mailbox publishes its own events onto the ordinary topic `mailbox.events`, so
+kyu publishes its own events onto the ordinary topic `kyu.events`, so
 consuming them needs no special integration — subscribe exactly the way you
 subscribe to anything else:
 
 ```bash
-curl "http://hub.lan:8080/t/mailbox.events/next?as=ha&envelope=json"
+curl "http://hub.lan:8080/t/kyu.events/next?as=ha&envelope=json"
 ```
 
 Events: `message.dead_lettered`, `message.expired`, `subscription.flagged`,
 `subscription.archived`, `subscription.unarchived`.
 
-One rule is load-bearing: an event *about* a `mailbox.*` topic is logged, never
-republished. Without it, a broken consumer of `mailbox.events` dead-letters,
+One rule is load-bearing: an event *about* a `kyu.*` topic is logged, never
+republished. Without it, a broken consumer of `kyu.events` dead-letters,
 which emits an event onto the same topic, which dead-letters — a self-sustaining
 message generator.
 
@@ -308,7 +308,7 @@ so it can never be a surprise.
 
 ---
 
-## What mailbox deliberately does not do
+## What kyu deliberately does not do
 
 - **No exactly-once.** At-least-once is the contract; be idempotent (N4).
 - **No routing or transformation.** The hub moves bytes; it does not inspect

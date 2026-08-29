@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use mailbox::engine::clock::MockClock;
-use mailbox::engine::policy::Policy;
-use mailbox::engine::{Defaults, Engine};
-use mailbox::events::EVENTS_TOPIC;
-use mailbox::store::Store;
-use mailbox::store::queries::StoredPolicy;
+use kyu::engine::clock::MockClock;
+use kyu::engine::policy::Policy;
+use kyu::engine::{Defaults, Engine};
+use kyu::events::EVENTS_TOPIC;
+use kyu::store::Store;
+use kyu::store::queries::StoredPolicy;
 
 const START: i64 = 1_700_000_000_000;
 const DAY: i64 = 24 * 60 * 60 * 1_000;
@@ -606,7 +606,7 @@ fn p7_collecting_the_events_topic_does_not_feed_itself() {
     let events_on_topic = || {
         f.count(
             "SELECT count(*) FROM messages m JOIN topics t ON t.id = m.topic_id \
-             WHERE t.name = 'mailbox.events'",
+             WHERE t.name = 'kyu.events'",
         )
     };
     assert!(events_on_topic() > 0, "an event was published");

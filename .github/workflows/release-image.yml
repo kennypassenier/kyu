@@ -1,5 +1,5 @@
 # K13 · every version tag publishes a Docker image to GHCR, so the homelab
-# deploys and updates mailbox like any other app. Taken verbatim (bar this
+# deploys and updates kyu like any other app. Taken verbatim (bar this
 # comment) from ~/Projects/homelab/templates/rust-service/release-image.yml,
 # which exists so every one of Kenny's Rust repos ships the same way — one
 # shape to remember rather than four.

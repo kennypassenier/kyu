@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# mailbox quality gates — configuration C1 ("local + SQL guard"),
+# kyu quality gates — configuration C1 ("local + SQL guard"),
 # approved at the Phase 5 gate. Called by check-commit.sh before every
 # git commit; a non-zero exit blocks the commit (standing rule 7).
 set -euo pipefail
@@ -7,7 +7,7 @@ set -euo pipefail
 # ── Standing rule 7: a gate that does not predict the build is not a gate ──
 # The checks below rewrite files. cargo updates Cargo.lock, formatters
 # rewrite sources — and anything rewritten AFTER `git add` is green here
-# and absent from the commit. mailbox's 1.0.0 commit carried a lock file
+# and absent from the commit. kyu's 1.0.0 commit carried a lock file
 # still naming version 0.0.0; the container build refused it one step
 # before a release tag, and nothing local had objected. So: fingerprint
 # the tree now, compare once the checks are done, and refuse rather than

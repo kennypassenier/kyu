@@ -1,4 +1,4 @@
-# mailbox — operations runbook
+# kyu — operations runbook
 
 Numbered procedures for the things you do to a running hub. Each one says
 what it changes and how you know it worked. Written in Phase 8; every
@@ -6,7 +6,7 @@ procedure was either executed against a real container or is derived from a
 test that executes it.
 
 Assumes `HUB=http://hub.lan:8080` and, on a protected hub,
-`TOKEN=<your MAILBOX_TOKEN>` with `-H "authorization: Bearer $TOKEN"` on every
+`TOKEN=<your KYU_TOKEN>` with `-H "authorization: Bearer $TOKEN"` on every
 call.
 
 ---
@@ -15,47 +15,47 @@ call.
 
 **Through the homelab** (supported route):
 
-1. In the homelab wizard, pick the `mailbox` preset.
+1. In the homelab wizard, pick the `kyu` preset.
 2. Before deploying, write the stack's `.env`:
    ```bash
-   echo "MAILBOX_TOKEN=$(openssl rand -hex 24)" >> stacks/<name>/mailbox/.env
-   echo "MAILBOX_SECRET_KEY=$(openssl rand -hex 32)" >> stacks/<name>/mailbox/.env
+   echo "KYU_TOKEN=$(openssl rand -hex 24)" >> stacks/<name>/kyu/.env
+   echo "KYU_SECRET_KEY=$(openssl rand -hex 32)" >> stacks/<name>/kyu/.env
    ```
    Both or neither. One without the other refuses to start, by design.
-3. Deploy. The preset binds `/appdata/<stack>/mailbox-config`, which is what
+3. Deploy. The preset binds `/appdata/<stack>/kyu-config`, which is what
    restic backs up, and carries `com.homelab.backup.pause=true`.
 4. Verify: `curl -sf $HUB/healthz` returns `{"status":"ok",…}`.
 5. Open `/login`, paste the token, tick "stay logged in".
 
 **As a plain binary under systemd** — what Kenny actually runs, on LXC 109
-(`109-app-mailbox`, `10.10.10.9`). No Docker on the box at all:
+(`109-app-kyu`, `10.10.10.9`). No Docker on the box at all:
 
 1. Take the binary out of the published image on a machine that has Docker,
    and copy it over. It is statically linked, so it needs nothing installed:
    ```bash
-   id=$(docker create ghcr.io/kennypassenier/mailbox:1.0.1)
-   docker cp "$id":/usr/local/bin/mailbox ./mailbox && docker rm "$id"
-   scp mailbox root@<proxmox>:/tmp/mailbox
-   ssh root@<proxmox> 'pct push 109 /tmp/mailbox /usr/local/bin/mailbox --perms 755'
+   id=$(docker create ghcr.io/kennypassenier/kyu:1.0.1)
+   docker cp "$id":/usr/local/bin/kyu ./kyu && docker rm "$id"
+   scp kyu root@<proxmox>:/tmp/kyu
+   ssh root@<proxmox> 'pct push 109 /tmp/kyu /usr/local/bin/kyu --perms 755'
    ```
 2. A system user that owns only its data, and a config file only it can read:
    ```bash
-   adduser --system --group --home /var/lib/mailbox --no-create-home mailbox
-   install -d -o mailbox -g mailbox -m 0750 /var/lib/mailbox
-   install -d -o root -g mailbox -m 0750 /etc/mailbox
+   adduser --system --group --home /var/lib/kyu --no-create-home kyu
+   install -d -o kyu -g kyu -m 0750 /var/lib/kyu
+   install -d -o root -g kyu -m 0750 /etc/kyu
    umask 077
-   printf 'MAILBOX_TOKEN=%s\nMAILBOX_SECRET_KEY=%s\nMAILBOX_LISTEN=0.0.0.0:8080\nMAILBOX_DATA_DIR=/var/lib/mailbox\nMAILBOX_LOG=info\n' \
-     "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /etc/mailbox/mailbox.env
-   chown root:mailbox /etc/mailbox/mailbox.env && chmod 0640 /etc/mailbox/mailbox.env
+   printf 'KYU_TOKEN=%s\nKYU_SECRET_KEY=%s\nKYU_LISTEN=0.0.0.0:8080\nKYU_DATA_DIR=/var/lib/kyu\nKYU_LOG=info\n' \
+     "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /etc/kyu/kyu.env
+   chown root:kyu /etc/kyu/kyu.env && chmod 0640 /etc/kyu/kyu.env
    ```
-3. `mailbox.service` with `Restart=always` and `StartLimitIntervalSec=0` — the
+3. `kyu.service` with `Restart=always` and `StartLimitIntervalSec=0` — the
    second matters as much as the first, because systemd otherwise gives up
    after a few restarts in a short window and turns a transient fault into a
    permanent outage. The unit also carries the namespace hardening
    (`ProtectSystem=strict` and friends), which in an **unprivileged LXC needs
    `features: nesting=1` on the container** or every start fails with
    `Failed to set up mount namespacing`. That is measured, not guessed.
-4. `systemctl enable --now mailbox`, then `curl -sf http://<host>:8080/healthz`.
+4. `systemctl enable --now kyu`, then `curl -sf http://<host>:8080/healthz`.
 
 **Standalone with Docker:**
 
@@ -64,7 +64,7 @@ docker compose up -d
 curl -sf localhost:8080/healthz
 ```
 
-Data lands in the `mailbox-data` named volume. Do not "fix" that into a bind
+Data lands in the `kyu-data` named volume. Do not "fix" that into a bind
 mount without reading the comment in `compose.yml` first — the image runs as
 uid 65532 and a bind mount makes the hub refuse to start until you chown the
 directory. That refusal was reproduced on 2026-08-28, not theorised.
@@ -97,7 +97,7 @@ GitHub and no image to build by hand.
    release created by hand.
 5. **Watch it:** `gh run list --workflow=release-image` — it takes a few
    minutes. It publishes two tags of the same image:
-   `ghcr.io/kennypassenier/mailbox:1.2.3` and `:latest`.
+   `ghcr.io/kennypassenier/kyu:1.2.3` and `:latest`.
 6. **Write the GitHub Release yourself:**
    ```bash
    gh release create v1.2.3 --title "v1.2.3" --notes-file <(sed -n '/## \[1.2.3\]/,/## \[/p' CHANGELOG.md)
@@ -107,14 +107,14 @@ GitHub and no image to build by hand.
    produces a list nobody reads.
 7. **Verify the image exists and is pullable:**
    ```bash
-   docker pull ghcr.io/kennypassenier/mailbox:1.2.3
+   docker pull ghcr.io/kennypassenier/kyu:1.2.3
    ```
    The package is linked to this repository and takes its visibility, so a
    public repo yields a package the homelab host can pull anonymously.
 
 **Deviation from the procedure, recorded rather than forgotten:** Phase 9 of
 the dev procedure asks for tag → build → *checksum manifest* → GitHub Release.
-mailbox ships no self-updating binary — updates arrive as a new image, whose
+kyu ships no self-updating binary — updates arrive as a new image, whose
 integrity Docker already verifies by digest — so a checksum manifest would be
 a file with no reader. See AR12.
 
@@ -128,10 +128,10 @@ a file with no reader. See AR12.
 4. **Plain binary under systemd** — extract the new binary as in §1, then:
    ```bash
    ssh root@<proxmox> '
-     pct exec 109 -- systemctl stop mailbox
-     pct push 109 /tmp/mailbox /usr/local/bin/mailbox --perms 755
-     pct exec 109 -- systemctl start mailbox
-     pct exec 109 -- /usr/local/bin/mailbox --version'
+     pct exec 109 -- systemctl stop kyu
+     pct push 109 /tmp/kyu /usr/local/bin/kyu --perms 755
+     pct exec 109 -- systemctl start kyu
+     pct exec 109 -- /usr/local/bin/kyu --version'
    ```
    Walked for real on 2026-08-28 going from 1.0.0 to 1.0.1: an unacknowledged
    message was still waiting afterwards.
@@ -174,8 +174,8 @@ deliver a message out of it.
 
 1. Stop the hub. `docker compose down`, or the homelab's own restore flow,
    which quiesces for you.
-2. Put the backup file in place of `mailbox.db` in the data directory.
-   Remove any `mailbox.db-wal` and `mailbox.db-shm` beside it — they belong
+2. Put the backup file in place of `kyu.db` in the data directory.
+   Remove any `kyu.db-wal` and `kyu.db-shm` beside it — they belong
    to the old file and will confuse SQLite about what it is looking at.
 3. Start the hub.
 4. Verify: `curl -sf $HUB/healthz`, then poll a subscription you know had a
@@ -189,14 +189,14 @@ Use that rather than these steps when the hub is deployed there.
 depends on what broke:
 
 - **The container is gone or unbootable** → the Proxmox backup job
-  `mailbox-109` (nightly 03:30, 7 daily + 4 weekly, on `local`). Restore the
+  `kyu-109` (nightly 03:30, 7 daily + 4 weekly, on `local`). Restore the
   container; everything comes back with it.
 - **The data is wrong but the container is fine** — a bad migration, a
   message you should not have deleted → the newest
-  `/var/lib/mailbox/mailbox.backup-*.db`, written nightly at 03:00 by
-  `mailbox-backup.timer` and integrity-checked by the hub before it was
+  `/var/lib/kyu/kyu.backup-*.db`, written nightly at 03:00 by
+  `kyu-backup.timer` and integrity-checked by the hub before it was
   reported. Follow step 2 above: stop the service, put it in place of
-  `mailbox.db`, delete the `-wal` and `-shm`, start again.
+  `kyu.db`, delete the `-wal` and `-shm`, start again.
 
 The 03:00 backup runs half an hour before the snapshot on purpose: whatever
 state the live database is caught in, the snapshot always contains one file
@@ -206,11 +206,11 @@ the hub itself opened and checked.
 
 ## 5 · Rotate the tokens
 
-**The login token (`MAILBOX_TOKEN`) — safe.** Change it in the `.env` or
+**The login token (`KYU_TOKEN`) — safe.** Change it in the `.env` or
 compose file and restart. App tokens keep working; you just log in with the
 new value.
 
-**The encryption key (`MAILBOX_SECRET_KEY`) — destructive.** Every stored app
+**The encryption key (`KYU_SECRET_KEY`) — destructive.** Every stored app
 token becomes unreadable. The apps page will list them as `unreadable`.
 Recovery: revoke each one there and generate a replacement, then update the
 apps that used them.
@@ -286,9 +286,9 @@ curl -X PUT -H 'content-type: application/json' \
 
 ## 9 · Ship logs to Loki
 
-Set `MAILBOX_LOG_FORMAT=json` and restart. One JSON object per line; the
-human-readable format stays the default. `MAILBOX_LOG` takes a `tracing`
-filter (`info`, `mailbox=debug`, …).
+Set `KYU_LOG_FORMAT=json` and restart. One JSON object per line; the
+human-readable format stays the default. `KYU_LOG` takes a `tracing`
+filter (`info`, `kyu=debug`, …).
 
 Payloads never appear in a log line, in either format. Asserted by
 `p7_g9_payloads_never_reach_the_logs_or_the_metrics`.
@@ -296,8 +296,8 @@ Payloads never appear in a log line, in either format. Asserted by
 ## 10 · Prove the whole thing still works
 
 ```bash
-docker build -t mailbox:smoke .
-bash scripts/container-smoke.sh mailbox:smoke
+docker build -t kyu:smoke .
+bash scripts/container-smoke.sh kyu:smoke
 ```
 
 Walks the three verbs through the real image, restarts the container, runs the

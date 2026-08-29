@@ -2,10 +2,10 @@
 # LXC this pulls the published image; `docker compose build` uses the
 # local Dockerfile instead.
 services:
-  mailbox:
-    image: ghcr.io/kennypassenier/mailbox:latest
+  kyu:
+    image: ghcr.io/kennypassenier/kyu:latest
     build: .
-    container_name: mailbox
+    container_name: kyu
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -20,16 +20,16 @@ services:
       # The cost, and it is real: the homelab's nightly restic backup walks
       # host directories, so a named volume is invisible to it. Deploying
       # THROUGH the homelab therefore uses its own preset
-      # (presets/mailbox/), whose compose binds /appdata/<stack>/
-      # mailbox-config and carries the backup labels. This file is the
+      # (presets/kyu/), whose compose binds /appdata/<stack>/
+      # kyu-config and carries the backup labels. This file is the
       # standalone route; back it up with POST /api/backup (W8) or a host
       # snapshot of the volume.
-      - mailbox-data:/data
+      - kyu-data:/data
     environment:
-      MAILBOX_LISTEN: 0.0.0.0:8080
-      MAILBOX_DATA_DIR: /data
-      MAILBOX_LOG: info
-      # MAILBOX_LOG_FORMAT: json          # one JSON object per line, for Loki
+      KYU_LISTEN: 0.0.0.0:8080
+      KYU_DATA_DIR: /data
+      KYU_LOG: info
+      # KYU_LOG_FORMAT: json          # one JSON object per line, for Loki
       #
       # --- The door (W2) -------------------------------------------------
       # Leave both unset and the hub runs with no door at all: anyone who can
@@ -41,11 +41,11 @@ services:
       # Authorization header on every command the dashboard prints. BOTH are
       # required together — one without the other refuses to start:
       #
-      #   MAILBOX_TOKEN: <what you log in with>        openssl rand -hex 24
-      #   MAILBOX_SECRET_KEY: <64 hex characters>      openssl rand -hex 32
+      #   KYU_TOKEN: <what you log in with>        openssl rand -hex 24
+      #   KYU_SECRET_KEY: <64 hex characters>      openssl rand -hex 32
       #
       # They do different jobs, and the difference matters exactly once:
-      # MAILBOX_TOKEN is the password you type; MAILBOX_SECRET_KEY encrypts
+      # KYU_TOKEN is the password you type; KYU_SECRET_KEY encrypts
       # the per-app tokens in the store. Rotating the token is therefore safe
       # and rotating the key is not — change the key and every app token
       # becomes unreadable, and you re-issue them on the apps page. Keep both
@@ -54,9 +54,9 @@ services:
       # Hub-wide defaults. Every one of these can be overridden per topic or
       # per subscription through the API, so these are the starting point
       # rather than the rule:
-      #   MAILBOX_RETENTION_MS      604800000 (7d), or "never" to keep forever
-      #   MAILBOX_IDLE_FLAG_MS      604800000 (7d) before a quiet subscription is flagged
-      #   MAILBOX_IDLE_ARCHIVE_MS  2592000000 (30d) before it is archived
+      #   KYU_RETENTION_MS      604800000 (7d), or "never" to keep forever
+      #   KYU_IDLE_FLAG_MS      604800000 (7d) before a quiet subscription is flagged
+      #   KYU_IDLE_ARCHIVE_MS  2592000000 (30d) before it is archived
       # A consumer with a slower rhythm sets its own idle_flag_ms and
       # idle_archive_ms in its subscription policy — see the README.
     # The healthcheck is defined in the Dockerfile and inherited here:
@@ -64,4 +64,4 @@ services:
     # curl from (W6, T9).
 
 volumes:
-  mailbox-data:
+  kyu-data:

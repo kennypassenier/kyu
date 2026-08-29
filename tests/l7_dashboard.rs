@@ -10,11 +10,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::{Clock, SystemClock};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::{Clock, SystemClock};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 
 struct Hub {
     addr: SocketAddr,
@@ -104,7 +104,7 @@ async fn l7_the_index_lists_every_topic_with_its_counts() {
     assert!(body.contains("notify.kenny"), "the topic is listed");
     assert!(body.contains("jobs.transcode"));
     assert!(
-        body.contains("mailbox.events"),
+        body.contains("kyu.events"),
         "the hub's own event topic is a topic like any other"
     );
     assert!(
@@ -118,7 +118,7 @@ async fn l7_the_index_always_shows_how_to_start_a_topic() {
     let (hub, _dir) = spawn().await;
     let body = unescape(&page(&hub, "/").await);
 
-    // A fresh hub is never literally empty — mailbox.events is always
+    // A fresh hub is never literally empty — kyu.events is always
     // there — so the getting-started example is unconditional rather than
     // an empty state nobody would ever see.
     assert!(

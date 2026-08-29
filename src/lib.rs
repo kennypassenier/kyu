@@ -1,4 +1,4 @@
-//! mailbox — a durable message hub with a three-verb HTTP API.
+//! kyu — a durable message hub with a three-verb HTTP API.
 //!
 //! Module boundaries are frozen in `docs/ARCHITECTURE_DECISIONS.md`
 //! (AR1). The split exists so that delivery semantics can be tested
@@ -8,7 +8,7 @@
 //! - [`store`] — all SQL, the schema and its migrations
 //! - [`http`] — HTTP to engine translation, nothing more
 //! - [`dashboard`] — rendering (K10)
-//! - [`events`] — the hub's own events onto `mailbox.*` topics (W11)
+//! - [`events`] — the hub's own events onto `kyu.*` topics (W11)
 //!
 //! [`config`] and [`sweeper`] sit outside that list on purpose: they are
 //! shell concerns — configuration read once before anything can start, and

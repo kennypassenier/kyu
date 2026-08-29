@@ -1,8 +1,9 @@
-# mailbox
+# kyu
 
 A self-documenting message hub for the homelab: durable topics, named
 subscriptions, send/receive/ack over plain HTTP, dashboard as
-documentation. Rust; deployed as a Docker container in a Proxmox LXC.
+documentation. Rust; runs as a native binary under systemd in a Proxmox
+LXC (a container image is published too, but the live route is native).
 
 This project follows the dev procedure in `~/Projects/dev-procedure/`
 (`/project-flow`). Standing rules apply to every change:
@@ -15,16 +16,17 @@ from anywhere — the gates live in git hooks, not in session config.
 |---|---|
 | Current phase | **Done** — all eleven phases complete |
 | Last completed gate | Post-deployment gaps + monitoring (2026-08-29): backups, the native route documented, health check proven by a real outage |
-| Next gate | None. mailbox is released (1.0.1), deployed on LXC 109 and monitored. Further work arrives as mini-rounds |
+| Next gate | None. kyu is released (2.0.0), deployed on LXC 109 and monitored. Further work arrives as mini-rounds |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
+| Rename mailbox → kyu | **DONE** 2026-08-29 — the old name said email about a queue. Everything moved (env vars, headers, metrics, cookie, event topic, paths), so it shipped as 2.0.0 |
 | Shared-token auth (W2) | **DONE** 2026-08-28 — door, per-app tokens, login page, masked snippets |
 | Update & distribution (M1) | **DONE** 2026-08-28 — `release-image.yml` adopted from the homelab template; K13's false "verified end-to-end" claim removed. Unproven until the first tag (Phase 9) |
-| Ecosystem integration (M2) | **DONE** 2026-08-28 — `presets/mailbox/` committed in ~/Projects/homelab (8c7b5e8, not pushed). Native-binary deployment investigated and rejected: not built or planned there |
+| Ecosystem integration (M2) | **DONE** 2026-08-28 — `presets/kyu/` committed in ~/Projects/homelab (8c7b5e8, not pushed). Native-binary deployment investigated and rejected: not built or planned there |
 | Backup & restore (M3) | **DONE** 2026-08-28 — rides the homelab's restic backup via the preset's `/appdata` bind + pause label; no in-hub scheduler, on purpose |
 | Toolchain pin (M4) | **DONE** 2026-08-28 — `rust-toolchain.toml`, after a green local gate let a red CI through |
 

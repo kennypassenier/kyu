@@ -4,19 +4,19 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use mailbox::cli;
-use mailbox::config::Config;
-use mailbox::engine::Engine;
-use mailbox::engine::clock::{Clock, SystemClock};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::{self, Heartbeat};
+use kyu::cli;
+use kyu::config::Config;
+use kyu::engine::Engine;
+use kyu::engine::clock::{Clock, SystemClock};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::{self, Heartbeat};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     // Anything the command line does not recognise is refused rather than
-    // ignored (cli, 1.0.1): before that, `mailbox --version` started the hub
+    // ignored (cli, 1.0.1): before that, `kyu --version` started the hub
     // and sat there, and a typo in a unit file would have started a second
     // one on the same store.
     match cli::parse(std::env::args().skip(1)) {
@@ -25,7 +25,7 @@ async fn main() -> Result<()> {
         // call curl: the binary probes itself instead (W6, T9).
         Ok(cli::Action::Healthcheck) => return healthcheck(),
         Ok(cli::Action::Version) => {
-            println!("mailbox {}", env!("CARGO_PKG_VERSION"));
+            println!("kyu {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
         Ok(cli::Action::Help) => {
@@ -65,12 +65,12 @@ async fn main() -> Result<()> {
     // is a legitimate choice; a hub you *think* is protected is not, and the
     // only defence against that is saying so on every single startup.
     if config.auth.is_protected() {
-        tracing::info!("this hub requires a token (MAILBOX_TOKEN)");
+        tracing::info!("this hub requires a token (KYU_TOKEN)");
     } else {
         tracing::warn!(
             "this hub has NO token: anyone who can reach it can read every \
-             message, publish, and use the dashboard buttons. Set MAILBOX_TOKEN \
-             and MAILBOX_SECRET_KEY to protect it."
+             message, publish, and use the dashboard buttons. Set KYU_TOKEN \
+             and KYU_SECRET_KEY to protect it."
         );
     }
 
@@ -95,7 +95,7 @@ async fn main() -> Result<()> {
         .with_context(|| {
             format!(
                 "cannot bind {}. Check that the address is free and that the \
-                 container maps the port, or set MAILBOX_LISTEN to another \
+                 container maps the port, or set KYU_LISTEN to another \
                  HOST:PORT.",
                 config.listen
             )
@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
         listen = %config.listen,
         data_dir = %config.data_dir.display(),
         max_body_bytes = config.max_body_bytes,
-        "mailbox started"
+        "kyu started"
     );
 
     axum::serve(listener, router(state))
@@ -132,7 +132,7 @@ fn healthcheck() -> Result<()> {
     };
 
     let mut stream =
-        TcpStream::connect(&target).with_context(|| format!("cannot reach mailbox on {target}"))?;
+        TcpStream::connect(&target).with_context(|| format!("cannot reach kyu on {target}"))?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.write_all(b"GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n")?;
 
@@ -142,7 +142,7 @@ fn healthcheck() -> Result<()> {
     let status_line = response.lines().next().unwrap_or_default();
     anyhow::ensure!(
         status_line.contains(" 200"),
-        "mailbox reports itself unhealthy: {}",
+        "kyu reports itself unhealthy: {}",
         response.trim()
     );
     Ok(())
@@ -150,13 +150,13 @@ fn healthcheck() -> Result<()> {
 
 /// W7 · structured logging.
 ///
-/// `MAILBOX_LOG_FORMAT=json` emits one JSON object per line, so Loki can
+/// `KYU_LOG_FORMAT=json` emits one JSON object per line, so Loki can
 /// filter on topic, subscription or message id rather than on substrings.
 /// The default stays human-readable, because the first person reading these
 /// logs is usually someone at a terminal.
 fn init_tracing() {
-    let filter = EnvFilter::try_from_env("MAILBOX_LOG").unwrap_or_else(|_| "info".into());
-    let json = std::env::var("MAILBOX_LOG_FORMAT")
+    let filter = EnvFilter::try_from_env("KYU_LOG").unwrap_or_else(|_| "info".into());
+    let json = std::env::var("KYU_LOG_FORMAT")
         .map(|format| format.eq_ignore_ascii_case("json"))
         .unwrap_or(false);
 

@@ -1,5 +1,5 @@
 {% extends "layout.html" %}
-{% block title %}mailbox — apps{% endblock %}
+{% block title %}kyu — apps{% endblock %}
 {% block content %}
 <h1 class="h3">Apps</h1>
 <p class="text-secondary">
@@ -60,7 +60,7 @@
         {% else %}
         <span class="text-danger">unreadable</span>
         <div class="form-text">
-          This token was encrypted with a different <code>MAILBOX_SECRET_KEY</code>.
+          This token was encrypted with a different <code>KYU_SECRET_KEY</code>.
           Revoke it and generate a replacement.
         </div>
         {% endif %}
@@ -97,11 +97,11 @@
 {% endif %}
 
 <div class="alert alert-secondary mt-4" role="alert">
-  <h2 class="h6">Before you rotate <code>MAILBOX_TOKEN</code></h2>
+  <h2 class="h6">Before you rotate <code>KYU_TOKEN</code></h2>
   <p class="mb-0">
-    The tokens above are encrypted with <code>MAILBOX_SECRET_KEY</code>, not with
-    <code>MAILBOX_TOKEN</code> — so changing the token you log in with leaves
-    them working. Changing <code>MAILBOX_SECRET_KEY</code> is the one that makes
+    The tokens above are encrypted with <code>KYU_SECRET_KEY</code>, not with
+    <code>KYU_TOKEN</code> — so changing the token you log in with leaves
+    them working. Changing <code>KYU_SECRET_KEY</code> is the one that makes
     every token above unreadable; if you have to, revoke them here afterwards and
     generate replacements. Keep both values in the same compose file, and keep a
     copy somewhere you will find it again.

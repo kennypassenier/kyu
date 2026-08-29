@@ -24,7 +24,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result};
 use rusqlite::{Connection, Transaction};
 
-pub const STORE_FILE_NAME: &str = "mailbox.db";
+pub const STORE_FILE_NAME: &str = "kyu.db";
 
 /// How long a statement waits for the writer before giving up. AR5 keeps
 /// writes on one connection, so contention should be brief; this is the
@@ -64,7 +64,7 @@ impl Store {
         std::fs::create_dir_all(data_dir).with_context(|| {
             format!(
                 "cannot create the data directory {}. Check that the volume is \
-                 mounted and writable by this user, or point MAILBOX_DATA_DIR \
+                 mounted and writable by this user, or point KYU_DATA_DIR \
                  somewhere else.",
                 data_dir.display()
             )
@@ -74,7 +74,7 @@ impl Store {
         let mut conn = Connection::open(&path).with_context(|| {
             format!(
                 "cannot open the store at {}. Check file permissions, or point \
-                 MAILBOX_DATA_DIR at a writable directory.",
+                 KYU_DATA_DIR at a writable directory.",
                 path.display()
             )
         })?;

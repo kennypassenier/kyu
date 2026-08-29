@@ -7,7 +7,7 @@
 
 /// The prefix the hub keeps for its own event topics (W11). Publishing
 /// there from outside is refused, so nothing can forge hub events.
-pub const RESERVED_PREFIX: &str = "mailbox.";
+pub const RESERVED_PREFIX: &str = "kyu.";
 
 pub const MAX_NAME_LEN: usize = 64;
 
@@ -73,9 +73,9 @@ mod tests {
 
     #[test]
     fn l2_recognises_the_reserved_prefix() {
-        assert!(is_reserved("mailbox.events"));
+        assert!(is_reserved("kyu.events"));
         assert!(
-            !is_reserved("mailboxes.kenny"),
+            !is_reserved("kyues.kenny"),
             "only the dotted prefix is reserved"
         );
         assert!(!is_reserved("notify.kenny"));

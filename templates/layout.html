@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}mailbox{% endblock %}</title>
+<title>{% block title %}kyu{% endblock %}</title>
 <link rel="stylesheet" href="/static/bootstrap.min.css?v={{ assets }}">
 <style>
 /* Bootstrap covers the furniture; these are the few things it cannot know
@@ -22,7 +22,7 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 <body>
 <nav class="navbar navbar-expand border-bottom mb-4">
   <div class="container">
-    <a class="navbar-brand" href="/">mailbox</a>
+    <a class="navbar-brand" href="/">kyu</a>
     <div class="navbar-nav me-auto">
       <a class="nav-link" href="/">Topics</a>
       {% if protected %}<a class="nav-link" href="/apps">Apps</a>{% endif %}
@@ -42,8 +42,8 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
     <strong>This hub has no token.</strong>
     Anyone who can reach it can read every message, publish, and use the
     buttons on these pages. That is a valid choice for a hub nobody else can
-    reach — but if you meant to protect it, set <code>MAILBOX_TOKEN</code> and
-    <code>MAILBOX_SECRET_KEY</code> in your compose file and restart.
+    reach — but if you meant to protect it, set <code>KYU_TOKEN</code> and
+    <code>KYU_SECRET_KEY</code> in your compose file and restart.
   </div>
 </div>
 {% endif %}

@@ -1,10 +1,10 @@
 //! The hub's own events (W11), published as ordinary messages onto
-//! `mailbox.*` topics so that consuming them needs no special integration —
+//! `kyu.*` topics so that consuming them needs no special integration —
 //! an HA automation subscribes exactly the way anything else does.
 //!
-//! One rule is load-bearing (AR1): events *about* a `mailbox.*` topic are
+//! One rule is load-bearing (AR1): events *about* a `kyu.*` topic are
 //! logged, never republished. Without it a broken consumer of
-//! `mailbox.events` dead-letters, which emits a dead-letter event onto the
+//! `kyu.events` dead-letters, which emits a dead-letter event onto the
 //! same topic, which dead-letters — a self-sustaining message generator.
 //!
 //! Events are written inside the transaction that caused them, so a hard
@@ -20,7 +20,7 @@ use crate::engine::names::RESERVED_PREFIX;
 use crate::store::queries;
 
 /// The system topic every hub event lands on.
-pub const EVENTS_TOPIC: &str = "mailbox.events";
+pub const EVENTS_TOPIC: &str = "kyu.events";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -56,7 +56,7 @@ impl Event {
     /// on.
     ///
     /// Every event has one, and that is the point: an event with no subject
-    /// could never be suppressed, so it would publish onto `mailbox.events`
+    /// could never be suppressed, so it would publish onto `kyu.events`
     /// unconditionally. Retention collecting those events used to do exactly
     /// that, refilling the topic it had just emptied. Housekeeping is logged
     /// instead.
@@ -130,7 +130,7 @@ pub fn emit(
     now: Millis,
     event: &Event,
 ) -> Result<Vec<String>> {
-    // The loop-breaker. An event about a mailbox topic is written to the log
+    // The loop-breaker. An event about a kyu topic is written to the log
     // and stops there.
     if let Some(subject) = event.subject_topic()
         && subject.starts_with(RESERVED_PREFIX)
@@ -138,7 +138,7 @@ pub fn emit(
         tracing::info!(
             event = event.kind(),
             subject,
-            "hub event about a mailbox topic — logged, not republished"
+            "hub event about a kyu topic — logged, not republished"
         );
         return Ok(Vec::new());
     }

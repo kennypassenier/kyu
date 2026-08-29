@@ -3,4 +3,4 @@
 *.db
 *.db-wal
 *.db-shm
-mailbox.pre-v*.db
+kyu.pre-v*.db

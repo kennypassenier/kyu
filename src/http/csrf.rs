@@ -63,7 +63,7 @@ pub async fn same_origin_only(request: Request, next: Next) -> Response {
     ApiError::new(
         StatusCode::FORBIDDEN,
         format!("this request came from another origin ({origin})"),
-        "mailbox refuses state-changing requests that a browser reports as \
+        "kyu refuses state-changing requests that a browser reports as \
          cross-origin: an unprotected hub has nothing else to fall back on, \
          and a protected one would otherwise let a foreign page ride your \
          session cookie. \

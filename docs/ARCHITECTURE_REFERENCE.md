@@ -1,4 +1,4 @@
-# mailbox — architecture reference
+# kyu — architecture reference
 
 The system as built, in Phase 8. `ARCHITECTURE_DECISIONS.md` records what was
 decided and why, including the roads not taken; this file records what is
@@ -30,7 +30,7 @@ Store                       src/store/
 SQLite (bundled, WAL, synchronous=FULL)
 
 Background                  src/sweeper.rs    leases, TTL, retention, idle
-Self-reporting              src/events.rs     mailbox.events
+Self-reporting              src/events.rs     kyu.events
 Presentation                src/dashboard.rs + templates/ + static/
 ```
 
@@ -146,9 +146,9 @@ the downtime and a long one where they do not), `p7_g2_a_hard_kill_at_startup_le
 ## The door (W2)
 
 Two credentials reach the same check: an `Authorization: Bearer` header, or a
-`mailbox_session` cookie for browsers. The bootstrap token comes from the
+`kyu_session` cookie for browsers. The bootstrap token comes from the
 environment; app tokens live in the store, **encrypted** with
-ChaCha20-Poly1305 under `MAILBOX_SECRET_KEY`.
+ChaCha20-Poly1305 under `KYU_SECRET_KEY`.
 
 Encrypted rather than hashed, deliberately: a hash cannot be turned back into
 a working command, and printing a working command is what the dashboard is

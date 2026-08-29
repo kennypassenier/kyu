@@ -4,11 +4,11 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::SystemClock;
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::SystemClock;
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 
 /// Starts the router on an ephemeral port and returns its address. The
 /// task is left running; the test process exiting cleans it up.

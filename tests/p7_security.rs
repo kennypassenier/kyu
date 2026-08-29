@@ -10,11 +10,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::{Clock, SystemClock};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::{Clock, SystemClock};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 
 struct Hub {
     addr: SocketAddr,
@@ -77,7 +77,7 @@ async fn p7_sec1_a_hostile_content_type_cannot_escape_the_dashboard_snippet() {
     assert_eq!(
         publish_with_type(&hub, "notify.kenny", hostile, r#"{"n":1}"#).await,
         201,
-        "the publish itself is allowed — mailbox stores what it is given"
+        "the publish itself is allowed — kyu stores what it is given"
     );
 
     let page = reqwest::get(hub.url("/t/notify.kenny/dashboard"))

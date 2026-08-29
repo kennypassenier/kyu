@@ -71,12 +71,12 @@ fn free_port() -> u16 {
 }
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
-    let process = Command::new(env!("CARGO_BIN_EXE_mailbox"))
-        .env("MAILBOX_DATA_DIR", data_dir)
-        .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-        .env("MAILBOX_LOG", "warn")
+    let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_DATA_DIR", data_dir)
+        .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_LOG", "warn")
         .spawn()
-        .expect("the mailbox binary must start");
+        .expect("the kyu binary must start");
 
     let hub = Hub { process, port };
 
@@ -143,7 +143,7 @@ async fn drain(hub: &Hub, topic: &str, subscription: &str) -> Vec<String> {
         if response.status() != 200 {
             return ids;
         }
-        let id = header(&response, "mailbox-id").expect("an id");
+        let id = header(&response, "kyu-id").expect("an id");
         assert_eq!(ack(hub, topic, &id, subscription).await.status(), 200);
         ids.push(id);
     }
@@ -226,7 +226,7 @@ async fn l5_s4_acks_survive_a_hard_kill() {
     for _ in 0..10 {
         let response = receive(&hub, "notify.kenny", "printer").await;
         assert_eq!(response.status(), 200);
-        let id = header(&response, "mailbox-id").expect("an id");
+        let id = header(&response, "kyu-id").expect("an id");
         assert_eq!(
             ack(&hub, "notify.kenny", &id, "printer").await.status(),
             200
@@ -313,7 +313,7 @@ async fn l5_s4_a_long_outage_returns_in_flight_messages_to_the_queue() {
         .expect("a publish");
     let claimed = receive(&hub, "jobs.transcode", "worker").await;
     assert_eq!(claimed.status(), 200);
-    assert_eq!(header(&claimed, "mailbox-attempt").as_deref(), Some("1"));
+    assert_eq!(header(&claimed, "kyu-attempt").as_deref(), Some("1"));
 
     hub.kill();
     // The hub is down for longer than the lease. Nothing can expire it while
@@ -332,12 +332,9 @@ async fn l5_s4_a_long_outage_returns_in_flight_messages_to_the_queue() {
     }
 
     let response = returned.expect("an in-flight message must return after a long outage");
+    assert_eq!(header(&response, "kyu-id").as_deref(), Some(id.as_str()));
     assert_eq!(
-        header(&response, "mailbox-id").as_deref(),
-        Some(id.as_str())
-    );
-    assert_eq!(
-        header(&response, "mailbox-attempt").as_deref(),
+        header(&response, "kyu-attempt").as_deref(),
         Some("2"),
         "the interrupted attempt is counted, so a poison pill cannot loop forever"
     );
@@ -350,7 +347,7 @@ async fn l5_a_hard_kill_never_needs_manual_repair_to_restart() {
 
     // Ten kills in a row, each mid-traffic. The rejected brokers in Phase 1
     // were rejected partly for needing hand-repair of their state files
-    // after exactly this; mailbox has to come back by itself, every time.
+    // after exactly this; kyu has to come back by itself, every time.
     for round in 0..10 {
         let mut hub = start(dir.path(), port).await;
         bootstrap(&hub, "notify.kenny", &format!("round{round}")).await;
@@ -381,7 +378,7 @@ async fn l5_a_hard_kill_never_needs_manual_repair_to_restart() {
     assert_eq!(health["store"], "writable");
     assert!(
         dir.path()
-            .join("mailbox.db")
+            .join("kyu.db")
             .metadata()
             .expect("the store file must exist")
             .len()
@@ -416,11 +413,11 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
     // stop expiring and messages quietly stop coming back.
     use std::sync::Arc;
 
-    use mailbox::engine::Engine;
-    use mailbox::engine::clock::{Clock, SystemClock};
-    use mailbox::http::{AppState, Limits, router};
-    use mailbox::store::Store;
-    use mailbox::sweeper::{Heartbeat, STALE_AFTER_MS};
+    use kyu::engine::Engine;
+    use kyu::engine::clock::{Clock, SystemClock};
+    use kyu::http::{AppState, Limits, router};
+    use kyu::store::Store;
+    use kyu::sweeper::{Heartbeat, STALE_AFTER_MS};
 
     let store = Arc::new(Store::open_in_memory().expect("a store"));
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
@@ -474,10 +471,10 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
 
     // What the container healthcheck runs: the binary probing itself,
     // because distroless has no curl and no shell (T9).
-    let healthy = Command::new(env!("CARGO_BIN_EXE_mailbox"))
+    let healthy = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
-        .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-        .env("MAILBOX_DATA_DIR", dir.path())
+        .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_DATA_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");
     assert!(healthy.success(), "a healthy hub must exit 0");
@@ -485,10 +482,10 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
     drop(hub);
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let dead = Command::new(env!("CARGO_BIN_EXE_mailbox"))
+    let dead = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
-        .env("MAILBOX_LISTEN", format!("127.0.0.1:{port}"))
-        .env("MAILBOX_DATA_DIR", dir.path())
+        .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_DATA_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");
     assert!(

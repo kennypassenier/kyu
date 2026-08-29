@@ -13,7 +13,7 @@ COPY src ./src
 # build needs them even though nothing is mounted at runtime.
 COPY templates ./templates
 COPY static ./static
-RUN cargo build --release --locked && strip target/release/mailbox
+RUN cargo build --release --locked && strip target/release/kyu
 
 # /data must belong to the nonroot user before Docker creates the volume
 # from it, otherwise the store directory is root-owned and unwritable.
@@ -21,11 +21,11 @@ RUN mkdir -p /empty-data
 
 FROM gcr.io/distroless/static:nonroot
 
-COPY --from=build /src/target/release/mailbox /usr/local/bin/mailbox
+COPY --from=build /src/target/release/kyu /usr/local/bin/kyu
 COPY --from=build --chown=65532:65532 /empty-data /data
 
-ENV MAILBOX_LISTEN=0.0.0.0:8080 \
-    MAILBOX_DATA_DIR=/data
+ENV KYU_LISTEN=0.0.0.0:8080 \
+    KYU_DATA_DIR=/data
 
 EXPOSE 8080
 VOLUME ["/data"]
@@ -35,6 +35,6 @@ USER nonroot:nonroot
 # start-period must exceed the worst-case migration, or a restart loop could
 # kill a migration mid-flight (AR10).
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
-    CMD ["/usr/local/bin/mailbox", "--healthcheck"]
+    CMD ["/usr/local/bin/kyu", "--healthcheck"]
 
-ENTRYPOINT ["/usr/local/bin/mailbox"]
+ENTRYPOINT ["/usr/local/bin/kyu"]

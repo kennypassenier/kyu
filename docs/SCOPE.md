@@ -1,11 +1,34 @@
-# mailbox — Scope
+# kyu — Scope
 
 Approved via the Phase 0 gate on 2026-08-12. Every statement below was
 individually approved by Kenny (Klopt), amended items are marked.
 
+## Amendment — renamed to kyu (mini-round, 2026-08-29)
+
+The project was called **mailbox** through 1.0.1. Kenny reopened the name
+after the deployment: "mailbox doet mij heel erg aan email denken", and he
+was right — nothing here is email. Nothing is sent anywhere, nothing is
+forwarded, no mail protocol is spoken. The hub holds a message until a
+consumer asks for it and confirms it handled it, which is a queue.
+
+**kyu** (級) is Japanese for a rank or grade — the position that says when
+your turn comes — and it is pronounced *queue*. Chosen from twenty-one
+candidates at the mini-round form.
+
+Kenny chose to rename everything rather than only the visible layer, so
+the environment variables, response headers, metrics, session cookie and
+the hub's own event topic moved too. That breaks the public interface as
+this project defines it, so it ships as **2.0.0**.
+
+The sentence below is amended in the same breath: "post office" was the
+metaphor that produced the wrong name in the first place.
+
 ## The project in one sentence
 
-A self-documenting post office for the homelab — any script can send
+*(amended 2026-08-29 — was "a self-documenting post office for the
+homelab", which is the image the rename exists to correct)*
+
+A self-documenting queue for the homelab — any script can send
 with one curl, any worker can receive and ack with two, nothing is ever
 silently lost, and the dashboard teaches you your own system every time
 you come back.

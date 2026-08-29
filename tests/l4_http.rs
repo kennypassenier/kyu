@@ -7,12 +7,12 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::{Clock, SystemClock};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::{Clock, SystemClock};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper;
+use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -173,12 +173,9 @@ async fn l4_s2_a_killed_consumer_gets_its_message_redelivered() {
     }
 
     let response = redelivered.expect("a killed consumer's message must come back");
+    assert_eq!(header(&response, "kyu-id").as_deref(), Some(id.as_str()));
     assert_eq!(
-        header(&response, "mailbox-id").as_deref(),
-        Some(id.as_str())
-    );
-    assert_eq!(
-        header(&response, "mailbox-attempt").as_deref(),
+        header(&response, "kyu-attempt").as_deref(),
         Some("2"),
         "and it arrives marked as the second attempt, so a consumer can tell"
     );
@@ -268,8 +265,8 @@ async fn l4_nack_returns_a_message_without_waiting_for_the_lease() {
 
     let again = receive(&hub, "jobs.transcode", "worker").await;
     assert_eq!(again.status(), 200);
-    assert_eq!(header(&again, "mailbox-id").as_deref(), Some(id.as_str()));
-    assert_eq!(header(&again, "mailbox-attempt").as_deref(), Some("2"));
+    assert_eq!(header(&again, "kyu-id").as_deref(), Some(id.as_str()));
+    assert_eq!(header(&again, "kyu-attempt").as_deref(), Some("2"));
 }
 
 #[tokio::test]
@@ -320,7 +317,7 @@ async fn l4_dead_letters_are_listed_with_their_payload_and_can_be_requeued() {
     let redelivered = receive(&hub, "print.receipt", "printer").await;
     assert_eq!(redelivered.status(), 200);
     assert_eq!(
-        header(&redelivered, "mailbox-attempt").as_deref(),
+        header(&redelivered, "kyu-attempt").as_deref(),
         Some("1"),
         "a requeued message starts its attempts over"
     );

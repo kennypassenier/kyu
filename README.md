@@ -1,19 +1,21 @@
-# mailbox
+# kyu
 
 A self-documenting durable message hub for a homelab. Any script can
 send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 1.0.0.** Every frozen feature is built and under test (190 tests,
-> CI green on every push). 1.0.0 is a promise about the HTTP contract — the
-> three verbs, their parameters and response shapes, and the environment
-> variables: breaking those means 2.0.0. The dashboard's HTML and the on-disk
-> schema are not part of that promise. Published as
-> `ghcr.io/kennypassenier/mailbox:1.0.0` and deployed from that image into a
-> throwaway LXC on the real Proxmox host on 2026-08-28: three verbs, an
-> unacked message surviving a container restart, monitoring open, dashboard
-> behind its door. Still true: no production traffic has touched it yet.
+> **Status: 2.0.0.** Every frozen feature is built and under test (202 tests,
+> CI green on every push). The version is a promise about the HTTP contract —
+> the three verbs, their parameters and response shapes, and the environment
+> variables. The dashboard's HTML and the on-disk schema are not part of it.
+>
+> 2.0.0 is a **rename**, not new behaviour: this project was called `mailbox`
+> through 1.0.1, which said email about something that is a queue. Everything
+> moved — `MAILBOX_*` → `KYU_*`, `mailbox-*` headers → `kyu-*`, the
+> `mailbox.events` topic → `kyu.events`. See CHANGELOG.md for the upgrade
+> steps. Runs on LXC 109 as a native binary under systemd, backed up nightly
+> and watched by Uptime Kuma.
 
 ## The idea
 
@@ -48,7 +50,7 @@ curl localhost:8080/healthz
 
 ## The door
 
-Out of the box mailbox has **no authentication**, which is a real choice for
+Out of the box kyu has **no authentication**, which is a real choice for
 a hub on a network nothing else reaches — and one it will not let you make
 by accident: it warns on every startup and puts a banner on every dashboard
 page saying so.
@@ -56,8 +58,8 @@ page saying so.
 To put a token on it, set both of these and restart:
 
 ```bash
-MAILBOX_TOKEN=$(openssl rand -hex 24)        # what you log in with
-MAILBOX_SECRET_KEY=$(openssl rand -hex 32)   # encrypts per-app tokens
+KYU_TOKEN=$(openssl rand -hex 24)        # what you log in with
+KYU_SECRET_KEY=$(openssl rand -hex 32)   # encrypts per-app tokens
 ```
 
 One without the other refuses to start, and the error prints a generated key
@@ -83,12 +85,12 @@ who has already logged in, which is by design.
 
 ### Which value to rotate
 
-`MAILBOX_TOKEN` and `MAILBOX_SECRET_KEY` do different jobs, and the
+`KYU_TOKEN` and `KYU_SECRET_KEY` do different jobs, and the
 difference bites exactly once:
 
-- Rotating **`MAILBOX_TOKEN`** is safe. App tokens keep working; you just log
+- Rotating **`KYU_TOKEN`** is safe. App tokens keep working; you just log
   in with a new value.
-- Rotating **`MAILBOX_SECRET_KEY`** makes every stored app token unreadable.
+- Rotating **`KYU_SECRET_KEY`** makes every stored app token unreadable.
   The apps page will show them as `unreadable`; revoke and re-issue.
 
 That is precisely why the key is a separate variable rather than derived from
@@ -104,7 +106,7 @@ git tag v0.1.0 && git push origin v0.1.0
 ```
 
 `.github/workflows/release-image.yml` then builds and pushes
-`ghcr.io/kennypassenier/mailbox:0.1.0` and `:latest`. The workflow is taken
+`ghcr.io/kennypassenier/kyu:0.1.0` and `:latest`. The workflow is taken
 from the homelab's `templates/rust-service/`, so every one of these Rust
 repos ships the same way — one shape to remember instead of four.
 
@@ -129,8 +131,8 @@ checked, and it is wrong. The same sentence is still in
 
 The store is one SQLite file. Two routes, and they are not equivalent:
 
-**Through the homelab** (the supported route). `presets/mailbox/` in the
-homelab repo binds the data directory under `/appdata/<stack>/mailbox-config`,
+**Through the homelab** (the supported route). `presets/kyu/` in the
+homelab repo binds the data directory under `/appdata/<stack>/kyu-config`,
 which is what restic walks: encrypted, off-site, 7 daily / 4 weekly / 3
 monthly, with a restore drill scheduled quarterly. The preset also carries
 `com.homelab.backup.pause=true`, which stops the container while the snapshot
@@ -139,7 +141,7 @@ is taken — SQLite copied mid-write is not a database.
 **As a plain binary under systemd** (what Kenny runs, on its own LXC). Neither
 of the two routes below applies: restic never sees it and the nightly image
 update never touches it. Two mechanisms cover it instead, and they cover
-different disasters — `mailbox-backup.timer` in the container asks the hub for
+different disasters — `kyu-backup.timer` in the container asks the hub for
 a consistent copy at 03:00, and a Proxmox `vzdump` job snapshots the whole
 container at 03:30. The first survives a bad migration; only the second
 survives losing the container. See OPERATIONS_RUNBOOK §4.
@@ -151,7 +153,7 @@ until you chown the directory. The cost is that restic cannot see a named
 volume — so on the standalone route, backups are yours to arrange:
 
 ```bash
-curl -X POST -H "authorization: Bearer $MAILBOX_TOKEN" http://hub.lan:8080/api/backup
+curl -X POST -H "authorization: Bearer $KYU_TOKEN" http://hub.lan:8080/api/backup
 ```
 
 That writes a consistent copy beside the store while the hub keeps serving,
@@ -171,16 +173,16 @@ consumer is an environment variable.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `MAILBOX_LISTEN` | `0.0.0.0:8080` | Address to bind. |
-| `MAILBOX_DATA_DIR` | `/data` | Where the store lives. |
-| `MAILBOX_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
-| `MAILBOX_LOG` | `info` | Log filter (`tracing` syntax). |
-| `MAILBOX_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |
-| `MAILBOX_TOKEN` | *(none)* | The token you log in with and that scripts send. Unset means no door at all. |
-| `MAILBOX_SECRET_KEY` | *(none)* | 64 hex characters. Encrypts per-app tokens. Required whenever `MAILBOX_TOKEN` is set. |
-| `MAILBOX_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
-| `MAILBOX_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
-| `MAILBOX_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
+| `KYU_LISTEN` | `0.0.0.0:8080` | Address to bind. |
+| `KYU_DATA_DIR` | `/data` | Where the store lives. |
+| `KYU_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
+| `KYU_LOG` | `info` | Log filter (`tracing` syntax). |
+| `KYU_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |
+| `KYU_TOKEN` | *(none)* | The token you log in with and that scripts send. Unset means no door at all. |
+| `KYU_SECRET_KEY` | *(none)* | 64 hex characters. Encrypts per-app tokens. Required whenever `KYU_TOKEN` is set. |
+| `KYU_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
+| `KYU_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
+| `KYU_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
 
 The two idle thresholds are **defaults, not laws** — see below.
 
@@ -226,14 +228,14 @@ complete backlog.
 
 ## Development
 
-**If you are using mailbox**, these are the ones you want:
+**If you are using kyu**, these are the ones you want:
 [USER_GUIDE.md](docs/USER_GUIDE.md) (every feature with a command you can
 paste, and where each claim is proven),
 [OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) (numbered procedures:
 deploy, upgrade, back up, restore, rotate tokens),
 [DEBUGGING_GUIDE.md](docs/DEBUGGING_GUIDE.md) (symptom → cause → fix).
 
-**If you are changing mailbox**, add
+**If you are changing kyu**, add
 [ARCHITECTURE_REFERENCE.md](docs/ARCHITECTURE_REFERENCE.md) (the system as
 built) and [TEST_PLAN.md](docs/TEST_PLAN.md) (what is proven where, and what
 is deliberately not covered).

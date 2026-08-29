@@ -11,14 +11,68 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 1.0.1.
+Nothing since 2.0.0.
+
+## [2.0.0] — 2026-08-29
+
+### The project is now called kyu
+
+It was called `mailbox`, and that name said email. This has never been
+email: nothing is sent anywhere, nothing is forwarded, no mail protocol is
+spoken. What it does is hold a message until a consumer comes asking and
+confirms it handled it — which is a queue, not a postbox.
+
+**kyu** (級) is the Japanese word for a rank or grade: the position that
+says when your turn comes. It is pronounced *queue*, which is what the
+thing is.
+
+Everything moved, deliberately. A half-renamed system asks you to remember
+two names instead of one, and the old name would have outlived every
+document explaining it.
+
+- Crate, binary, repository, image and container: `mailbox` → `kyu`.
+- **Environment variables** — every `MAILBOX_*` is now `KYU_*`
+  (`KYU_TOKEN`, `KYU_SECRET_KEY`, `KYU_DATA_DIR`, `KYU_LISTEN`, …).
+- **Response headers** — `mailbox-id`, `mailbox-topic`, `mailbox-attempt`,
+  `mailbox-published-at` and `mailbox-notice` are now `kyu-*`.
+- **Metrics** — `mailbox_messages`, `mailbox_deliveries`, `mailbox_topics`,
+  `mailbox_subscriptions`, `mailbox_store_bytes` and
+  `mailbox_sweeper_age_ms` are now `kyu_*`.
+- **Session cookie** — `mailbox_session` → `kyu_session`.
+- **The hub's own events** — the topic `mailbox.events` is now
+  `kyu.events`, and the reserved topic prefix is `kyu.` instead of
+  `mailbox.`.
+- **On disk** — `/var/lib/mailbox` → `/var/lib/kyu`, `/etc/mailbox/` →
+  `/etc/kyu/`.
+
+### Upgrading from 1.x
+
+The stored data needs no migration: the schema never carried the name, so
+the same SQLite file opens unchanged under the new binary. What has to
+change is everything that speaks to the hub.
+
+1. Move the store and the configuration: `/var/lib/mailbox` →
+   `/var/lib/kyu`, `/etc/mailbox/mailbox.env` → `/etc/kyu/kyu.env`.
+2. Rename the variables inside that env file (`MAILBOX_` → `KYU_`).
+3. In every consumer, rename the response headers it reads and the topic
+   `mailbox.events` if it subscribes to it.
+4. Point monitoring at the new metric names before you retire the old
+   dashboards, or the graphs go quiet without anything being wrong.
+
+### Why this is 2.0.0 and not 1.2.0
+
+The definition at the top of this file counts the environment variables as
+part of the public interface, and the Phase 9 promise was that breaking it
+means a major version. Renaming every one of them breaks it. The three
+verbs, their parameters and their response *shapes* are unchanged — only
+the names on the outside moved.
 
 ## [1.0.1] — 2026-08-28
 
 ### Fixed
 
 - **The command line no longer fails open.** Every argument except
-  `--healthcheck` was ignored, so `mailbox --version` printed nothing and
+  `--healthcheck` was ignored, so `kyu --version` printed nothing and
   started the hub instead — found while deploying 1.0.0 onto its LXC, where
   the invocation simply never returned. Unknown flags and stray positional
   arguments are now refused with exit code 2 and a remedy, and `--version`
@@ -43,7 +97,7 @@ in `docs/`, not here.
   hard kill.
 - **Subscription names carry both delivery patterns** (K4): different names
   each receive every message, the same name from several processes competes.
-- **Two response shapes** (AR2): raw body with `Mailbox-*` headers by default,
+- **Two response shapes** (AR2): raw body with `Kyu-*` headers by default,
   `?envelope=json` for scripts — JSON embeds as JSON, text as `payload_text`,
   anything else as `payload_base64`, never silently mangled.
 - **Every failure answers `{error, remedy}`** (AR4), including the ones a
@@ -69,7 +123,7 @@ in `docs/`, not here.
 - **Replay** (K8) via `?from=beginning`, idempotent and in bounded batches.
 - **Idle lifecycle** (K11): a quiet subscription is flagged, then archived,
   settling what it held as `lapsed` rather than dropping it silently.
-- **`mailbox.events`** (W11): the hub publishes its own events as ordinary
+- **`kyu.events`** (W11): the hub publishes its own events as ordinary
   messages, so consuming them needs no special integration.
 - **Delayed delivery** (W4) via `?delay=` or `?at=`, durable on acceptance.
 
@@ -87,7 +141,7 @@ in `docs/`, not here.
   copy-paste commands that carry a real token while showing a masked one.
   `/healthz` and `/metrics` stay open so monitoring keeps working.
 - **Distribution** (K13): a `v*` tag publishes a Docker image to GHCR;
-  `presets/mailbox/` in the homelab repo deploys it like any other app.
+  `presets/kyu/` in the homelab repo deploys it like any other app.
 
 ### Deliberately not included
 

@@ -94,20 +94,20 @@ impl Auth {
         match (token, key) {
             (None, None) => Ok(Self::Unprotected),
             (None, Some(_)) => bail!(
-                "MAILBOX_SECRET_KEY is set but MAILBOX_TOKEN is not, so the hub                  would run with its door open while looking configured. Set                  MAILBOX_TOKEN as well, or unset MAILBOX_SECRET_KEY to run                  deliberately unprotected."
+                "KYU_SECRET_KEY is set but KYU_TOKEN is not, so the hub                  would run with its door open while looking configured. Set                  KYU_TOKEN as well, or unset KYU_SECRET_KEY to run                  deliberately unprotected."
             ),
             (Some(_), None) => bail!(
-                "MAILBOX_TOKEN is set but MAILBOX_SECRET_KEY is not. App tokens \
-                 are encrypted with that key, and deriving it from MAILBOX_TOKEN \
+                "KYU_TOKEN is set but KYU_SECRET_KEY is not. App tokens \
+                 are encrypted with that key, and deriving it from KYU_TOKEN \
                  would mean that rotating a leaked token silently destroys every \
                  app token you have. Add this line and keep it with the token:\n\
-                 \n    MAILBOX_SECRET_KEY={}\n",
+                 \n    KYU_SECRET_KEY={}\n",
                 SecretKey::generate_hex()
             ),
             (Some(token), Some(key)) => {
                 if token.len() < MIN_TOKEN_LEN {
                     bail!(
-                        "MAILBOX_TOKEN is {} characters, which is short enough to \
+                        "KYU_TOKEN is {} characters, which is short enough to \
                          guess. Use at least {MIN_TOKEN_LEN}; generate one with: \
                          openssl rand -hex 24",
                         token.len()
@@ -124,27 +124,27 @@ impl Auth {
 
 impl Config {
     pub fn from_env() -> Result<Self> {
-        let listen = std::env::var("MAILBOX_LISTEN").ok();
-        let data_dir = std::env::var("MAILBOX_DATA_DIR").ok();
-        let max_body = std::env::var("MAILBOX_MAX_BODY_BYTES").ok();
+        let listen = std::env::var("KYU_LISTEN").ok();
+        let data_dir = std::env::var("KYU_DATA_DIR").ok();
+        let max_body = std::env::var("KYU_MAX_BODY_BYTES").ok();
         let mut config = Self::parse(listen.as_deref(), data_dir.as_deref(), max_body.as_deref())?;
 
         config.defaults = Defaults {
-            retention_ms: duration_from_env("MAILBOX_RETENTION_MS", config.defaults.retention_ms)?,
+            retention_ms: duration_from_env("KYU_RETENTION_MS", config.defaults.retention_ms)?,
             idle_flag_ms: duration_from_env(
-                "MAILBOX_IDLE_FLAG_MS",
+                "KYU_IDLE_FLAG_MS",
                 Some(config.defaults.idle_flag_ms),
             )?
             .unwrap_or(config.defaults.idle_flag_ms),
             idle_archive_ms: duration_from_env(
-                "MAILBOX_IDLE_ARCHIVE_MS",
+                "KYU_IDLE_ARCHIVE_MS",
                 Some(config.defaults.idle_archive_ms),
             )?
             .unwrap_or(config.defaults.idle_archive_ms),
         };
         config.auth = Auth::parse(
-            std::env::var("MAILBOX_TOKEN").ok().as_deref(),
-            std::env::var("MAILBOX_SECRET_KEY").ok().as_deref(),
+            std::env::var("KYU_TOKEN").ok().as_deref(),
+            std::env::var("KYU_SECRET_KEY").ok().as_deref(),
         )?;
         Ok(config)
     }
@@ -161,7 +161,7 @@ impl Config {
         let listen_raw = listen.unwrap_or(DEFAULT_LISTEN);
         let listen: SocketAddr = listen_raw.parse().with_context(|| {
             format!(
-                "MAILBOX_LISTEN is not a socket address: {listen_raw:?}. \
+                "KYU_LISTEN is not a socket address: {listen_raw:?}. \
                  Set it as HOST:PORT (for example 0.0.0.0:8080), \
                  or unset it to use the default {DEFAULT_LISTEN}."
             )
@@ -170,7 +170,7 @@ impl Config {
         let data_dir = PathBuf::from(data_dir.unwrap_or(DEFAULT_DATA_DIR));
         if data_dir.as_os_str().is_empty() {
             bail!(
-                "MAILBOX_DATA_DIR is empty. Set it to the directory holding \
+                "KYU_DATA_DIR is empty. Set it to the directory holding \
                  the store (for example /data), or unset it to use the \
                  default {DEFAULT_DATA_DIR}."
             );
@@ -181,14 +181,14 @@ impl Config {
             Some(raw) => {
                 let parsed: u64 = raw.parse().with_context(|| {
                     format!(
-                        "MAILBOX_MAX_BODY_BYTES is not a whole number of bytes: {raw:?}. \
+                        "KYU_MAX_BODY_BYTES is not a whole number of bytes: {raw:?}. \
                          Set it to a byte count (for example 1048576 for 1 MiB), \
                          or unset it to use the default {DEFAULT_MAX_BODY_BYTES}."
                     )
                 })?;
                 if parsed == 0 {
                     bail!(
-                        "MAILBOX_MAX_BODY_BYTES is 0, which would reject every \
+                        "KYU_MAX_BODY_BYTES is 0, which would reject every \
                          message. Set it to a byte count above zero (for example \
                          1048576 for 1 MiB), or unset it to use the default \
                          {DEFAULT_MAX_BODY_BYTES}."
@@ -248,10 +248,10 @@ mod tests {
 
     #[test]
     fn l0_explicit_values_are_used() {
-        let config = Config::parse(Some("127.0.0.1:9000"), Some("/srv/mailbox"), Some("2048"))
+        let config = Config::parse(Some("127.0.0.1:9000"), Some("/srv/kyu"), Some("2048"))
             .expect("explicit values must parse");
         assert_eq!(config.listen.to_string(), "127.0.0.1:9000");
-        assert_eq!(config.data_dir, PathBuf::from("/srv/mailbox"));
+        assert_eq!(config.data_dir, PathBuf::from("/srv/kyu"));
         assert_eq!(config.max_body_bytes, 2048);
     }
 
@@ -260,7 +260,7 @@ mod tests {
         let error = Config::parse(Some("not-an-address"), None, None)
             .expect_err("an invalid address must not fall back to the default");
         let message = format!("{error:#}");
-        assert!(message.contains("MAILBOX_LISTEN"), "names the variable");
+        assert!(message.contains("KYU_LISTEN"), "names the variable");
         assert!(message.contains("HOST:PORT"), "carries a remedy: {message}");
     }
 
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn p7_empty_strings_count_as_absent() {
-        // Compose writes MAILBOX_TOKEN= when a variable is left blank, and
+        // Compose writes KYU_TOKEN= when a variable is left blank, and
         // treating that as a token would protect the hub with "".
         assert_eq!(
             Auth::parse(Some("   "), Some("")).expect("blank values parse as absent"),
@@ -298,12 +298,12 @@ mod tests {
             .expect_err("a half-configured door must not start");
         let message = format!("{error:#}");
         assert!(
-            message.contains("MAILBOX_SECRET_KEY="),
+            message.contains("KYU_SECRET_KEY="),
             "hands over a pastable line: {message}"
         );
         assert!(message.contains("rotating"), "explains why, not just what");
         let generated = message
-            .rsplit("MAILBOX_SECRET_KEY=")
+            .rsplit("KYU_SECRET_KEY=")
             .next()
             .expect("the line is present")
             .trim();

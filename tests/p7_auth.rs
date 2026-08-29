@@ -15,13 +15,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use mailbox::config::Auth;
-use mailbox::crypto::SecretKey;
-use mailbox::engine::Engine;
-use mailbox::engine::clock::{Clock, SystemClock};
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::config::Auth;
+use kyu::crypto::SecretKey;
+use kyu::engine::Engine;
+use kyu::engine::clock::{Clock, SystemClock};
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 
 const TOKEN: &str = "the-bootstrap-token-for-tests";
 
@@ -431,7 +431,7 @@ async fn p7_an_unprotected_hub_says_so_and_lets_everything_through() {
         "an unprotected hub must never be quietly unprotected: {page}"
     );
     assert!(
-        page.contains("MAILBOX_SECRET_KEY"),
+        page.contains("KYU_SECRET_KEY"),
         "and it must say how to fix it"
     );
 }

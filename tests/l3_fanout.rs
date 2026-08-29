@@ -12,11 +12,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mailbox::engine::Engine;
-use mailbox::engine::clock::SystemClock;
-use mailbox::http::{AppState, Limits, router};
-use mailbox::store::Store;
-use mailbox::sweeper::Heartbeat;
+use kyu::engine::Engine;
+use kyu::engine::clock::SystemClock;
+use kyu::http::{AppState, Limits, router};
+use kyu::store::Store;
+use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
@@ -97,7 +97,7 @@ async fn ack(hub: &Hub, topic: &str, id: &str, subscription: &str) -> reqwest::R
 fn message_id(response: &reqwest::Response) -> String {
     response
         .headers()
-        .get("mailbox-id")
+        .get("kyu-id")
         .and_then(|value| value.to_str().ok())
         .expect("a delivered message carries its id")
         .to_string()
@@ -256,7 +256,7 @@ async fn l3_competing_consumers_share_the_work_without_duplicating_it() {
                 assert_eq!(response.status(), 200);
                 let id = response
                     .headers()
-                    .get("mailbox-id")
+                    .get("kyu-id")
                     .and_then(|value| value.to_str().ok())
                     .expect("an id")
                     .to_string();

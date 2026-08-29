@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mailbox — log in</title>
+<title>kyu — log in</title>
 <link rel="stylesheet" href="/static/bootstrap.min.css?v={{ assets }}">
 </head>
 <body class="d-flex align-items-center" style="min-height: 100vh">
 <main class="container" style="max-width: 26rem">
-  <h1 class="h4 mb-1">mailbox</h1>
+  <h1 class="h4 mb-1">kyu</h1>
   <p class="text-secondary mb-4">This hub is protected. Paste a token to continue.</p>
 
   {% if error %}
@@ -21,7 +21,7 @@
       <input type="password" class="form-control font-monospace" id="token" name="token"
              autocomplete="current-password" autofocus required>
       <div class="form-text">
-        The value of <code>MAILBOX_TOKEN</code> from your compose file, or any
+        The value of <code>KYU_TOKEN</code> from your compose file, or any
         token from the apps page.
       </div>
     </div>

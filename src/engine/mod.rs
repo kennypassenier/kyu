@@ -36,7 +36,7 @@ pub enum EngineError {
     #[error("{kind} name {name:?} is not allowed")]
     InvalidName { kind: &'static str, name: String },
 
-    #[error("topic {topic:?} is reserved for mailbox's own events")]
+    #[error("topic {topic:?} is reserved for kyu's own events")]
     ReservedTopic { topic: String },
 
     #[error("topic {topic:?} does not exist")]
@@ -102,7 +102,7 @@ impl EngineError {
             Self::UnknownApp { .. } => "register the app on the dashboard's apps page first; \
                  its token is generated there."
                 .to_string(),
-            Self::Unprotected => "set MAILBOX_TOKEN and MAILBOX_SECRET_KEY in your compose \
+            Self::Unprotected => "set KYU_TOKEN and KYU_SECRET_KEY in your compose \
                  file and restart the hub. Without a token there is nothing to hand out."
                 .to_string(),
             Self::InvalidName { kind, .. } => format!(
@@ -112,8 +112,8 @@ impl EngineError {
                 names::MAX_NAME_LEN
             ),
             Self::ReservedTopic { .. } => format!(
-                "the {:?} prefix carries mailbox's own events, so only mailbox publishes \
-                 there. Pick another topic name; you can still subscribe to mailbox topics \
+                "the {:?} prefix carries kyu's own events, so only kyu publishes \
+                 there. Pick another topic name; you can still subscribe to kyu topics \
                  to consume those events.",
                 names::RESERVED_PREFIX
             ),
@@ -165,7 +165,7 @@ impl EngineError {
                  what the topic still retains."
             ),
             Self::Internal(_) => {
-                "this is a fault in mailbox rather than in the request. Check the hub's logs \
+                "this is a fault in kyu rather than in the request. Check the hub's logs \
                  for the matching error line and the dashboard for the store's health."
                     .to_string()
             }
@@ -536,7 +536,7 @@ impl Engine {
             // Idempotent, but not noisy with it: unarchiving something that
             // was never archived changes nothing, so it announces nothing.
             // A spurious subscription.unarchived event would wake whatever
-            // HA automation listens to mailbox.events for no reason.
+            // HA automation listens to kyu.events for no reason.
             if queries::subscription_state(tx, sub_id)? != "archived" {
                 return Ok(false);
             }
@@ -843,7 +843,7 @@ impl Engine {
                 report.collected = collected;
                 // Logged rather than published, deliberately. Retention is
                 // the hub's own housekeeping, and an event about it lands on
-                // mailbox.events — where it becomes a message that retention
+                // kyu.events — where it becomes a message that retention
                 // must eventually collect, emitting another. The topic would
                 // never reach quiescence. The count is on the dashboard and
                 // in the metrics; this is the loud-enough place for it.

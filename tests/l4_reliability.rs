@@ -7,11 +7,11 @@
 
 use std::sync::Arc;
 
-use mailbox::engine::clock::MockClock;
-use mailbox::engine::policy::{DEFAULT_MAX_ATTEMPTS, Policy};
-use mailbox::engine::{Engine, Settled};
-use mailbox::store::Store;
-use mailbox::store::queries::StoredPolicy;
+use kyu::engine::clock::MockClock;
+use kyu::engine::policy::{DEFAULT_MAX_ATTEMPTS, Policy};
+use kyu::engine::{Engine, Settled};
+use kyu::store::Store;
+use kyu::store::queries::StoredPolicy;
 
 const START: i64 = 1_700_000_000_000;
 
