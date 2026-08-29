@@ -13,9 +13,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | 10 · Retrospective |
-| Last completed gate | Phase 9 (2026-08-28): v1.0.0 tagged, image published and verified, GitHub Release written |
-| Next gate | Phase 10 · Retrospective (diff on dev-procedure) |
+| Current phase | **Done** — all eleven phases complete |
+| Last completed gate | Post-deployment gaps + monitoring (2026-08-29): backups, the native route documented, health check proven by a real outage |
+| Next gate | None. mailbox is released (1.0.1), deployed on LXC 109 and monitored. Further work arrives as mini-rounds |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
