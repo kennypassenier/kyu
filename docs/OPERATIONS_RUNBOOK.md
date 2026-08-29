@@ -27,7 +27,37 @@ call.
 4. Verify: `curl -sf $HUB/healthz` returns `{"status":"ok",…}`.
 5. Open `/login`, paste the token, tick "stay logged in".
 
-**Standalone:**
+**As a plain binary under systemd** — what Kenny actually runs, on LXC 109
+(`109-app-mailbox`, `10.10.10.9`). No Docker on the box at all:
+
+1. Take the binary out of the published image on a machine that has Docker,
+   and copy it over. It is statically linked, so it needs nothing installed:
+   ```bash
+   id=$(docker create ghcr.io/kennypassenier/mailbox:1.0.1)
+   docker cp "$id":/usr/local/bin/mailbox ./mailbox && docker rm "$id"
+   scp mailbox root@<proxmox>:/tmp/mailbox
+   ssh root@<proxmox> 'pct push 109 /tmp/mailbox /usr/local/bin/mailbox --perms 755'
+   ```
+2. A system user that owns only its data, and a config file only it can read:
+   ```bash
+   adduser --system --group --home /var/lib/mailbox --no-create-home mailbox
+   install -d -o mailbox -g mailbox -m 0750 /var/lib/mailbox
+   install -d -o root -g mailbox -m 0750 /etc/mailbox
+   umask 077
+   printf 'MAILBOX_TOKEN=%s\nMAILBOX_SECRET_KEY=%s\nMAILBOX_LISTEN=0.0.0.0:8080\nMAILBOX_DATA_DIR=/var/lib/mailbox\nMAILBOX_LOG=info\n' \
+     "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /etc/mailbox/mailbox.env
+   chown root:mailbox /etc/mailbox/mailbox.env && chmod 0640 /etc/mailbox/mailbox.env
+   ```
+3. `mailbox.service` with `Restart=always` and `StartLimitIntervalSec=0` — the
+   second matters as much as the first, because systemd otherwise gives up
+   after a few restarts in a short window and turns a transient fault into a
+   permanent outage. The unit also carries the namespace hardening
+   (`ProtectSystem=strict` and friends), which in an **unprivileged LXC needs
+   `features: nesting=1` on the container** or every start fails with
+   `Failed to set up mount namespacing`. That is measured, not guessed.
+4. `systemctl enable --now mailbox`, then `curl -sf http://<host>:8080/healthz`.
+
+**Standalone with Docker:**
 
 ```bash
 docker compose up -d
@@ -94,8 +124,18 @@ a file with no reader. See AR12.
 2. **Deployed via the homelab:** nothing to do. The nightly run updates it and
    rolls back on a failed health check (`com.homelab.update.policy=auto`).
    Immediate instead: `homelab update stacks/<name>`.
-3. **Standalone:** `docker compose pull && docker compose up -d`.
-4. Verify: `curl -sf $HUB/healthz`, and check the log line `schema migrated`
+3. **Standalone with Docker:** `docker compose pull && docker compose up -d`.
+4. **Plain binary under systemd** — extract the new binary as in §1, then:
+   ```bash
+   ssh root@<proxmox> '
+     pct exec 109 -- systemctl stop mailbox
+     pct push 109 /tmp/mailbox /usr/local/bin/mailbox --perms 755
+     pct exec 109 -- systemctl start mailbox
+     pct exec 109 -- /usr/local/bin/mailbox --version'
+   ```
+   Walked for real on 2026-08-28 going from 1.0.0 to 1.0.1: an unacknowledged
+   message was still waiting afterwards.
+5. Verify: `curl -sf $HUB/healthz`, and check the log line `schema migrated`
    if the schema moved.
 
 **What happens to your data.** A populated store is snapshotted with
@@ -144,6 +184,23 @@ deliver a message out of it.
 **Through the homelab** this is a first-class operation — choose snapshot,
 quiesce, restore, restart, verify — with a restore drill scheduled quarterly.
 Use that rather than these steps when the hub is deployed there.
+
+**On LXC 109** there are two things to restore from, and which one you want
+depends on what broke:
+
+- **The container is gone or unbootable** → the Proxmox backup job
+  `mailbox-109` (nightly 03:30, 7 daily + 4 weekly, on `local`). Restore the
+  container; everything comes back with it.
+- **The data is wrong but the container is fine** — a bad migration, a
+  message you should not have deleted → the newest
+  `/var/lib/mailbox/mailbox.backup-*.db`, written nightly at 03:00 by
+  `mailbox-backup.timer` and integrity-checked by the hub before it was
+  reported. Follow step 2 above: stop the service, put it in place of
+  `mailbox.db`, delete the `-wal` and `-shm`, start again.
+
+The 03:00 backup runs half an hour before the snapshot on purpose: whatever
+state the live database is caught in, the snapshot always contains one file
+the hub itself opened and checked.
 
 ---
 

@@ -136,8 +136,16 @@ monthly, with a restore drill scheduled quarterly. The preset also carries
 `com.homelab.backup.pause=true`, which stops the container while the snapshot
 is taken — SQLite copied mid-write is not a database.
 
-**Standalone** (this repo's `compose.yml`). It uses a named volume, on
-purpose: the image is distroless and runs as uid 65532, and a bind mount does
+**As a plain binary under systemd** (what Kenny runs, on its own LXC). Neither
+of the two routes below applies: restic never sees it and the nightly image
+update never touches it. Two mechanisms cover it instead, and they cover
+different disasters — `mailbox-backup.timer` in the container asks the hub for
+a consistent copy at 03:00, and a Proxmox `vzdump` job snapshots the whole
+container at 03:30. The first survives a bad migration; only the second
+survives losing the container. See OPERATIONS_RUNBOOK §4.
+
+**Standalone with Docker** (this repo's `compose.yml`). It uses a named
+volume, on purpose: the image is distroless and runs as uid 65532, and a bind mount does
 not inherit that ownership, so `- ./data:/data` makes the hub refuse to start
 until you chown the directory. The cost is that restic cannot see a named
 volume — so on the standalone route, backups are yours to arrange:
