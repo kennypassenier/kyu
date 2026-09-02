@@ -150,6 +150,33 @@ which runs an existing volume against a freshly built image because that is
 the only place migration, snapshot and the healthcheck start-period meet the
 way a real pull does.
 
+### Stopping the hub (2.1.0 and later)
+
+`systemctl stop kyu`, `docker stop` and Ctrl-C all send a signal kyu now
+catches (W12). It finishes the requests in flight — a long-poll consumer is
+the normal state here, so that matters — folds the write-ahead log back into
+the database, truncates it, and exits **0**. After that the files in the data
+directory stand still, so a plain `tar` or `cp` of it is a restorable copy.
+
+`KYU_SHUTDOWN_TIMEOUT_MS` (default 10000) bounds it. Blowing the budget logs
+one loud line naming what was still open and exits 0 anyway: a stop that
+hangs is worse than one that is incomplete, and a non-zero code would make
+systemd report a clean stop as a crash.
+
+**Give the unit a `TimeoutStopSec` above that budget**, so systemd's own
+patience is never the thing that ends a shutdown:
+
+```ini
+# in kyu.service, alongside Restart=always
+TimeoutStopSec=30
+```
+
+Before 2.1.0 there was no handler at all and the process died where it
+stood. That was never a data risk — `l5_crash.rs` kills the real binary with
+SIGKILL ten times in a row and it restarts without repair — but the log was
+always mid-write, which is why the homelab's nightly `tar` of CT 109 failed
+with `kyu.db-wal: file changed as we read it`.
+
 ---
 
 ## 3 · Take a backup by hand

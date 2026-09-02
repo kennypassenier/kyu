@@ -22,7 +22,10 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: read
+  # write, not read: the same job attaches the binary and its checksums to
+  # the release (F168), so the homelab can install a verified native build
+  # instead of someone copying a file by hand.
+  contents: write
   packages: write
 
 jobs:
@@ -48,3 +51,33 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # F168 · the release carries the binary too, so `homelab install-native`
+      # can fetch it, verify it against SHA256SUMS on Kenny's desktop, and
+      # only then push the bytes into the container. Without this, updating
+      # the native deployment on CT 109 is a manual copy.
+      #
+      # Deliberately EXTRACTED from the image rather than built again: cargo
+      # compiles exactly once, so the binary published here is byte-for-byte
+      # the one running in the container. A second `cargo build` in this
+      # workflow would be a second build path, and two build paths drift.
+      - name: Extract the binary from the image just built
+        run: |
+          set -euo pipefail
+          ref="ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}"
+          docker pull "$ref"
+          id=$(docker create "$ref")
+          docker cp "$id:/usr/local/bin/kyu" ./kyu
+          docker rm "$id"
+          chmod 755 ./kyu
+          # Plain sha256sum format, one line per file: <64 hex>  <name>.
+          sha256sum kyu > SHA256SUMS
+          cat SHA256SUMS
+          # A published binary that cannot run is worse than none at all.
+          ./kyu --version
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            kyu
+            SHA256SUMS

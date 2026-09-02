@@ -5,7 +5,7 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 2.0.0.** Every frozen feature is built and under test (202 tests,
+> **Status: 2.1.0.** Every frozen feature is built and under test (207 tests,
 > CI green on every push). The version is a promise about the HTTP contract —
 > the three verbs, their parameters and response shapes, and the environment
 > variables. The dashboard's HTML and the on-disk schema are not part of it.

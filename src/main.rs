@@ -9,6 +9,7 @@ use kyu::config::Config;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
 use kyu::http::{AppState, Limits, router};
+use kyu::shutdown;
 use kyu::store::Store;
 use kyu::sweeper::{self, Heartbeat};
 use tracing_subscriber::EnvFilter;
@@ -49,6 +50,9 @@ async fn main() -> Result<()> {
     // without somewhere durable to put them would break K1's promise that a
     // confirmed publish is a kept one.
     let store = Arc::new(Store::open(&config.data_dir)?);
+    // Kept past the move into the engine so the stop path can settle the
+    // write-ahead log (W12); the engine owns the store, this is a handle.
+    let store_for_shutdown = store.clone();
     tracing::info!(
         store = %store.path().map(|path| path.display().to_string()).unwrap_or_default(),
         "store ready"
@@ -109,8 +113,18 @@ async fn main() -> Result<()> {
     );
 
     axum::serve(listener, router(state))
+        .with_graceful_shutdown(shutdown::requested())
         .await
-        .context("the HTTP server stopped unexpectedly")
+        .context("the HTTP server stopped unexpectedly")?;
+
+    // Past this point no new request will arrive and the ones in flight have
+    // finished, so the store can be settled without racing anything (W12).
+    shutdown::settle(
+        store_for_shutdown,
+        std::time::Duration::from_millis(config.shutdown_timeout_ms),
+    )
+    .await;
+    Ok(())
 }
 
 /// Asks the running hub about its own health and exits 0 or 1.

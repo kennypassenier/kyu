@@ -14,6 +14,17 @@ use crate::engine::Defaults;
 pub const DEFAULT_LISTEN: &str = "0.0.0.0:8080";
 pub const DEFAULT_DATA_DIR: &str = "/data";
 pub const DEFAULT_MAX_BODY_BYTES: u64 = 1024 * 1024;
+
+/// How long a graceful shutdown may take before the hub stops waiting and
+/// exits anyway (W12).
+///
+/// Ten seconds is long enough for in-flight requests to finish and for a
+/// WAL checkpoint on a store far larger than this hub is meant to hold, and
+/// short enough that systemd's own patience is never the thing that ends it.
+/// It is configurable because how long a stop may take is an operational
+/// question, not a property of the code: a host with slow storage may want
+/// more, and a laptop running the test suite wants less.
+pub const DEFAULT_SHUTDOWN_TIMEOUT_MS: u64 = 10_000;
 /// Shortest bootstrap token we accept. Long enough that a guess is not a
 /// realistic attack, short enough to type once into a compose file.
 pub const MIN_TOKEN_LEN: usize = 16;
@@ -26,6 +37,11 @@ pub struct Config {
     pub listen: SocketAddr,
     pub data_dir: PathBuf,
     pub max_body_bytes: u64,
+    /// How long a graceful shutdown may take before the hub gives up and
+    /// exits anyway (W12). Never blocks forever: a stop that hangs is worse
+    /// than a stop that is incomplete, because systemd resolves the first
+    /// one with SIGKILL after a delay nobody remembers configuring.
+    pub shutdown_timeout_ms: u64,
     /// Hub-wide defaults for things a topic or subscription can override
     /// (AR6): retention and the idle thresholds.
     pub defaults: Defaults,
@@ -146,6 +162,8 @@ impl Config {
             std::env::var("KYU_TOKEN").ok().as_deref(),
             std::env::var("KYU_SECRET_KEY").ok().as_deref(),
         )?;
+        config.shutdown_timeout_ms =
+            parse_shutdown_timeout(std::env::var("KYU_SHUTDOWN_TIMEOUT_MS").ok().as_deref())?;
         Ok(config)
     }
 
@@ -202,10 +220,41 @@ impl Config {
             listen,
             data_dir,
             max_body_bytes,
+            shutdown_timeout_ms: DEFAULT_SHUTDOWN_TIMEOUT_MS,
             defaults: Defaults::default(),
             auth: Auth::Unprotected,
         })
     }
+}
+
+/// Parses `KYU_SHUTDOWN_TIMEOUT_MS`.
+///
+/// Separate from `Config::parse` so it can be tested without touching the
+/// process environment, and refusing rather than falling back on nonsense
+/// (standing rule 12): a shutdown budget of zero would make every stop look
+/// like a timeout, and a typo silently becoming ten seconds is exactly the
+/// kind of quiet substitution that makes an operator distrust the knob.
+pub fn parse_shutdown_timeout(raw: Option<&str>) -> Result<u64> {
+    let Some(raw) = raw else {
+        return Ok(DEFAULT_SHUTDOWN_TIMEOUT_MS);
+    };
+    let parsed: u64 = raw.trim().parse().with_context(|| {
+        format!(
+            "KYU_SHUTDOWN_TIMEOUT_MS is not a whole number of milliseconds: \
+             {raw:?}. Set it to a millisecond count (for example 10000 for ten \
+             seconds), or unset it to use the default \
+             {DEFAULT_SHUTDOWN_TIMEOUT_MS}."
+        )
+    })?;
+    if parsed == 0 {
+        bail!(
+            "KYU_SHUTDOWN_TIMEOUT_MS is 0, which would abandon every shutdown \
+             before it started. Set it above zero (for example 10000 for ten \
+             seconds), or unset it to use the default \
+             {DEFAULT_SHUTDOWN_TIMEOUT_MS}."
+        );
+    }
+    Ok(parsed)
 }
 
 /// Reads a millisecond duration from the environment. The literal `never`

@@ -137,6 +137,30 @@ impl Store {
         f(&conn)
     }
 
+    /// Folds the write-ahead log back into the database and truncates it
+    /// (W12), so the files on disk stand still.
+    ///
+    /// Nothing about durability depends on this — K12 is proven by killing
+    /// the process with SIGKILL and restarting it, and a checkpoint is not
+    /// what makes a confirmed publish survive. What it buys is a quiescent
+    /// moment: in WAL mode almost everything recent lives in `<name>.db-wal`,
+    /// which a running hub keeps rewriting, and a file-level backup that
+    /// copies it mid-write gets `file changed as we read it` rather than a
+    /// database. After this returns, the log is empty and a plain `tar` or
+    /// `cp` of the directory is a restorable copy.
+    ///
+    /// TRUNCATE rather than PASSIVE on purpose: PASSIVE gives up quietly if
+    /// a reader is still holding the log open, which would make this look
+    /// like it worked while leaving the very file we came to settle.
+    pub fn checkpoint(&self) -> Result<()> {
+        let conn = self
+            .writer
+            .lock()
+            .expect("the writer lock is never poisoned");
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+            .context("cannot checkpoint the write-ahead log")
+    }
+
     /// Runs `f` inside one write transaction, committing if it returns
     /// `Ok`. This is the only way to write: it is what makes a delivery
     /// transition atomic (AR3).

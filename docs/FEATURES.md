@@ -4,15 +4,16 @@
 form R1–R3 all approved). Changes only via mini-rounds
 (FORM_PROTOCOL §5), recorded here as dated amendments.
 
-Tally: 16 Essential · 6 Desired · 2 Later · 0 Don't do.
-*(W2 promoted from Later to Essential by the 2026-08-28 mini-round.)*
+Tally: 17 Essential · 6 Desired · 2 Later · 0 Don't do.
+*(W2 promoted from Later to Essential by the 2026-08-28 mini-round;
+W12 added as Essential by the 2026-09-02 mini-round.)*
 IDs are permanent: they appear in commits, test names, docs and forms.
 
 Ratings use the canonical English scale (Essential/Desired/Later/Don't
 do); the forms rendered them in Dutch (Onmisbaar/Gewenst/Later/Niet
 doen) per FORM_PROTOCOL.
 
-## Essential (16)
+## Essential (17)
 
 ### K1 · Publish
 `POST /t/<topic>` with arbitrary JSON/bytes body. Topic auto-created on
@@ -184,6 +185,42 @@ Phase 7 hardening gate and specified the shape across three rounds:
 **Plaintext-scan test is mandatory** (carried over from the original
 rating): no token may appear in logs, metric labels or any rendered
 page except behind the reveal control.
+
+### W12 · Graceful shutdown on SIGTERM *(added at the 2026-09-02 mini-round)*
+
+Did not exist at the Phase 2 freeze and was never missed, because
+nothing about durability needs it: K12 ↳ *crash-safe storage* is proven
+by killing the process with SIGKILL ten times in a row and restarting
+without repair. kyu caught no signals at all, so `systemctl stop kyu`
+ended the process where it stood.
+
+Two things brought it back. The homelab's nightly file-level backup of
+CT 109 ↳ *the container kyu runs on* failed with
+`tar: kyu.db-wal: file changed as we read it`, because a running hub
+keeps rewriting the write-ahead log and there was no moment when the
+files stood still. And Kenny made a graceful stop the norm for every
+Rust service in this ecosystem on 2026-09-02 (homelab D93): kyu was the
+only one of four without it, and the only one with a database.
+
+- **Both signals:** SIGTERM (systemd, `docker stop`) and Ctrl-C.
+- **In-flight requests are answered**, not cut off — a long-poll
+  consumer is this hub's normal state, so a reset connection would be
+  the common case rather than the rare one.
+- **The store is settled** with `PRAGMA wal_checkpoint(TRUNCATE)`, so
+  the log is empty and a plain `tar` of the data directory restores.
+- **Bounded and configurable:** `KYU_SHUTDOWN_TIMEOUT_MS`, default
+  10000. Blowing the budget logs one loud line naming what was still
+  open and exits **0** anyway — a stop that hangs is worse than a stop
+  that is incomplete, and an exit code of 1 would make systemd report a
+  clean stop as a crash.
+- **Idempotent:** further signals during shutdown change nothing. The
+  escape hatch stays systemd's `TimeoutStopSec`, set above kyu's own
+  budget.
+
+Proven by `tests/w12_shutdown.rs` (5 tests, real signals against the
+real binary): a clean exit code, a truncated log, the backlog intact
+across the stop, three SIGTERMs in a row still exiting 0, and an
+in-flight long poll answered rather than dropped.
 
 ## Desired (6)
 

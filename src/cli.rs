@@ -66,6 +66,8 @@ CONFIGURATION (environment only — there is no config file):
     KYU_MAX_BODY_BYTES  largest accepted payload default 1048576
     KYU_LOG             log filter               default info
     KYU_LOG_FORMAT      set to json for Loki     default human-readable
+    KYU_SHUTDOWN_TIMEOUT_MS  how long a graceful stop may take, in ms
+                                                 default 10000
     KYU_RETENTION_MS    default retention        default 604800000, or never
     KYU_IDLE_FLAG_MS    flag a quiet consumer    default 604800000
     KYU_IDLE_ARCHIVE_MS archive a quiet consumer default 2592000000

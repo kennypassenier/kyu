@@ -11,7 +11,53 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.0.0.
+Nothing since 2.1.0.
+
+## [2.1.0] — 2026-09-02
+
+Both items come from the homelab, which is adopting CT 109 as a supervised
+native service and found kyu the odd one out of four.
+
+### Added
+
+- **A graceful stop** (W12). kyu caught no signals at all, so
+  `systemctl stop kyu` ended the process where it stood. Nothing about
+  durability depended on that — ten SIGKILLs in a row still need no repair,
+  which is what `l5_crash.rs` proves — but it cost three things worth
+  having: in-flight requests were cut off mid-response, systemd recorded
+  every stop as "killed by signal", and the files on disk never stood still,
+  so the homelab's nightly `tar` of the data directory failed with
+  `kyu.db-wal: file changed as we read it`.
+
+  SIGTERM and Ctrl-C now stop the hub politely: requests in flight are
+  answered, the write-ahead log is folded back and truncated, and the
+  process exits 0. Bounded by **`KYU_SHUTDOWN_TIMEOUT_MS`** (default
+  10000); blowing the budget logs one loud line and exits 0 anyway, because
+  a stop that hangs is worse than one that is incomplete. Further signals
+  during shutdown change nothing.
+
+- **The release carries the binary.** Every `v*` tag now attaches `kyu` and
+  a `SHA256SUMS` to its GitHub Release alongside the image, so
+  `homelab install-native` can fetch it, verify the checksum on the desktop
+  and push only verified bytes into the container. Before this, updating the
+  native deployment on LXC 109 meant copying a file by hand.
+
+  The binary is **extracted from the image the same workflow just built**
+  rather than compiled a second time: cargo runs exactly once, so what you
+  download is byte-for-byte what runs in the container. Two build paths
+  drift; one cannot.
+
+### Upgrading from 2.0.x
+
+Nothing is required — the new variable has a working default and the HTTP
+contract is untouched. Two things are worth doing on a systemd host:
+
+1. Add `TimeoutStopSec` to the unit, comfortably above
+   `KYU_SHUTDOWN_TIMEOUT_MS`, so systemd's patience is never what ends a
+   shutdown.
+2. If a backup tars the data directory, it can now stop the service first
+   and get files nothing is rewriting. Backing up `POST /api/backup` output
+   while the hub runs remains the alternative that needs no downtime.
 
 ## [2.0.0] — 2026-08-29
 
