@@ -179,6 +179,31 @@ with `kyu.db-wal: file changed as we read it`.
 
 ---
 
+### Where the deployment files live (2026-09-02)
+
+`deploy/` in this repository holds the unit files, the backup script and the
+alerting hook. Before that date they existed only on LXC 109 and in no
+repository, which is how a broken one went unnoticed for two nights: nothing
+versioned them, so no test, gate or review could look at them (F179).
+
+**A timer firing says nothing about whether the work succeeded.** Ask about
+the service, never the timer:
+
+```bash
+systemctl status kyu-backup.service          # not kyu-backup.timer
+ls -lt "$KYU_DATA_DIR"/kyu.backup-*.db | head -1
+```
+
+Since 2026-09-02 a failure also announces itself: `OnFailure=` on the backup
+service runs `kyu-alert`, which publishes the unit name, the host and the
+last journal lines to the `ops.alerts` topic on this same hub. Proven by
+reproducing the original fault — pointing the unit at an env file that does
+not exist — and watching the message arrive.
+
+Its limit, stated rather than hidden: if the hub itself is down there is
+nowhere to publish and the alert only reaches the journal. That case belongs
+to Uptime Kuma, which watches `/healthz`.
+
 ## 3 · Take a backup by hand
 
 ```bash

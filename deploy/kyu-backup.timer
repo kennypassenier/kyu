@@ -1,0 +1,14 @@
+[Unit]
+Description=kyu — nightly consistent backup
+Documentation=https://github.com/kennypassenier/kyu
+
+[Timer]
+# Half an hour before the Proxmox vzdump job, so the snapshot always
+# contains a copy the hub itself opened and integrity-checked.
+OnCalendar=*-*-* 03:00:00
+# A container that was off at 03:00 still gets its backup when it comes up.
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

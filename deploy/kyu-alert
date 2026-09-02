@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Publishes a message when a kyu helper unit fails (F179).
+#
+# Why this exists: a systemd TIMER reports that it fired, not that the work
+# succeeded. kyu-backup.timer went on saying "fired, next run in 2 hours"
+# for two nights while the service it starts failed instantly. Nothing in
+# the ordinary view said anything was wrong — you had to ask systemctl about
+# the service by name. This turns that silence into a message.
+#
+# Limitation, stated rather than hidden: if the hub itself is down there is
+# nowhere to publish, and this exits non-zero into the journal. It covers a
+# broken helper, not a dead hub — the hub has Uptime Kuma watching /healthz.
+#
+# Paths and credentials come from the environment (standing rule 28); the
+# unit hands them in through EnvironmentFile=.
+set -euo pipefail
+
+UNIT=${1:?kyu-alert needs the name of the failed unit as its argument}
+: "${KYU_TOKEN:?kyu-alert needs KYU_TOKEN. The unit passes it via EnvironmentFile=.}"
+: "${KYU_LISTEN:?kyu-alert needs KYU_LISTEN (HOST:PORT) to reach the hub. Same source.}"
+
+TOPIC=${KYU_ALERT_TOPIC:-ops.alerts}
+PORT=${KYU_LISTEN##*:}
+
+# The last few journal lines are what makes the alert actionable rather than
+# merely alarming. Quotes are stripped so the JSON stays valid.
+detail=$(journalctl -u "$UNIT" -n 6 --no-pager -o cat 2>/dev/null | tail -3 | tr '\n' ' ' | tr -d '"\\' | cut -c1-400)
+body="{\"unit\":\"${UNIT}\",\"host\":\"$(hostname)\",\"detail\":\"${detail}\"}"
+
+exec 3<>"/dev/tcp/127.0.0.1/${PORT}"
+printf 'POST /t/%s HTTP/1.0\r\nHost: 127.0.0.1\r\nAuthorization: Bearer %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s' \
+    "$TOPIC" "$KYU_TOKEN" "${#body}" "$body" >&3
+answer=$(cat <&3)
+exec 3<&-
+
+status=$(printf '%s' "$answer" | head -1 | awk '{print $2}')
+if [ "$status" != "201" ]; then
+    echo "kyu-alert could not publish the alert for ${UNIT}: HTTP ${status:-<none>}" >&2
+    exit 1
+fi
+echo "alert published to ${TOPIC} for ${UNIT}"

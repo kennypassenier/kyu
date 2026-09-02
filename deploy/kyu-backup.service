@@ -1,0 +1,18 @@
+[Unit]
+Description=kyu — consistent backup of the store
+Documentation=https://github.com/kennypassenier/kyu
+After=kyu.service
+Requires=kyu.service
+
+# A timer reports that it FIRED, not that the work succeeded (F179). Without
+# this line a failing backup is invisible until someone asks systemctl about
+# this service by name — which is exactly how two nights went by.
+OnFailure=kyu-alert@%n.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
+ExecStart=/usr/local/bin/kyu-backup
+# VACUUM INTO on a large store takes a while; the socket has no timeout of
+# its own, so the ceiling lives here.
+TimeoutStartSec=300

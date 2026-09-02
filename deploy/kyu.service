@@ -1,0 +1,43 @@
+[Unit]
+Description=kyu — durable message hub
+Documentation=https://github.com/kennypassenier/kyu
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kyu
+Group=kyu
+# Config and data both live on the host now, bind-mounted in, so
+# destroying this container costs nothing (Kenny, P1 2026-08-31).
+EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
+ExecStart=/usr/local/bin/kyu
+
+# Kenny asked for it to come back from trouble: always, not only on failure,
+# with a short pause so a crash loop cannot spin the CPU.
+Restart=always
+RestartSec=2s
+# W12: kyu finishes in-flight requests and checkpoints the store on
+# SIGTERM, bounded by KYU_SHUTDOWN_TIMEOUT_MS (default 10s). systemd waits
+# comfortably longer, so its patience is never what ends a shutdown.
+TimeoutStopSec=30
+# Never give up. systemd's default is to stop trying after a few restarts in
+# a short window, which turns a transient fault into a permanent outage —
+# exactly what this service is here to avoid.
+StartLimitIntervalSec=0
+
+# The hub needs nothing but its data directory and a socket.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/appdata/kyu/kyu-config
+
+[Install]
+WantedBy=multi-user.target

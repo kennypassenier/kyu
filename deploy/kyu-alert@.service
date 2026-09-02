@@ -1,0 +1,10 @@
+[Unit]
+Description=kyu — publish an alert because %i failed
+Documentation=https://github.com/kennypassenier/kyu
+
+[Service]
+Type=oneshot
+# The deployment owns this path (standing rule 28). It is the ONE line to
+# change when the deployment moves; everything else derives from it.
+EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
+ExecStart=/usr/local/bin/kyu-alert %i

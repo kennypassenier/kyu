@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Nightly consistent backup of the kyu store.
+#
+# Why this exists next to the Proxmox vzdump job: vzdump snapshots a running
+# container, and a SQLite file caught mid-write is not guaranteed to open.
+# This runs first and asks the hub itself for a copy — it uses VACUUM INTO,
+# then opens the result and integrity-checks it before reporting success —
+# so whatever the snapshot captures, one file beside the database is known
+# good.
+#
+# The request is spoken over bash's own socket rather than with curl, because
+# the container has no curl and this is not worth a package for. HTTP/1.0 is
+# deliberate: it makes the server close the connection, which is what lets
+# the read finish without parsing Content-Length.
+#
+# NO PATHS ARE HARDCODED HERE, on purpose (F179, 2026-09-02). This script
+# used to read /etc/kyu/kyu.env and prune /var/lib/kyu. The homelab's C7
+# adoption moved both to /appdata/kyu/kyu-config, and the script kept the old
+# assumption: every nightly run since failed with `grep: /etc/kyu/kyu.env: No
+# such file or directory` while the timer went on reporting that it had
+# fired. Where a program runs is owned by whoever deploys it, so the
+# deployment hands these in through the unit's EnvironmentFile= and the
+# script refuses to guess.
+set -euo pipefail
+
+: "${KYU_TOKEN:?kyu-backup needs KYU_TOKEN. systemd passes it via EnvironmentFile= in kyu-backup.service; running this by hand means sourcing that same env file first.}"
+: "${KYU_LISTEN:?kyu-backup needs KYU_LISTEN (HOST:PORT) to reach the hub. Same source as KYU_TOKEN.}"
+: "${KYU_DATA_DIR:?kyu-backup needs KYU_DATA_DIR to know which directory to prune. Same source as KYU_TOKEN.}"
+
+# How many copies to keep. A count rather than an age, so a week of failed
+# runs cannot quietly delete the last good backup.
+KEEP=${KYU_BACKUP_KEEP:-7}
+PORT=${KYU_LISTEN##*:}
+
+exec 3<>"/dev/tcp/127.0.0.1/${PORT}"
+printf 'POST /api/backup HTTP/1.0\r\nHost: 127.0.0.1\r\nAuthorization: Bearer %s\r\nContent-Length: 0\r\n\r\n' "$KYU_TOKEN" >&3
+answer=$(cat <&3)
+exec 3<&-
+
+status=$(printf '%s' "$answer" | head -1 | awk '{print $2}')
+body=$(printf '%s' "$answer" | sed -n '/^\r\{0,1\}$/,$p' | tail -n +2)
+
+if [ "$status" != "200" ]; then
+    echo "backup refused with HTTP ${status:-<none>}: ${body}" >&2
+    exit 1
+fi
+echo "backup written: ${body}"
+
+mapfile -t stale < <(ls -1t "${KYU_DATA_DIR}"/kyu.backup-*.db 2>/dev/null | tail -n +$((KEEP + 1)))
+for old in "${stale[@]:-}"; do
+    [ -n "$old" ] || continue
+    rm -f -- "$old"
+    echo "pruned ${old}"
+done
