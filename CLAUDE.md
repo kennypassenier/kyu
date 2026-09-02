@@ -23,7 +23,7 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Item | Status |
 |---|---|
-| Backup alerting — measurement 1 | **OPEN** — the loop from correction form F179 stays open until the first nightly run after 2026-09-02 03:00 is checked: a fresh `kyu.backup-*.db` present AND `systemctl show kyu-backup.service -p Result` = success. Measurement 2 (deliberately breaking it to prove the alarm fires) is DONE and proven |
+| Backup alerting — measurement 1 | **OPEN** — the loop from correction form F179. Criterion sharpened 2026-09-02 after the homelab read manual drill runs as the nightly one: a fresh backup and `Result=success` are NOT enough, because a hand-started run produces both. It closes only when `systemctl show kyu-backup.timer -p LastTriggerUSec` is later than 2026-09-02 01:14 UTC **and** that run reports success **and** left a copy. Measurement 2 (reproducing the fault to prove the alarm fires) is DONE and proven |
 | Graceful shutdown + release assets | **DONE** 2026-09-02 — two homelab requirements (their D93/F172 and F168/T72). SIGTERM now finishes in-flight requests, checkpoints the store and exits 0, bounded by KYU_SHUTDOWN_TIMEOUT_MS; every tag attaches the binary and SHA256SUMS, extracted from the image so one compile serves both |
 | Rename mailbox → kyu | **DONE** 2026-08-29 — the old name said email about a queue. Everything moved (env vars, headers, metrics, cookie, event topic, paths), so it shipped as 2.0.0 |
 | Shared-token auth (W2) | **DONE** 2026-08-28 — door, per-app tokens, login page, masked snippets |
