@@ -15,14 +15,15 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | **Done** — all eleven phases complete |
-| Last completed gate | Post-deployment gaps + monitoring (2026-08-29): backups, the native route documented, health check proven by a real outage |
-| Next gate | None. kyu is released (2.0.0), deployed on LXC 109 and monitored. Further work arrives as mini-rounds |
+| Last completed gate | Mini-round (2026-09-02): graceful shutdown on SIGTERM (W12) and a release that publishes the binary with checksums |
+| Next gate | None. kyu is released (2.1.0), deployed on LXC 109 and monitored. Further work arrives as mini-rounds |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
+| Graceful shutdown + release assets | **DONE** 2026-09-02 — two homelab requirements (their D93/F172 and F168/T72). SIGTERM now finishes in-flight requests, checkpoints the store and exits 0, bounded by KYU_SHUTDOWN_TIMEOUT_MS; every tag attaches the binary and SHA256SUMS, extracted from the image so one compile serves both |
 | Rename mailbox → kyu | **DONE** 2026-08-29 — the old name said email about a queue. Everything moved (env vars, headers, metrics, cookie, event topic, paths), so it shipped as 2.0.0 |
 | Shared-token auth (W2) | **DONE** 2026-08-28 — door, per-app tokens, login page, masked snippets |
 | Update & distribution (M1) | **DONE** 2026-08-28 — `release-image.yml` adopted from the homelab template; K13's false "verified end-to-end" claim removed. Unproven until the first tag (Phase 9) |
