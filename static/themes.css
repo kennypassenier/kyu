@@ -6,7 +6,18 @@
    dependency the way it is in JobTracker: this is a copy, and a copy goes
    stale silently unless someone says so out loud. When kp-themes releases a
    new version, re-copy this file and bump the version above. Nothing here
-   is kyu-specific — the mapping onto Bootstrap lives in theme-bridge.css. */
+   is kyu-specific — the mapping onto Bootstrap lives in theme-bridge.css.
+
+   NOT contrast-checked here, and that is deliberate (Kenny, 2026-09-02).
+   kp-themes runs scripts/check-contrast.mjs on this file before it tags a
+   version, so the copy below has already passed that gate; re-running it in
+   kyu's Rust CI would mean pulling Node in to re-answer a question already
+   answered, and it would only ever catch someone editing this copy — which
+   the line at the top forbids. The risk a COPY actually runs is going stale,
+   and contrast says nothing about that. That is what the gate below guards
+   instead.
+
+   ── end of kyu's provenance note; everything below is verbatim upstream ── */
 
 /* @kp-soft/themes — css/themes.css
    The seven house themes as plain CSS custom properties, plus the shared

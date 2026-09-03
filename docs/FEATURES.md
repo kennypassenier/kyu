@@ -289,6 +289,24 @@ dark flags, the storage contract pinned literally, the assets served with
 the right types while the traversal guard still holds, and every theme the
 picker offers actually defined in the stylesheet.
 
+**Keeping the copy honest** (decided 2026-09-02). A vendored file goes
+stale in silence — the colours still work, the page still renders, and
+nothing says the package moved on. `.claude/hooks/gates.sh` therefore
+compares `static/themes.css` against `~/Projects/kp-themes/css/themes.css`
+whenever that repository is on the machine, and refuses the commit when they
+differ, naming the exact lines. Where it is absent (CI) it says so out loud
+rather than passing quietly. Proven by changing one character and watching
+the gate refuse, then reverting.
+
+**No contrast gate here, on purpose** (Kenny, 2026-09-02). Both JobTracker
+and the almanac session proposed vendoring `check-contrast.mjs` and running
+it in kyu's CI. It was declined with its reason written into the copy's own
+header: kp-themes runs that gate before it tags, so this file has already
+passed it, and re-running it would mean pulling Node into a Rust pipeline to
+re-answer an answered question. It would only ever catch someone editing
+this copy, which is forbidden anyway. The risk a copy actually runs is
+staleness, and contrast says nothing about that.
+
 ## Later (2)
 
 - **W3 · Companion CLI** — `kyu send/tail/ls`; only if the
