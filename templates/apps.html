@@ -20,12 +20,18 @@
         <label for="name" class="form-label">Name</label>
         <input type="text" class="form-control" id="name" name="name"
                placeholder="home-assistant" required>
-        <div class="form-text">
-          Lowercase letters, digits, dots, underscores and hyphens.
-        </div>
       </div>
       <div class="col-sm-auto">
         <button type="submit" class="btn btn-primary">Generate token</button>
+      </div>
+      <!-- The hint sits BELOW the row, not inside the field's column: with
+           align-items-end an in-column hint makes the row taller than the
+           input, and the button lines up with the bottom of the hint instead
+           of with the field it belongs to. -->
+      <div class="col-12">
+        <div class="form-text mt-0">
+          Lowercase letters, digits, dots, underscores and hyphens.
+        </div>
       </div>
     </form>
   </div>

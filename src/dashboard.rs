@@ -27,6 +27,83 @@ use crate::store::queries::{
 /// message; the rest is announced rather than dropped in silence (AR11).
 pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
 
+/// The house themes, mirroring `@kp-soft/themes` v0.1.1 — the shared
+/// package JobTracker and kp-soft use.
+///
+/// Held here rather than in JavaScript so there is ONE list on kyu's side:
+/// the picker is rendered server-side from this, and the browser script
+/// reads what it needs off the rendered markup instead of carrying a second
+/// copy that can drift. The three colours are the theme's own
+/// `--background`, `--primary` and whether it is dark, which is all a swatch
+/// and the Bootstrap dark-mode switch need. Everything else — the full token
+/// set, the typography, the texture registers — lives in the vendored
+/// `static/themes.css` and is never duplicated here.
+///
+/// The order is the package's order, and `formal` is its default.
+pub const THEMES: &[ThemeView] = &[
+    ThemeView {
+        name: "formal",
+        label: "Formeel",
+        bg: "hsl(40,25%,97%)",
+        primary: "hsl(218,45%,24%)",
+        dark: false,
+    },
+    ThemeView {
+        name: "light",
+        label: "Licht",
+        bg: "hsl(0,0%,100%)",
+        primary: "hsl(243,60%,45%)",
+        dark: false,
+    },
+    ThemeView {
+        name: "dark",
+        label: "Donker",
+        bg: "hsl(226,22%,8%)",
+        primary: "hsl(255,85%,74%)",
+        dark: true,
+    },
+    ThemeView {
+        name: "cyberpunk",
+        label: "Cyberpunk",
+        bg: "hsl(258,40%,6%)",
+        primary: "hsl(315,95%,64%)",
+        dark: true,
+    },
+    ThemeView {
+        name: "pastel",
+        label: "Pastel",
+        bg: "hsl(285,45%,97%)",
+        primary: "hsl(330,55%,42%)",
+        dark: false,
+    },
+    ThemeView {
+        name: "terminal",
+        label: "Terminal",
+        bg: "hsl(120,10%,5%)",
+        primary: "hsl(120,90%,50%)",
+        dark: true,
+    },
+    ThemeView {
+        name: "topo",
+        label: "Topografisch",
+        bg: "hsl(42,32%,95%)",
+        primary: "hsl(158,42%,24%)",
+        dark: false,
+    },
+];
+
+/// One theme as the picker needs it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ThemeView {
+    pub name: &'static str,
+    /// Shown to the reader. Dutch, because the package's labels are Dutch
+    /// and Kenny asked for these exact themes rather than a translation.
+    pub label: &'static str,
+    pub bg: &'static str,
+    pub primary: &'static str,
+    pub dark: bool,
+}
+
 /// Templates are embedded in the binary, so the image stays a single file
 /// with nothing to mount beside it (T9).
 static ENVIRONMENT: LazyLock<Environment<'static>> = LazyLock::new(|| {
@@ -34,6 +111,10 @@ static ENVIRONMENT: LazyLock<Environment<'static>> = LazyLock::new(|| {
     // Autoescape is the difference between a dashboard and a stored-XSS
     // delivery system: every payload on these pages came from outside.
     environment.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
+    // A global rather than a context key on all four render functions: the
+    // picker sits in the layout, so every page needs it and none of them
+    // should have to remember to pass it.
+    environment.add_global("themes", minijinja::Value::from_serialize(THEMES));
     environment
         .add_template("layout.html", include_str!("../templates/layout.html"))
         .expect("the layout template must compile");

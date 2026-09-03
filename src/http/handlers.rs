@@ -1242,11 +1242,18 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 // W2 · the door: static assets, login, logout and app management.
 // ---------------------------------------------------------------------------
 
-/// The two files the pages need, compiled into the binary like the
-/// templates (T4 amendment) so the container stays one artifact and the
-/// distroless image needs no filesystem layout.
+/// The files the pages need, compiled into the binary like the templates
+/// (T4 amendment) so the container stays one artifact and the distroless
+/// image needs no filesystem layout.
 const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
 const APP_JS: &str = include_str!("../../static/app.js");
+/// The house themes, vendored verbatim from `@kp-soft/themes` v0.1.1 — the
+/// shared package JobTracker and kp-soft use. Never edited here.
+const THEMES_CSS: &str = include_str!("../../static/themes.css");
+/// kyu's own mapping of those tokens onto Bootstrap, kept separate so
+/// re-copying the upstream file never overwrites it.
+const THEME_BRIDGE_CSS: &str = include_str!("../../static/theme-bridge.css");
+const THEME_JS: &str = include_str!("../../static/theme.js");
 
 /// A short fingerprint of the assets, appended to their URLs in the
 /// templates.
@@ -1259,7 +1266,13 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
     // FNV-1a: not cryptographic, and does not need to be — this answers
     // "did these bytes change", nothing more (T6: no crate for six lines).
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in BOOTSTRAP_CSS.bytes().chain(APP_JS.bytes()) {
+    for byte in BOOTSTRAP_CSS
+        .bytes()
+        .chain(APP_JS.bytes())
+        .chain(THEMES_CSS.bytes())
+        .chain(THEME_BRIDGE_CSS.bytes())
+        .chain(THEME_JS.bytes())
+    {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -1275,11 +1288,16 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
     let (body, content_type) = match file.as_str() {
         "bootstrap.min.css" => (BOOTSTRAP_CSS, "text/css; charset=utf-8"),
         "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
+        "themes.css" => (THEMES_CSS, "text/css; charset=utf-8"),
+        "theme-bridge.css" => (THEME_BRIDGE_CSS, "text/css; charset=utf-8"),
+        "theme.js" => (THEME_JS, "text/javascript; charset=utf-8"),
         _ => {
             return ApiError::new(
                 StatusCode::NOT_FOUND,
                 format!("kyu serves no asset named {file:?}"),
-                "the dashboard needs only bootstrap.min.css and app.js.".to_string(),
+                "the dashboard needs only bootstrap.min.css, app.js, \
+                 themes.css, theme-bridge.css and theme.js."
+                    .to_string(),
             )
             .into_response();
         }

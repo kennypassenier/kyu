@@ -4,9 +4,10 @@
 form R1–R3 all approved). Changes only via mini-rounds
 (FORM_PROTOCOL §5), recorded here as dated amendments.
 
-Tally: 17 Essential · 6 Desired · 2 Later · 0 Don't do.
+Tally: 17 Essential · 7 Desired · 2 Later · 0 Don't do.
 *(W2 promoted from Later to Essential by the 2026-08-28 mini-round;
-W12 added as Essential by the 2026-09-02 mini-round.)*
+W12 added as Essential and W13 as Desired by the 2026-09-02
+mini-rounds.)*
 IDs are permanent: they appear in commits, test names, docs and forms.
 
 Ratings use the canonical English scale (Essential/Desired/Later/Don't
@@ -222,7 +223,7 @@ real binary): a clean exit code, a truncated log, the backlog intact
 across the stop, three SIGTERMs in a row still exiting 0, and an
 in-flight long poll answered rather than dropped.
 
-## Desired (6)
+## Desired (7)
 
 ### W1 · Prometheus metrics
 `/metrics`: per-subscription backlog, delivery/ack rates, DLQ counts,
@@ -252,6 +253,41 @@ backup-under-load → restore → invariants-hold E2E test.
 ### W9 · Dashboard test-publish
 Per-topic form, payload prefilled with last real payload, send button.
 **Proven by:** UI route test → message lands on topic.
+
+### W13 · The house themes *(added at the 2026-09-02 mini-round)*
+
+Kenny asked for the seven themes from `@kp-soft/themes` — the shared
+package born out of JobTracker's Phase 3 (T17) and Phase 5 (P0) decisions
+— with *the same picker and the same way of storing the choice in the
+browser*. Not a lookalike: the same contract, so a theme chosen in one of
+his apps behaves identically in the next.
+
+- **The seven:** formal (the default), light, dark, cyberpunk, pastel,
+  terminal, topo. Three of them are dark: dark, cyberpunk, terminal.
+- **The contract that must not drift**, because three projects share it:
+  `localStorage` key `theme`, the seven names as values, applied as
+  `data-theme` on `<html>` plus the class `dark`, default `formal`.
+- **kyu cannot use the package.** It has no npm and no build step, and the
+  package ships a React hook and a JSX component. `css/themes.css` is
+  therefore vendored verbatim with its version and commit recorded above
+  it, and the switcher's behaviour is reimplemented in ~130 lines of
+  plain JavaScript.
+- **One list, not three.** The themes live once in `dashboard.rs`, are
+  rendered server-side into the picker, and the browser script reads what
+  it needs off that markup — no `THEME_META` copy in JavaScript.
+- **The bridge is kyu's own file.** `static/theme-bridge.css` maps the
+  package's tokens onto Bootstrap's `--bs-*` variables, and sets
+  `data-bs-theme` for the dark themes so Bootstrap's own components follow
+  instead of staying light under dark tokens. Keeping it separate means
+  re-copying the upstream file never overwrites it.
+- **Deliberately not taken:** `cyberpunk-register.css` (much of it targets
+  shadcn `data-slot` attributes and the React fx, so it would be dead
+  weight here) and the four `fx/` components (React).
+
+Proven by `tests/w13_themes.rs`: all seven offered with their swatches and
+dark flags, the storage contract pinned literally, the assets served with
+the right types while the traversal guard still holds, and every theme the
+picker offers actually defined in the stylesheet.
 
 ## Later (2)
 

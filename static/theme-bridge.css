@@ -1,0 +1,131 @@
+/* kyu's own file: it maps the kp-themes tokens onto Bootstrap.
+   themes.css is vendored verbatim and knows nothing about Bootstrap;
+   everything kyu-specific lives here, so re-copying the upstream file
+   never overwrites this mapping.
+
+   Bootstrap reads its own --bs-* custom properties for nearly every
+   surface, so pointing those at the theme tokens carries the whole
+   dashboard — tables, cards, alerts, buttons — without restyling
+   components one by one. The remaining rules are the handful of places
+   Bootstrap hardcodes a colour rather than reading a variable. */
+
+:root {
+    --bs-body-bg: var(--background);
+    --bs-body-color: var(--foreground);
+    --bs-emphasis-color: var(--foreground);
+    --bs-secondary-color: var(--muted-foreground);
+    --bs-secondary-bg: var(--secondary);
+    --bs-tertiary-bg: var(--muted);
+    --bs-tertiary-color: var(--muted-foreground);
+    --bs-border-color: var(--border);
+    --bs-border-radius: var(--radius);
+    --bs-link-color: var(--primary);
+    --bs-link-hover-color: var(--primary);
+    --bs-code-color: var(--primary);
+    --bs-heading-color: var(--foreground);
+    --bs-primary: var(--primary);
+    --bs-primary-rgb: var(--primary);
+    --bs-danger: var(--destructive);
+}
+
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--theme-font-body, var(--bs-font-sans-serif));
+}
+
+/* The display face is part of what makes a theme recognisable — terminal
+   without its monospace headings is just green text. */
+h1, h2, h3, .h1, .h2, .h3, .navbar-brand {
+    font-family: var(--theme-font-display, inherit);
+}
+
+.card, .table, .list-group-item {
+    --bs-card-bg: var(--card);
+    --bs-card-color: var(--card-foreground);
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--foreground);
+    --bs-list-group-bg: var(--card);
+}
+
+.card { background-color: var(--card); color: var(--card-foreground); border-color: var(--border); }
+.navbar, .border-bottom, .border-top { border-color: var(--border) !important; }
+
+/* Buttons: Bootstrap composes these from fixed colours, so the primary and
+   the outline variants are the two that have to be re-pointed by hand. */
+.btn-primary {
+    --bs-btn-bg: var(--primary);
+    --bs-btn-border-color: var(--primary);
+    --bs-btn-color: var(--primary-foreground);
+    --bs-btn-hover-bg: var(--primary);
+    --bs-btn-hover-border-color: var(--primary);
+    --bs-btn-hover-color: var(--primary-foreground);
+    --bs-btn-active-bg: var(--primary);
+    --bs-btn-active-border-color: var(--primary);
+    --bs-btn-disabled-bg: var(--muted);
+    --bs-btn-disabled-border-color: var(--border);
+}
+.btn-outline-secondary {
+    --bs-btn-color: var(--foreground);
+    --bs-btn-border-color: var(--border);
+    --bs-btn-hover-bg: var(--accent);
+    --bs-btn-hover-border-color: var(--border);
+    --bs-btn-hover-color: var(--accent-foreground);
+}
+.btn-outline-danger {
+    --bs-btn-color: var(--destructive);
+    --bs-btn-border-color: var(--destructive);
+    --bs-btn-hover-bg: var(--destructive);
+    --bs-btn-hover-color: var(--destructive-foreground);
+}
+
+.form-control, .form-select {
+    background-color: var(--card);
+    color: var(--foreground);
+    border-color: var(--input);
+}
+.form-control:focus, .form-select:focus {
+    background-color: var(--card);
+    color: var(--foreground);
+    border-color: var(--ring);
+    box-shadow: 0 0 0 .2rem color-mix(in srgb, var(--ring) 35%, transparent);
+}
+.form-control::placeholder { color: var(--muted-foreground); opacity: .7; }
+.form-text, .text-secondary { color: var(--muted-foreground) !important; }
+
+pre.snippet { background: var(--muted); border-color: var(--border); color: var(--foreground); }
+
+/* The picker itself, styled from the same tokens so it belongs to whatever
+   theme is active rather than to the one it was designed in. */
+.theme-picker { position: relative; }
+.theme-picker__trigger {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.25rem; height: 2.25rem; padding: 0;
+    background: transparent; color: var(--foreground);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    cursor: pointer;
+}
+.theme-picker__trigger:hover { background: var(--accent); color: var(--accent-foreground); }
+.theme-picker__list {
+    position: absolute; right: 0; top: calc(100% + .25rem); z-index: 1050;
+    min-width: 11rem; margin: 0; padding: .25rem; list-style: none;
+    background: var(--popover); color: var(--popover-foreground);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 .5rem 1rem rgba(0, 0, 0, .18);
+}
+.theme-picker__list[hidden] { display: none; }
+.theme-picker__option {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .375rem .5rem; border-radius: calc(var(--radius) - .125rem);
+    font-size: .875rem; cursor: pointer;
+}
+.theme-picker__option:hover, .theme-picker__option:focus-visible {
+    background: var(--accent); color: var(--accent-foreground); outline: none;
+}
+.theme-picker__swatch {
+    display: inline-block; width: 1rem; height: 1rem; flex: 0 0 auto;
+    border: 1px solid var(--border); border-radius: 50%;
+}
+.theme-picker__label { flex: 1 1 auto; }
+.theme-picker__check { width: 1rem; height: 1rem; flex: 0 0 auto; }
+.theme-picker__option[aria-selected='false'] .theme-picker__check { visibility: hidden; }

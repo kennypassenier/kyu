@@ -11,30 +11,30 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+Nothing since 2.2.0.
+
+## [2.2.0] — 2026-09-02
+
 ### Added
 
-- **`deploy/`** — the unit files, the backup script and a new alerting hook,
-  which until now existed only on the machine and in no repository. That is
-  why a broken backup went unnoticed for two nights: nothing versioned them,
-  so nothing could test them (F179).
-- **A failing helper announces itself.** `OnFailure=` on the backup service
-  publishes the unit name, host and last journal lines to `ops.alerts`. A
-  systemd timer reports that it *fired*, not that the work succeeded, which
-  is what made the failure invisible.
+- **The house themes** (W13). The seven themes from `@kp-soft/themes` —
+  formal, light, dark, cyberpunk, pastel, terminal, topo — with a picker in
+  the navbar and the choice remembered in the browser. Same contract as
+  JobTracker and kp-soft: the `theme` key in `localStorage`, `data-theme` on
+  `<html>` plus the `dark` class, `formal` as the default. A theme chosen in
+  one of these apps behaves the same way in the next.
+
+  kyu has no npm and no build step, so `css/themes.css` is vendored verbatim
+  with its version and commit recorded at the top, and the React switcher's
+  behaviour is reimplemented in plain JavaScript. The mapping onto Bootstrap
+  lives in a separate file so re-copying the upstream one never overwrites
+  it.
 
 ### Fixed
 
-- **The nightly backup ran again.** `kyu-backup` hardcoded
-  `/etc/kyu/kyu.env` and `/var/lib/kyu`; the homelab's adoption of LXC 109
-  moved both, and every run since 2026-09-01 03:01 failed with
-  `grep: /etc/kyu/kyu.env: No such file or directory` while the timer went on
-  reporting success. It now takes `KYU_TOKEN`, `KYU_LISTEN` and
-  `KYU_DATA_DIR` from the environment systemd hands it, and refuses by name
-  rather than guessing when one is missing. `KYU_BACKUP_KEEP` makes the
-  retained count a knob instead of a constant.
-
-  kyu itself never had this fault — `KYU_DATA_DIR` has always moved the
-  store — which is exactly why the helper beside it was easy to miss.
+- **The Generate token button lines up with the field again.** The row was
+  bottom-aligned while the field's column also held its hint text, so the
+  button sat level with the bottom of the hint rather than with the input.
 
 ## [2.1.0] — 2026-09-02
 

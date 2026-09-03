@@ -1,10 +1,33 @@
 <!doctype html>
-<html lang="en" data-bs-theme="auto">
+<html lang="en" data-theme="formal" data-bs-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}kyu{% endblock %}</title>
+<script>
+/* Before the first paint: the visitor's last theme, or the default. Without
+   this the page renders in `formal` and then jumps to the chosen theme —
+   the flash the package's initializeTheme() exists to prevent.
+   Kept deliberately tiny and duplication-free: it does not know which themes
+   exist or which are dark. theme.js settles both once the picker is in the
+   DOM, a few milliseconds later. */
+(function () {
+  try {
+    var t = localStorage.getItem('theme');
+    if (t) document.documentElement.dataset.theme = t;
+  } catch (e) { /* blocked storage: the default stands */ }
+})();
+</script>
+<link rel="preconnect" href="https://fonts.bunny.net">
+<!-- Three themes carry their own display face — formal wants Fraunces,
+     cyberpunk Chakra Petch, terminal Share Tech Mono, which also becomes
+     that theme's body font. Without this they fall back to Georgia and a
+     generic monospace, and cyberpunk in particular reads as half-applied. -->
+<link rel="stylesheet"
+      href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|fraunces:600,700|share-tech-mono:400|chakra-petch:500,600,700">
 <link rel="stylesheet" href="/static/bootstrap.min.css?v={{ assets }}">
+<link rel="stylesheet" href="/static/themes.css?v={{ assets }}">
+<link rel="stylesheet" href="/static/theme-bridge.css?v={{ assets }}">
 <style>
 /* Bootstrap covers the furniture; these are the few things it cannot know
    about — payload cells that must not stretch a table off the page, and the
@@ -18,6 +41,7 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 .tabular { font-variant-numeric: tabular-nums; }
 </style>
 <script src="/static/app.js?v={{ assets }}" defer></script>
+<script src="/static/theme.js?v={{ assets }}" defer></script>
 </head>
 <body>
 <nav class="navbar navbar-expand border-bottom mb-4">
@@ -27,11 +51,44 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
       <a class="nav-link" href="/">Topics</a>
       {% if protected %}<a class="nav-link" href="/apps">Apps</a>{% endif %}
     </div>
-    {% if protected %}
-    <form method="post" action="/logout" class="m-0">
-      <button type="submit" class="btn btn-sm btn-outline-secondary">Log out</button>
-    </form>
-    {% endif %}
+    <div class="d-flex align-items-center gap-2">
+      <!-- The picker is rendered server-side from dashboard.rs THEMES, so
+           the seven themes exist in one place and a test can see them.
+           theme.js only adds the behaviour. -->
+      <div class="theme-picker" data-theme-picker>
+        <button type="button" class="theme-picker__trigger" data-theme-trigger
+                aria-label="Thema kiezen" aria-haspopup="listbox" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/>
+            <circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/>
+            <circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/>
+            <circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/>
+            <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.3 0 6-2.7 6-6 0-4.9-4.5-8.6-10-8.6z"/>
+          </svg>
+        </button>
+        <ul class="theme-picker__list" data-theme-list role="listbox" aria-label="Thema kiezen" hidden>
+          {% for theme in themes %}
+          <li class="theme-picker__option" role="option" tabindex="0"
+              data-theme="{{ theme.name }}" data-dark="{{ 'true' if theme.dark else 'false' }}"
+              aria-selected="false">
+            <span class="theme-picker__swatch"
+                  style="background: linear-gradient(135deg, {{ theme.bg }} 50%, {{ theme.primary }} 50%)"></span>
+            <span class="theme-picker__label">{{ theme.label }}</span>
+            <svg class="theme-picker__check" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M20 6 9 17l-5-5"/>
+            </svg>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% if protected %}
+      <form method="post" action="/logout" class="m-0">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Log out</button>
+      </form>
+      {% endif %}
+    </div>
   </div>
 </nav>
 

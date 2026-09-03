@@ -1,0 +1,547 @@
+/* VENDORED — do not edit here.
+   Source: ~/Projects/kp-themes css/themes.css @kp-soft/themes v0.1.1,
+   commit 7cd2e8d, copied verbatim on 2026-09-02.
+
+   kyu has no npm and no build step, so the shared package cannot be a
+   dependency the way it is in JobTracker: this is a copy, and a copy goes
+   stale silently unless someone says so out loud. When kp-themes releases a
+   new version, re-copy this file and bump the version above. Nothing here
+   is kyu-specific — the mapping onto Bootstrap lives in theme-bridge.css. */
+
+/* @kp-soft/themes — css/themes.css
+   The seven house themes as plain CSS custom properties, plus the shared
+   register/texture machinery. No Tailwind here: a Tailwind v4 consumer
+   also imports css/tailwind-bridge.css; the cyberpunk register (HUD
+   chrome, motion) lives in css/cyberpunk-register.css and is opt-in.
+   Extracted from kp-soft resources/css/app.css at commit 2983abb on
+   2026-09-02. Status tokens (--status-*) are new in this package. */
+
+/* ═══════════════════════════════════════════════════════════════════
+   The seven themes (T1, T9). Each block is a COMPLETE token set; the
+   contrast checker (scripts/check-contrast.mjs) fails the build when
+   any pair drops under WCAG AA (T3). Fallback (no data-theme) = formal.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme='formal'] {
+    /* Editorial paper-and-ink with navy and bronze. */
+    --background: hsl(40, 25%, 97%);
+    --foreground: hsl(220, 30%, 13%);
+    --card: hsl(40, 30%, 99%);
+    --card-foreground: hsl(220, 30%, 13%);
+    --popover: hsl(40, 30%, 99%);
+    --popover-foreground: hsl(220, 30%, 13%);
+    --primary: hsl(218, 45%, 24%);
+    --primary-foreground: hsl(40, 30%, 97%);
+    --secondary: hsl(40, 18%, 90%);
+    --secondary-foreground: hsl(220, 25%, 18%);
+    --muted: hsl(40, 15%, 91%);
+    --muted-foreground: hsl(220, 12%, 36%);
+    --accent: hsl(30, 40%, 88%);
+    --accent-foreground: hsl(25, 45%, 22%);
+    --destructive: hsl(0, 60%, 40%);
+    --destructive-foreground: hsl(40, 30%, 97%);
+    --border: hsl(40, 15%, 85%);
+    --input: hsl(40, 15%, 82%);
+    --ring: hsl(218, 45%, 40%);
+    --chart-1: hsl(218, 45%, 35%);
+    --chart-2: hsl(35, 55%, 45%);
+    --chart-3: hsl(80, 30%, 38%);
+    --chart-4: hsl(15, 55%, 45%);
+    --chart-5: hsl(220, 15%, 55%);
+    --sidebar-background: hsl(220, 32%, 13%);
+    --sidebar-foreground: hsl(40, 25%, 92%);
+    --sidebar-primary: hsl(38, 55%, 62%);
+    --sidebar-primary-foreground: hsl(220, 32%, 12%);
+    --sidebar-accent: hsl(220, 26%, 20%);
+    --sidebar-accent-foreground: hsl(40, 25%, 92%);
+    --sidebar-border: hsl(220, 26%, 20%);
+    --sidebar-ring: hsl(38, 55%, 62%);
+
+    /* Status badges (application pipeline): ink-on-paper tints. */
+    --status-draft: hsl(40, 15%, 88%);
+    --status-draft-foreground: hsl(220, 12%, 30%);
+    --status-sent: hsl(218, 40%, 88%);
+    --status-sent-foreground: hsl(218, 45%, 24%);
+    --status-screening: hsl(38, 55%, 85%);
+    --status-screening-foreground: hsl(30, 50%, 22%);
+    --status-interview: hsl(265, 30%, 88%);
+    --status-interview-foreground: hsl(265, 35%, 25%);
+    --status-offer: hsl(140, 30%, 85%);
+    --status-offer-foreground: hsl(150, 40%, 18%);
+    --status-rejected: hsl(0, 45%, 90%);
+    --status-rejected-foreground: hsl(0, 55%, 30%);
+    --status-withdrawn: hsl(40, 10%, 82%);
+    --status-withdrawn-foreground: hsl(220, 8%, 35%);
+    --radius: 0.375rem;
+    --theme-font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+}
+
+[data-theme='light'] {
+    /* Crisp neutral with confident indigo. */
+    --background: hsl(0, 0%, 100%);
+    --foreground: hsl(224, 25%, 12%);
+    --card: hsl(0, 0%, 100%);
+    --card-foreground: hsl(224, 25%, 12%);
+    --popover: hsl(0, 0%, 100%);
+    --popover-foreground: hsl(224, 25%, 12%);
+    --primary: hsl(243, 60%, 45%);
+    --primary-foreground: hsl(0, 0%, 100%);
+    --secondary: hsl(220, 15%, 94%);
+    --secondary-foreground: hsl(224, 20%, 20%);
+    --muted: hsl(220, 15%, 95%);
+    --muted-foreground: hsl(224, 12%, 38%);
+    --accent: hsl(190, 80%, 92%);
+    --accent-foreground: hsl(200, 70%, 18%);
+    --destructive: hsl(0, 72%, 42%);
+    --destructive-foreground: hsl(0, 0%, 100%);
+    --border: hsl(220, 13%, 88%);
+    --input: hsl(220, 13%, 85%);
+    --ring: hsl(243, 60%, 55%);
+    --chart-1: hsl(243, 60%, 55%);
+    --chart-2: hsl(190, 70%, 40%);
+    --chart-3: hsl(150, 55%, 38%);
+    --chart-4: hsl(30, 80%, 48%);
+    --chart-5: hsl(330, 60%, 50%);
+    --sidebar-background: hsl(220, 18%, 97%);
+    --sidebar-foreground: hsl(224, 25%, 15%);
+    --sidebar-primary: hsl(243, 60%, 45%);
+    --sidebar-primary-foreground: hsl(0, 0%, 100%);
+    --sidebar-accent: hsl(220, 15%, 92%);
+    --sidebar-accent-foreground: hsl(224, 20%, 20%);
+    --sidebar-border: hsl(220, 13%, 89%);
+    --sidebar-ring: hsl(243, 60%, 55%);
+
+    /* Status badges (application pipeline): clean tints, indigo lead. */
+    --status-draft: hsl(220, 15%, 92%);
+    --status-draft-foreground: hsl(224, 15%, 30%);
+    --status-sent: hsl(243, 60%, 92%);
+    --status-sent-foreground: hsl(243, 60%, 35%);
+    --status-screening: hsl(40, 90%, 88%);
+    --status-screening-foreground: hsl(35, 80%, 24%);
+    --status-interview: hsl(280, 50%, 92%);
+    --status-interview-foreground: hsl(280, 50%, 32%);
+    --status-offer: hsl(150, 50%, 88%);
+    --status-offer-foreground: hsl(150, 60%, 20%);
+    --status-rejected: hsl(0, 80%, 93%);
+    --status-rejected-foreground: hsl(0, 72%, 35%);
+    --status-withdrawn: hsl(220, 10%, 88%);
+    --status-withdrawn-foreground: hsl(224, 10%, 36%);
+    --radius: 0.5rem;
+}
+
+[data-theme='dark'] {
+    /* Deep slate with luminous violet. */
+    --background: hsl(226, 22%, 8%);
+    --foreground: hsl(220, 20%, 93%);
+    --card: hsl(226, 20%, 11%);
+    --card-foreground: hsl(220, 20%, 93%);
+    --popover: hsl(226, 20%, 10%);
+    --popover-foreground: hsl(220, 20%, 93%);
+    --primary: hsl(255, 85%, 74%);
+    --primary-foreground: hsl(256, 40%, 12%);
+    --secondary: hsl(226, 16%, 16%);
+    --secondary-foreground: hsl(220, 15%, 86%);
+    --muted: hsl(226, 16%, 15%);
+    --muted-foreground: hsl(220, 12%, 70%);
+    --accent: hsl(226, 18%, 18%);
+    --accent-foreground: hsl(220, 20%, 92%);
+    --destructive: hsl(0, 70%, 68%);
+    --destructive-foreground: hsl(0, 55%, 10%);
+    --border: hsl(226, 15%, 20%);
+    --input: hsl(226, 15%, 22%);
+    --ring: hsl(255, 85%, 74%);
+    --chart-1: hsl(255, 85%, 74%);
+    --chart-2: hsl(180, 65%, 55%);
+    --chart-3: hsl(35, 80%, 62%);
+    --chart-4: hsl(330, 70%, 68%);
+    --chart-5: hsl(150, 55%, 58%);
+    --sidebar-background: hsl(226, 24%, 6%);
+    --sidebar-foreground: hsl(220, 15%, 85%);
+    --sidebar-primary: hsl(255, 85%, 74%);
+    --sidebar-primary-foreground: hsl(256, 40%, 12%);
+    --sidebar-accent: hsl(226, 18%, 14%);
+    --sidebar-accent-foreground: hsl(220, 15%, 88%);
+    --sidebar-border: hsl(226, 15%, 15%);
+    --sidebar-ring: hsl(255, 85%, 74%);
+
+    /* Status badges (application pipeline): deep tints under luminous text. */
+    --status-draft: hsl(226, 16%, 20%);
+    --status-draft-foreground: hsl(220, 15%, 85%);
+    --status-sent: hsl(200, 60%, 22%);
+    --status-sent-foreground: hsl(195, 80%, 85%);
+    --status-screening: hsl(35, 60%, 22%);
+    --status-screening-foreground: hsl(38, 90%, 80%);
+    --status-interview: hsl(255, 45%, 28%);
+    --status-interview-foreground: hsl(255, 85%, 88%);
+    --status-offer: hsl(150, 45%, 20%);
+    --status-offer-foreground: hsl(150, 60%, 80%);
+    --status-rejected: hsl(0, 50%, 26%);
+    --status-rejected-foreground: hsl(0, 80%, 86%);
+    --status-withdrawn: hsl(226, 10%, 18%);
+    --status-withdrawn-foreground: hsl(220, 10%, 70%);
+    --radius: 0.5rem;
+}
+
+[data-theme='cyberpunk'] {
+    /* Void-purple night, neon magenta and cyan. */
+    --background: hsl(258, 40%, 6%);
+    --foreground: hsl(190, 60%, 92%);
+    --card: hsl(258, 35%, 9%);
+    --card-foreground: hsl(190, 60%, 92%);
+    --popover: hsl(258, 35%, 8%);
+    --popover-foreground: hsl(190, 60%, 92%);
+    --primary: hsl(315, 95%, 64%);
+    --primary-foreground: hsl(315, 90%, 8%);
+    --secondary: hsl(258, 30%, 14%);
+    --secondary-foreground: hsl(190, 40%, 88%);
+    --muted: hsl(258, 28%, 13%);
+    --muted-foreground: hsl(200, 30%, 72%);
+    --accent: hsl(180, 95%, 50%);
+    --accent-foreground: hsl(185, 95%, 8%);
+    --destructive: hsl(350, 95%, 64%);
+    --destructive-foreground: hsl(350, 90%, 8%);
+    --border: hsl(280, 40%, 22%);
+    --input: hsl(280, 40%, 24%);
+    --ring: hsl(315, 95%, 64%);
+    --chart-1: hsl(315, 95%, 64%);
+    --chart-2: hsl(180, 95%, 50%);
+    --chart-3: hsl(265, 90%, 72%);
+    --chart-4: hsl(85, 90%, 55%);
+    --chart-5: hsl(35, 95%, 60%);
+    --sidebar-background: hsl(260, 45%, 4%);
+    --sidebar-foreground: hsl(190, 50%, 88%);
+    --sidebar-primary: hsl(315, 95%, 64%);
+    --sidebar-primary-foreground: hsl(315, 90%, 8%);
+    --sidebar-accent: hsl(258, 35%, 12%);
+    --sidebar-accent-foreground: hsl(180, 80%, 80%);
+    --sidebar-border: hsl(280, 40%, 18%);
+    --sidebar-ring: hsl(180, 95%, 50%);
+
+    /* Status badges (application pipeline): neon plates, dark text; draft/withdrawn stay dim. */
+    --status-draft: hsl(258, 25%, 22%);
+    --status-draft-foreground: hsl(200, 30%, 85%);
+    --status-sent: hsl(180, 95%, 50%);
+    --status-sent-foreground: hsl(185, 95%, 8%);
+    --status-screening: hsl(55, 97%, 52%);
+    --status-screening-foreground: hsl(55, 100%, 7%);
+    --status-interview: hsl(315, 95%, 64%);
+    --status-interview-foreground: hsl(315, 90%, 8%);
+    --status-offer: hsl(85, 90%, 55%);
+    --status-offer-foreground: hsl(85, 100%, 8%);
+    --status-rejected: hsl(350, 95%, 64%);
+    --status-rejected-foreground: hsl(350, 90%, 8%);
+    --status-withdrawn: hsl(265, 30%, 26%);
+    --status-withdrawn-foreground: hsl(265, 25%, 80%);
+    --radius: 0.25rem;
+    --theme-font-display: 'Chakra Petch', 'JetBrains Mono', ui-monospace, monospace;
+    /* CP-B1: the rare third signal colour (cyberpunk.net's #FCEE0A). */
+    --fx-signal: hsl(55, 97%, 52%);
+    --fx-signal-foreground: hsl(55, 100%, 7%);
+    /* CP-C1: one clipped corner per panel; other themes leave this 0. */
+    --fx-notch: 14px;
+    /* CP-E3: HUD motion - short and sharp; other themes fall back to
+       their own defaults via var() fallbacks. */
+    --fx-duration: 140ms;
+    --fx-ease: cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+
+[data-theme='pastel'] {
+    /* Lavender milk, plum ink, rose and mint. */
+    --background: hsl(285, 45%, 97%);
+    --foreground: hsl(285, 25%, 20%);
+    --card: hsl(0, 0%, 100%);
+    --card-foreground: hsl(285, 25%, 20%);
+    --popover: hsl(0, 0%, 100%);
+    --popover-foreground: hsl(285, 25%, 20%);
+    --primary: hsl(330, 55%, 42%);
+    --primary-foreground: hsl(330, 60%, 98%);
+    --secondary: hsl(200, 45%, 92%);
+    --secondary-foreground: hsl(210, 35%, 22%);
+    --muted: hsl(285, 25%, 92%);
+    --muted-foreground: hsl(285, 12%, 38%);
+    --accent: hsl(150, 40%, 88%);
+    --accent-foreground: hsl(160, 45%, 16%);
+    --destructive: hsl(355, 65%, 44%);
+    --destructive-foreground: hsl(355, 70%, 98%);
+    --border: hsl(285, 25%, 87%);
+    --input: hsl(285, 25%, 84%);
+    --ring: hsl(330, 55%, 52%);
+    --chart-1: hsl(330, 55%, 55%);
+    --chart-2: hsl(160, 45%, 42%);
+    --chart-3: hsl(210, 60%, 55%);
+    --chart-4: hsl(40, 70%, 50%);
+    --chart-5: hsl(270, 50%, 60%);
+    --sidebar-background: hsl(285, 35%, 94%);
+    --sidebar-foreground: hsl(285, 25%, 22%);
+    --sidebar-primary: hsl(330, 55%, 42%);
+    --sidebar-primary-foreground: hsl(330, 60%, 98%);
+    --sidebar-accent: hsl(285, 30%, 89%);
+    --sidebar-accent-foreground: hsl(285, 25%, 22%);
+    --sidebar-border: hsl(285, 25%, 88%);
+    --sidebar-ring: hsl(330, 55%, 52%);
+
+    /* Status badges (application pipeline): soft milk tints. */
+    --status-draft: hsl(285, 20%, 90%);
+    --status-draft-foreground: hsl(285, 20%, 32%);
+    --status-sent: hsl(200, 55%, 88%);
+    --status-sent-foreground: hsl(210, 45%, 26%);
+    --status-screening: hsl(40, 75%, 86%);
+    --status-screening-foreground: hsl(35, 60%, 26%);
+    --status-interview: hsl(270, 50%, 90%);
+    --status-interview-foreground: hsl(270, 45%, 32%);
+    --status-offer: hsl(150, 45%, 86%);
+    --status-offer-foreground: hsl(160, 50%, 20%);
+    --status-rejected: hsl(355, 70%, 92%);
+    --status-rejected-foreground: hsl(355, 60%, 34%);
+    --status-withdrawn: hsl(285, 12%, 86%);
+    --status-withdrawn-foreground: hsl(285, 12%, 36%);
+    --radius: 1rem;
+}
+
+[data-theme='terminal'] {
+    /* Phosphor-green monochrome on CRT black; everything is mono. */
+    --background: hsl(120, 10%, 5%);
+    --foreground: hsl(120, 85%, 68%);
+    --card: hsl(120, 9%, 7%);
+    --card-foreground: hsl(120, 85%, 68%);
+    --popover: hsl(120, 9%, 6%);
+    --popover-foreground: hsl(120, 85%, 68%);
+    --primary: hsl(120, 90%, 50%);
+    --primary-foreground: hsl(120, 100%, 4%);
+    --secondary: hsl(120, 8%, 11%);
+    --secondary-foreground: hsl(120, 50%, 75%);
+    --muted: hsl(120, 8%, 10%);
+    --muted-foreground: hsl(120, 25%, 62%);
+    --accent: hsl(65, 90%, 50%);
+    --accent-foreground: hsl(65, 100%, 6%);
+    --destructive: hsl(0, 90%, 62%);
+    --destructive-foreground: hsl(0, 100%, 6%);
+    --border: hsl(120, 20%, 18%);
+    --input: hsl(120, 20%, 20%);
+    --ring: hsl(120, 90%, 50%);
+    --chart-1: hsl(120, 90%, 50%);
+    --chart-2: hsl(160, 70%, 55%);
+    --chart-3: hsl(65, 85%, 55%);
+    --chart-4: hsl(180, 60%, 55%);
+    --chart-5: hsl(120, 20%, 70%);
+    --sidebar-background: hsl(120, 12%, 3%);
+    --sidebar-foreground: hsl(120, 60%, 70%);
+    --sidebar-primary: hsl(120, 90%, 50%);
+    --sidebar-primary-foreground: hsl(120, 100%, 4%);
+    --sidebar-accent: hsl(120, 10%, 9%);
+    --sidebar-accent-foreground: hsl(120, 60%, 72%);
+    --sidebar-border: hsl(120, 20%, 14%);
+    --sidebar-ring: hsl(120, 90%, 50%);
+
+    /* Status badges (application pipeline): phosphor tints; offer is the one solid green plate. */
+    --status-draft: hsl(120, 8%, 14%);
+    --status-draft-foreground: hsl(120, 25%, 68%);
+    --status-sent: hsl(160, 60%, 16%);
+    --status-sent-foreground: hsl(160, 80%, 70%);
+    --status-screening: hsl(65, 60%, 16%);
+    --status-screening-foreground: hsl(65, 90%, 62%);
+    --status-interview: hsl(180, 50%, 16%);
+    --status-interview-foreground: hsl(180, 70%, 65%);
+    --status-offer: hsl(120, 90%, 50%);
+    --status-offer-foreground: hsl(120, 100%, 4%);
+    --status-rejected: hsl(0, 60%, 20%);
+    --status-rejected-foreground: hsl(0, 90%, 72%);
+    --status-withdrawn: hsl(120, 5%, 12%);
+    --status-withdrawn-foreground: hsl(120, 10%, 55%);
+    --radius: 0rem;
+    --font-sans: 'Share Tech Mono', 'JetBrains Mono', ui-monospace, monospace;
+    --theme-font-display: 'Share Tech Mono', ui-monospace, monospace;
+}
+
+[data-theme='topo'] {
+    /* Contour maps and kraft paper: forest ink, clay trail, lake blue. */
+    --background: hsl(42, 32%, 95%);
+    --foreground: hsl(160, 28%, 14%);
+    --card: hsl(42, 38%, 98%);
+    --card-foreground: hsl(160, 28%, 14%);
+    --popover: hsl(42, 38%, 98%);
+    --popover-foreground: hsl(160, 28%, 14%);
+    --primary: hsl(158, 42%, 24%);
+    --primary-foreground: hsl(42, 40%, 96%);
+    --secondary: hsl(42, 24%, 87%);
+    --secondary-foreground: hsl(160, 24%, 18%);
+    --muted: hsl(42, 20%, 89%);
+    --muted-foreground: hsl(160, 12%, 34%);
+    --accent: hsl(24, 55%, 86%);
+    --accent-foreground: hsl(20, 55%, 22%);
+    --destructive: hsl(8, 62%, 40%);
+    --destructive-foreground: hsl(30, 40%, 97%);
+    --border: hsl(42, 20%, 80%);
+    --input: hsl(42, 20%, 78%);
+    --ring: hsl(158, 42%, 34%);
+    --chart-1: hsl(158, 42%, 32%);
+    --chart-2: hsl(24, 70%, 45%);
+    --chart-3: hsl(200, 50%, 42%);
+    --chart-4: hsl(88, 35%, 38%);
+    --chart-5: hsl(35, 25%, 45%);
+    --sidebar-background: hsl(160, 30%, 13%);
+    --sidebar-foreground: hsl(42, 30%, 92%);
+    --sidebar-primary: hsl(38, 60%, 62%);
+    --sidebar-primary-foreground: hsl(160, 30%, 12%);
+    --sidebar-accent: hsl(160, 24%, 19%);
+    --sidebar-accent-foreground: hsl(42, 30%, 92%);
+    --sidebar-border: hsl(160, 24%, 19%);
+    --sidebar-ring: hsl(38, 60%, 62%);
+
+    /* Status badges (application pipeline): kraft, lake, clay and forest tints. */
+    --status-draft: hsl(42, 18%, 86%);
+    --status-draft-foreground: hsl(160, 10%, 30%);
+    --status-sent: hsl(200, 40%, 86%);
+    --status-sent-foreground: hsl(200, 50%, 24%);
+    --status-screening: hsl(38, 60%, 84%);
+    --status-screening-foreground: hsl(30, 55%, 24%);
+    --status-interview: hsl(24, 50%, 86%);
+    --status-interview-foreground: hsl(20, 55%, 24%);
+    --status-offer: hsl(150, 35%, 84%);
+    --status-offer-foreground: hsl(158, 42%, 18%);
+    --status-rejected: hsl(8, 55%, 88%);
+    --status-rejected-foreground: hsl(8, 62%, 30%);
+    --status-withdrawn: hsl(42, 12%, 80%);
+    --status-withdrawn-foreground: hsl(160, 8%, 30%);
+    --radius: 0.625rem;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Theme registers (T5-T8): each theme borrows from a coherent world.
+   The shared machinery is one full-viewport texture layer per theme -
+   the "glass" the interface sits behind. It renders above the content
+   at imperceptible opacity, so it may never exceed ~6% perceived; the
+   contrast checker cannot see it, restraint here is the guardrail.
+   Themes without --fx-texture render nothing (opacity 0).
+   ═══════════════════════════════════════════════════════════════════ */
+
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    pointer-events: none;
+    background-image: var(--fx-texture, none);
+    background-size: var(--fx-texture-size, auto);
+    opacity: var(--fx-texture-opacity, 0);
+}
+
+/* T5 · Formal = "Gravure": laid paper grain under editorial serif. */
+[data-theme='formal'] {
+    --fx-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23p)'/%3E%3C/svg%3E");
+    --fx-texture-size: 240px 240px;
+    --fx-texture-opacity: 0.035;
+}
+
+/* T6 · Light = "Blauwdruk": millimetre grid off a drawing table. */
+[data-theme='light'] {
+    --fx-texture:
+        linear-gradient(to right, hsl(243 60% 45% / 0.55) 1px, transparent 1px),
+        linear-gradient(to bottom, hsl(243 60% 45% / 0.55) 1px, transparent 1px),
+        linear-gradient(to right, hsl(243 60% 45% / 0.9) 1px, transparent 1px),
+        linear-gradient(to bottom, hsl(243 60% 45% / 0.9) 1px, transparent 1px);
+    --fx-texture-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+    --fx-texture-opacity: 0.05;
+}
+
+/* T7 · Dark = "Observatorium": a faint starfield behind the glass. */
+[data-theme='dark'] {
+    --fx-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='280' height='280'%3E%3Cg fill='white'%3E%3Ccircle cx='24' cy='41' r='1'/%3E%3Ccircle cx='134' cy='17' r='0.6'/%3E%3Ccircle cx='201' cy='83' r='1.2'/%3E%3Ccircle cx='68' cy='129' r='0.7'/%3E%3Ccircle cx='249' cy='150' r='0.9'/%3E%3Ccircle cx='163' cy='196' r='0.6'/%3E%3Ccircle cx='41' cy='222' r='1.1'/%3E%3Ccircle cx='108' cy='257' r='0.7'/%3E%3Ccircle cx='226' cy='243' r='0.6'/%3E%3Ccircle cx='176' cy='115' r='0.5'/%3E%3Ccircle cx='95' cy='72' r='0.5'/%3E%3Ccircle cx='262' cy='38' r='0.7'/%3E%3C/g%3E%3C/svg%3E");
+    --fx-texture-size: 280px 280px;
+    --fx-texture-opacity: 0.5;
+}
+
+/* T8 · Pastel = "Riso": risograph grain and a misregistered second ink. */
+[data-theme='pastel'] {
+    --fx-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23g)'/%3E%3C/svg%3E");
+    --fx-texture-size: 200px 200px;
+    --fx-texture-opacity: 0.05;
+}
+
+[data-theme='pastel'] h1,
+[data-theme='pastel'] h2 {
+    /* Overprint: the same title in a second ink, printed a hair off. */
+    text-shadow: 2px 2px 0 hsl(200 60% 62% / 0.4);
+}
+
+/* T9 · Terminal: scanlines on the CRT glass, phosphor bloom on titles. */
+[data-theme='terminal'] {
+    --fx-texture: repeating-linear-gradient(to bottom, hsl(120 100% 50% / 0.06) 0 1px, transparent 1px 3px);
+    --fx-texture-opacity: 1;
+}
+
+[data-theme='terminal'] h1,
+[data-theme='terminal'] h2 {
+    text-shadow: 0 0 8px hsl(120 90% 55% / 0.45);
+}
+
+[data-theme='terminal'] ::selection {
+    background: hsl(120, 90%, 50%);
+    color: hsl(120, 100%, 4%);
+}
+
+/* T9 · Topo: contour lines wandering across the kraft paper. */
+[data-theme='topo'] {
+    --fx-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='360' height='360'%3E%3Cg fill='none' stroke='%23335544' stroke-width='1'%3E%3Cpath d='M-20 60 Q 60 20 140 65 T 300 55 T 400 80'/%3E%3Cpath d='M-20 95 Q 70 55 150 100 T 305 90 T 400 115'/%3E%3Cpath d='M-20 130 Q 80 95 160 135 T 310 125 T 400 150'/%3E%3Cpath d='M-20 230 Q 50 195 130 235 T 290 225 T 400 250'/%3E%3Cpath d='M-20 265 Q 60 235 140 270 T 295 260 T 400 285'/%3E%3Cpath d='M-20 330 Q 70 300 150 335 T 305 325 T 400 350'/%3E%3C/g%3E%3C/svg%3E");
+    --fx-texture-size: 360px 360px;
+    --fx-texture-opacity: 0.06;
+}
+
+/* ── Theme flourishes ─────────────────────────────────────────────── */
+
+[data-theme='formal'] h1,
+[data-theme='formal'] h2 {
+    font-family: var(--theme-font-display);
+    letter-spacing: -0.01em;
+}
+
+[data-theme='cyberpunk'] ::selection {
+    background: hsl(315, 95%, 64%);
+    color: hsl(315, 90%, 8%);
+}
+
+[data-theme='cyberpunk'] .glow-primary {
+    text-shadow:
+        0 0 6px hsl(315 95% 64% / 0.9),
+        0 0 24px hsl(315 95% 64% / 0.5),
+        0 0 64px hsl(315 95% 64% / 0.3);
+}
+
+[data-theme='cyberpunk'] .glow-accent {
+    text-shadow:
+        0 0 6px hsl(180 95% 50% / 0.9),
+        0 0 24px hsl(180 95% 50% / 0.5);
+}
+
+[data-theme='cyberpunk'] .glow-card {
+    box-shadow:
+        0 0 0 1px hsl(315 95% 64% / 0.35),
+        0 0 24px hsl(315 95% 64% / 0.15),
+        inset 0 0 32px hsl(258 40% 4% / 0.6);
+}
+
+.gradient-text {
+    background: linear-gradient(120deg, var(--primary), var(--ring) 60%, var(--primary));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+[data-theme='cyberpunk'] .gradient-text {
+    background: linear-gradient(120deg, hsl(315, 95%, 64%), hsl(180, 95%, 50%), hsl(315, 95%, 64%));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+
+/* Plain-CSS equivalent of kp-soft's `@apply bg-background text-foreground`
+   on body (the Tailwind @apply lines themselves are not part of this
+   package). */
+body {
+    background-color: var(--background);
+    color: var(--foreground);
+    transition:
+        background-color 400ms ease,
+        color 400ms ease;
+}
