@@ -63,15 +63,24 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
     (Hub { addr }, dir)
 }
 
-/// The eleven names, read out of the package's own generated registry
-/// rather than written here: a literal list in this test would be one more
-/// copy to go stale, which is the failure the package removed in v1.0.0.
-fn themes_from_registry(registry: &str) -> Vec<String> {
+/// The eleven themes, name AND label, read out of the package's own
+/// generated registry rather than written here: a literal list in this test
+/// would be one more copy to go stale, which is the failure the package
+/// removed in v1.0.0.
+fn themes_from_registry(registry: &str) -> Vec<(String, String)> {
     registry
-        .split("name: '")
+        .split("{ name: '")
         .skip(1)
-        .filter_map(|rest| rest.split('\'').next())
-        .map(str::to_string)
+        .filter_map(|entry| {
+            let name = entry.split('\'').next()?.to_string();
+            let label = entry
+                .split("label: '")
+                .nth(1)?
+                .split('\'')
+                .next()?
+                .to_string();
+            Some((name, label))
+        })
         .collect()
 }
 
@@ -93,7 +102,7 @@ async fn w13_the_picker_offers_exactly_the_themes_the_package_defines() {
         "the package should define eleven themes; found {expected:?}"
     );
 
-    for name in &expected {
+    for (name, label) in &expected {
         assert!(
             page.contains(&format!("data-kp-theme=\"{name}\"")),
             "the picker must offer {name}"
@@ -102,6 +111,16 @@ async fn w13_the_picker_offers_exactly_the_themes_the_package_defines() {
             page.contains(&format!("class=\"kp-swatch\" data-theme=\"{name}\"")),
             "and {name} must get a swatch that wears the theme itself, \
              rather than a colour copied out of the stylesheet"
+        );
+        // kyu holds the labels in Rust because it renders the menu
+        // server-side, so they are the one thing here that CAN drift from
+        // the package. Comparing them is what makes that copy safe: if
+        // kp-themes renames a theme, this fails instead of kyu quietly
+        // showing the old word. (Gap found by the almanac session, which
+        // had the same one.)
+        assert!(
+            page.contains(&format!("data-theme=\"{name}\"></span>{label}</button>")),
+            "{name} must be labelled {label:?}, exactly as the package calls it"
         );
     }
     assert_eq!(
@@ -216,7 +235,7 @@ async fn w13_every_theme_the_picker_offers_exists_in_the_stylesheet() {
     let css = hub.text("/static/themes.css").await;
     let registry = hub.text("/static/theme-registry.js").await;
 
-    for name in themes_from_registry(&registry) {
+    for (name, _) in themes_from_registry(&registry) {
         assert!(
             css.contains(&format!("data-theme='{name}'"))
                 || css.contains(&format!("data-theme=\"{name}\"")),
