@@ -60,9 +60,13 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
       'data-bs-theme', scheme.indexOf('dark') !== -1 ? 'dark' : 'light');
   }
   document.addEventListener('kp-theme-change', follow);
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', follow, { once: true });
-  } else { follow(); }
+  /* Immediately, not on DOMContentLoaded: this script sits after the
+     stylesheet links, so the theme's color-scheme is already readable here
+     and nothing has painted yet. Waiting would leave data-bs-theme on its
+     initial value through first paint, which is a flash of light Bootstrap
+     chrome under a dark theme. (Reported by the almanac session, which hit
+     the mirror image: their script ran BEFORE the links and read `normal`.) */
+  follow();
 })();
 </script>
 </head>
