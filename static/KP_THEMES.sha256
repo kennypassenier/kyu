@@ -1,0 +1,16 @@
+# @kp-soft/themes v1.0.0 — the release's own SHA256SUMS, mapped onto
+# kyu's flat static/ paths. Fetched with:
+#   gh release download v1.0.0 --repo kennypassenier/kp-themes -p SHA256SUMS -O -
+#
+# Why a recorded copy rather than a live fetch: this is checked by the
+# commit gate, and a gate that needs the network fails on a train. These
+# hashes say 'our five copies are unmodified AND are the tag we claim' —
+# a claim that holds offline and does not depend on what happens to be
+# in a sibling directory. Bumping the version means re-copying the files
+# AND refreshing this file, which is exactly the deliberate act it
+# should be.
+afe3b05b98acfaa12c456bb0bdf59b5612d0184f3c33723a216bfef03bab397e  themes.css
+90ad00b39bb6c0fe2d01b88ee894cd2aac34c2255139eabefab8bd437986fe81  components.css
+8b7f9eadb505ab2c9d9c97370e397ef6eb2f62e0c3b33f4fc63819913fa49896  theme-core.js
+40fdacc17b2364fc624f4abb15797ca1cd1175b6ce4d7bbaf9d85452e638dd02  theme-registry.js
+400703fd4dd26415698937b161f5419609d6e8f5a0b0129d712c09e93b4b47b1  theme-picker.js

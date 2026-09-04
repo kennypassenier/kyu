@@ -43,56 +43,61 @@ if [ -d src ]; then
   fi
 fi
 
-# W13 · the vendored kp-themes files must still match the package.
+# W13 · the vendored kp-themes files. Two checks, guarding two risks.
 #
 # kyu has no npm, so five files from @kp-soft/themes are COPIES here. A copy
-# goes stale in silence: the colours still work, the page still renders, and
-# nothing says the package moved on. That is the same shape as the backup
-# that failed for two nights while its timer reported it had fired (F179).
-#
-# Whenever the sibling repository is on this machine — which is where all of
-# Kenny's work happens — compare every copy byte for byte. The files are
-# vendored UNMODIFIED for exactly this reason: no header to skip, no marker
-# to get wrong, just diff.
-#
-# On CI the sibling does not exist. The check says so out loud rather than
-# passing quietly, because a check that silently does nothing is worse than
-# no check at all (standing rule 12).
+# fails in two different ways, and one check cannot see both.
+
+# (a) ARE THEY WHAT WE CLAIM? Verified against the release's own SHA256SUMS,
+# recorded in static/KP_THEMES.sha256. This holds offline and does not depend
+# on any other directory: it says the five copies are unmodified and are the
+# tag named in that file. Catches an edited copy, a truncated copy, and a
+# copy taken from a working tree that had drifted past its tag — which is a
+# real hazard, because kp-themes' HEAD sits four commits beyond v1.0.0.
+if ! (cd static && sha256sum -c KP_THEMES.sha256 >/dev/null 2>&1); then
+  {
+    echo "gates: a vendored kp-themes file does not match the release checksums."
+    (cd static && sha256sum -c KP_THEMES.sha256 2>&1 | grep -v ': OK$')
+    echo
+    echo "What now: these files are vendored VERBATIM — do not edit them here."
+    echo "If kp-themes released a new version, re-copy the five files and"
+    echo "refresh the checksums in the same commit:"
+    echo "  gh release download <tag> --repo kennypassenier/kp-themes -p SHA256SUMS -O -"
+    echo "Then read MIGRATION.md there: a new version may change the markup"
+    echo "contract the picker attaches to, which templates/layout.html writes."
+  } >&2
+  exit 1
+fi
+
+# (b) HAS THE PACKAGE MOVED ON? The checksums above can never notice a new
+# version — they are pinned to the one kyu vendored, and stay green forever
+# while the package advances without us. That is the risk the whole exercise
+# started from, so it gets its own check: compare against the sibling
+# repository when it is on this machine, which is where all of Kenny's work
+# happens. It is a NOTICE, not a refusal: being behind a release is a
+# decision to make, not a broken commit.
 KYU_THEME_UPSTREAM=${KYU_THEME_UPSTREAM:-$HOME/Projects/kp-themes}
 if [ -d "$KYU_THEME_UPSTREAM" ]; then
-  drift=""
+  behind=""
   for pair in "css/themes.css:themes.css" \
               "css/components.css:components.css" \
               "js/theme-core.js:theme-core.js" \
               "js/theme-picker.js:theme-picker.js" \
               "js/theme-registry.js:theme-registry.js"; do
     upstream="$KYU_THEME_UPSTREAM/${pair%%:*}"
-    ours="static/${pair##*:}"
-    if [ ! -f "$upstream" ]; then
-      drift="$drift  $upstream no longer exists in kp-themes\n"
-    elif ! diff -q "$ours" "$upstream" >/dev/null 2>&1; then
-      drift="$drift  $ours differs from ${pair%%:*}\n"
-    fi
+    [ -f "$upstream" ] || { behind="$behind  ${pair%%:*} no longer exists upstream\n"; continue; }
+    diff -q "static/${pair##*:}" "$upstream" >/dev/null 2>&1 || behind="$behind  ${pair%%:*}\n"
   done
-  if [ -n "$drift" ]; then
+  if [ -n "$behind" ]; then
     {
-      echo "gates: the vendored kp-themes files no longer match the package."
-      printf "%b" "$drift"
-      echo
-      echo "What now: if kp-themes released a new version, re-copy the five"
-      echo "files and update the version named in src/http/handlers.rs:"
-      echo "  for f in css/themes.css css/components.css js/theme-core.js \\"
-      echo "           js/theme-picker.js js/theme-registry.js; do"
-      echo "    cp \"$KYU_THEME_UPSTREAM/\$f\" \"static/\$(basename \"\$f\")\"; done"
-      echo "Then check MIGRATION.md there: a new version may change the markup"
-      echo "contract the picker attaches to, which templates/layout.html writes."
-      echo "If instead someone edited kyu's copy: don't. They are vendored."
+      echo "gates: NOTICE — kp-themes has moved on since kyu vendored v1.0.0."
+      printf "%b" "$behind"
+      echo "  (the commit is not blocked; check MIGRATION.md and decide)"
     } >&2
-    exit 1
   fi
 else
   echo "gates: kp-themes is not on this machine ($KYU_THEME_UPSTREAM), so the" >&2
-  echo "       five vendored files were NOT compared against it." >&2
+  echo "       'has it moved on' check did not run. The checksums above did." >&2
 fi
 
 # Standing rule 7, second clause: see gate_tree_fingerprint above.
