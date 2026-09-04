@@ -273,9 +273,14 @@ behaviour.
   terminal, topo, high-contrast, sepia, blueprint, solstice.
 - **The contract three projects share**: `localStorage` key `theme`, the
   theme names as values, `data-theme` on `<html>`, default `formal`.
-- **Five files are vendored verbatim** — `themes.css`, `components.css`,
-  `theme-core.js`, `theme-picker.js`, `theme-registry.js` — byte-for-byte
-  copies of the v1.0.0 tag, never edited here.
+- **Six files are vendored verbatim** — `themes.css`, `components.css`,
+  `theme-core.js`, `theme-picker.js`, `theme-registry.js`, `no-flash.js` —
+  byte-for-byte copies of the v1.2.0 tag, never edited here.
+- **The no-flash snippet is the package's**, not kyu's. `no-flash.js` is the
+  only vendored file the browser never fetches: kyu inlines its
+  `NO_FLASH_SNIPPET` into `<head>`, because a module arrives too late to
+  prevent the flash it exists to prevent. It is vendored so a test can compare
+  what the head inlines against the package's own text.
 - **kyu writes the markup, the package writes the behaviour.** The menu is
   rendered server-side because a menu built by JavaScript is an empty box on
   first paint, and this dashboard is server-rendered HTML. The vendored
@@ -291,11 +296,25 @@ behaviour.
   onto Bootstrap's `--bs-*` variables, since this dashboard's furniture is
   Bootstrap. Kept separate so re-copying upstream never overwrites it.
 
-**Keeping the copies honest.** `.claude/hooks/gates.sh` compares all five
-against `~/Projects/kp-themes` whenever that repository is on the machine
-and refuses the commit when any differs, naming the file. Where it is absent
-(CI) it says so out loud rather than passing quietly. Proven by changing one
-label and watching the gate refuse, then reverting.
+**Keeping the copies honest.** Two checks in `.claude/hooks/gates.sh`, because
+a copy fails in two ways and one check cannot see both.
+
+- *Are they what we claim?* `static/KP_THEMES.sha256` holds the release's own
+  checksums, mapped onto kyu's flat paths; a mismatch **refuses** the commit.
+  This holds offline and pins the tag, so an edited copy and a copy taken from
+  a working tree that had drifted past its tag both fail. Proven by appending
+  one line to `no-flash.js` and watching it refuse.
+- *Has the package moved on?* A comparison against `~/Projects/kp-themes`
+  whenever that repository is on the machine — a **notice**, not a refusal,
+  because being behind a release is a decision to make rather than a broken
+  commit. Where it is absent (CI) it says so out loud rather than passing
+  quietly.
+
+The tests carry the third case, the one no checksum can see: that kyu's own
+server-rendered side still agrees with the copies. `tests/w13_themes.rs`
+compares the rendered menu's names *and* labels against the package's
+generated registry, and the inlined snippet against `no-flash.js`. Each was
+proven red on a deliberate injection before being trusted.
 
 **No contrast gate here, on purpose** (Kenny, 2026-09-02). kp-themes runs
 `check-contrast.mjs` before it tags, so these files have already passed it;

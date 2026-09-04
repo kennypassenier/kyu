@@ -18,21 +18,43 @@
 import { THEMES, DEFAULT_THEME, STORAGE_KEY } from './theme-registry.js';
 
 /**
+ * A theme name, as a union of the eleven that exist [KT4].
+ *
+ * Only the OUTPUTS of this module narrowed to it. What a function accepts
+ * stays lenient — `storeTheme` and `initializeTheme` still take a plain
+ * string — because narrowing an input breaks a consumer that reads a theme
+ * out of config or a database, which is exactly what JobTracker and
+ * kp-soft do. Narrowing a return value cannot break anyone.
+ * The type below is the type itself:
+ *
+ * Re-exported from the generated registry so a consumer can name the type
+ * without importing from two places. It was `string` until 1.1.0, which
+ * meant `applyTheme('formeel')` type-checked and then silently fell back
+ * to `formal` at runtime.
+ *
+ * @typedef {import('./theme-registry.js').ThemeName} ThemeName
+ */
+
+/**
  * The event both channels listen to. A contract value: a consumer may
  * listen for it too, so it does not get renamed casually [TH26].
  */
 export const THEME_EVENT = 'kp-theme-change';
 
-const NAMES = THEMES.map((t) => t.name);
+// Widened back to string on purpose: this array is what the runtime check
+// searches, and `includes` on a ThemeName[] refuses the unknown string we
+// are asking about. The narrowing happens in the guard's return type,
+// where it is earned rather than assumed.
+const NAMES = /** @type {readonly string[]} */ (THEMES.map((t) => t.name));
 const DARK = new Set(THEMES.filter((t) => t.dark).map((t) => t.name));
 
-/** @param {unknown} value @returns {value is string} */
+/** @param {unknown} value @returns {value is ThemeName} */
 export const isTheme = (value) => typeof value === 'string' && NAMES.includes(value);
 
-/** @param {unknown} value @returns {string | null} */
+/** @param {unknown} value @returns {ThemeName | null} */
 const asTheme = (value) => (isTheme(value) ? value : null);
 
-/** @returns {string} the theme the document is currently wearing */
+/** @returns {ThemeName} the theme the document is currently wearing */
 export function currentTheme() {
     if (typeof document === 'undefined') return DEFAULT_THEME;
     return asTheme(document.documentElement.dataset.theme) ?? DEFAULT_THEME;
@@ -47,7 +69,7 @@ export function currentTheme() {
  * value was rejected by the hook (AR6, adopted from the critic).
  *
  * @param {unknown} theme
- * @returns {string} the theme actually applied — DEFAULT_THEME for anything unknown
+ * @returns {ThemeName} the theme actually applied — DEFAULT_THEME for anything unknown
  */
 export function applyTheme(theme) {
     const next = asTheme(theme) ?? DEFAULT_THEME;
@@ -83,7 +105,7 @@ export function storeTheme(theme) {
     }
 }
 
-/** @returns {string | null} the stored choice, or null if there is none or storage is unreadable */
+/** @returns {ThemeName | null} the stored choice, or null if there is none or storage is unreadable */
 export function storedTheme() {
     try {
         return asTheme(localStorage.getItem(STORAGE_KEY));
@@ -98,7 +120,7 @@ export function storedTheme() {
  * that knowledge lives in the generated registry [TH23].
  *
  * @param {string} [fallback]
- * @returns {string}
+ * @returns {ThemeName}
  */
 export function initializeTheme(fallback = DEFAULT_THEME) {
     return applyTheme(storedTheme() ?? fallback);
@@ -108,7 +130,7 @@ export function initializeTheme(fallback = DEFAULT_THEME) {
  * Listen for theme changes, whoever made them: this tab's React picker,
  * this tab's framework-free picker, or another tab.
  *
- * @param {(theme: string) => void} listener
+ * @param {(theme: ThemeName) => void} listener
  * @returns {() => void} unsubscribe
  */
 export function onThemeChange(listener) {

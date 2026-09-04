@@ -1,6 +1,6 @@
 //! [W13] The house themes and their picker.
 //!
-//! kyu consumes `@kp-soft/themes` v1.0.0 — the shared package JobTracker,
+//! kyu consumes `@kp-soft/themes` v1.2.0 — the shared package JobTracker,
 //! almanac and kp-soft use — so the same eleven themes look the same
 //! everywhere and a choice made in one app behaves the same in the next.
 //!
@@ -82,6 +82,17 @@ fn themes_from_registry(registry: &str) -> Vec<(String, String)> {
             Some((name, label))
         })
         .collect()
+}
+
+/// The package's own no-flash snippet, read out of the vendored module rather
+/// than written here — the whole point of the test below is that this text has
+/// exactly one source.
+fn no_flash_snippet(module: &str) -> &str {
+    module
+        .split("export const NO_FLASH_SNIPPET = `")
+        .nth(1)
+        .and_then(|rest| rest.split('`').next())
+        .expect("no-flash.js must export NO_FLASH_SNIPPET as a template literal")
 }
 
 #[tokio::test]
@@ -242,4 +253,39 @@ async fn w13_every_theme_the_picker_offers_exists_in_the_stylesheet() {
             "themes.css must define {name}; the picker offers it"
         );
     }
+}
+
+#[tokio::test]
+async fn w13_the_no_flash_snippet_is_the_packages_own() {
+    // kyu inlines these six lines in <head> instead of importing the module,
+    // because a module arrives too late to prevent the flash it exists to
+    // prevent. That inlining is a copy, and a copy is what this suite exists
+    // to guard: until 2.3.2 kyu carried a hand-written version, and the
+    // package's own comment names kyu as the consumer whose home-grown copy
+    // once grew a list of which themes are dark and had it wrong.
+    //
+    // Read from the vendored file at compile time, so re-copying a newer
+    // kp-themes that changed the snippet fails here rather than leaving the
+    // document head one release behind in silence.
+    const NO_FLASH_JS: &str = include_str!("../static/no-flash.js");
+
+    let (hub, _dir) = spawn().await;
+    let page = hub.text("/").await;
+    let snippet = no_flash_snippet(NO_FLASH_JS);
+
+    let at = page.find(snippet).unwrap_or_else(|| {
+        panic!("the document head must inline the package's snippet verbatim:\n{snippet}")
+    });
+
+    // Position is half of what the snippet is for. It has to run before the
+    // stylesheet that would paint a light background under a visitor who
+    // chose a dark theme; after it, it prevents nothing.
+    let stylesheet = page
+        .find("/static/themes.css")
+        .expect("the page must link the theme stylesheet");
+    assert!(
+        at < stylesheet,
+        "the no-flash snippet must come BEFORE the theme stylesheet, \
+         or the flash it exists to prevent has already happened"
+    );
 }

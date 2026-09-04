@@ -793,3 +793,921 @@
 .kp-menu [data-kp-theme][data-selected='true'] {
     font-weight: 600;
 }
+
+/* ====================================================================
+ * Round two: the components rated on 2026-09-04 [TH37-TH59].
+ * ==================================================================== */
+
+/* --- Combobox and tag input [TH39, TH41] ----------------------------- */
+
+.kp-combobox {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.kp-combobox__input {
+    /* Border-box, or `width: 100%` plus padding and a border overflows the
+     * wrapper. Found by putting this on the showcase: at 320 px it pushed
+     * the page 10 px sideways and DI11 went red on all eleven themes. */
+    box-sizing: border-box;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+    font: inherit;
+}
+
+/* The theme's own timing, and only for someone who did not ask for less
+ * motion — the same guard every other transition in this file sits in. */
+@media (prefers-reduced-motion: no-preference) {
+    .kp-combobox__input {
+        transition:
+            border-color var(--fx-duration) var(--fx-ease),
+            box-shadow var(--fx-duration) var(--fx-ease);
+    }
+}
+
+.kp-combobox__input:focus-visible {
+    border-color: var(--border-strong);
+}
+
+/* The list floats over the page, so it needs a surface of its own and a
+ * boundary that survives against whatever is behind it. */
+.kp-combobox__list {
+    position: absolute;
+    inset-inline: 0;
+    top: 100%;
+    z-index: 20;
+    max-height: 15rem;
+    margin: 0.25rem 0 0;
+    padding: 0.25rem;
+    overflow-y: auto;
+    list-style: none;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    box-shadow: 0 8px 24px hsl(from var(--foreground) h s l / 0.12);
+}
+
+.kp-combobox__option {
+    padding: 0.375rem 0.625rem;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    cursor: pointer;
+}
+
+/* The highlight is the keyboard's position, not the mouse's: it is set by
+ * the arrow keys and mirrored on hover, so both agree about what Enter
+ * would take. `is-active` and aria-selected are written together. */
+.kp-combobox__option.is-active {
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+.kp-combobox__option[hidden] {
+    display: none;
+}
+
+.kp-combobox__status {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+}
+
+.kp-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kp-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.25rem 0.125rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--muted);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+}
+
+.kp-tag__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* 1.25rem is small, so the tap target is widened by padding on the tag
+     * rather than by growing the glyph. */
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    border: 0;
+    border-radius: 999px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.kp-tag__remove:hover {
+    background: var(--destructive);
+    color: var(--destructive-foreground);
+}
+
+/* --- Command palette and shortcut sheet [TH40, TH49] ----------------- */
+
+/* A dialog centred near the top rather than the middle: a palette that
+ * grows downwards should not push its own input off-centre while you
+ * type. */
+.kp-palette {
+    width: min(36rem, 92vw);
+    margin: 10vh auto auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+}
+
+.kp-palette__input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 1rem;
+}
+
+.kp-palette__list {
+    max-height: 50vh;
+    margin: 0;
+    padding: 0.25rem;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.kp-palette__option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    cursor: pointer;
+}
+
+.kp-palette__option.is-active {
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+.kp-palette__option[hidden] {
+    display: none;
+}
+
+/* The key hint sits at the end and never competes with the label. */
+.kp-palette__keys {
+    margin-inline-start: auto;
+    font-size: 0.75rem;
+}
+
+.kp-palette__status {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+}
+
+.kp-shortcuts {
+    width: min(28rem, 92vw);
+    padding: 1.25rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+}
+
+.kp-shortcuts__list {
+    margin: 0.75rem 0;
+}
+
+.kp-shortcuts__row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+}
+
+.kp-shortcuts__row dt {
+    flex: 0 0 6rem;
+}
+
+.kp-shortcuts__row dd {
+    margin: 0;
+    color: var(--muted-foreground);
+}
+
+/* --- DataTable [TH37] ------------------------------------------------ */
+
+.kp-datatable {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.kp-datatable__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.kp-datatable__search {
+    box-sizing: border-box;
+    flex: 1 1 12rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+    font: inherit;
+}
+
+/* A sortable header is a control, so it says so on hover and carries its
+ * state in an arrow that is not the only carrier — aria-sort is. */
+.kp-table th[data-kp-sort] {
+    cursor: pointer;
+    user-select: none;
+}
+
+.kp-table th[data-kp-sort]::after {
+    content: '↕';
+    margin-inline-start: 0.375rem;
+    opacity: 0.35;
+}
+
+.kp-table th[aria-sort='ascending']::after {
+    content: '↑';
+    opacity: 1;
+}
+
+.kp-table th[aria-sort='descending']::after {
+    content: '↓';
+    opacity: 1;
+}
+
+.kp-datatable__status {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+}
+
+.kp-datatable__pager {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.kp-datatable__page {
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Narrow: a row becomes a card [TH37, DI11].
+ *
+ * The alternative every table reaches for is a horizontal scrollbar, and
+ * SC 1.4.10 is about not making a reader drag a page sideways to finish a
+ * sentence. The header text is carried into each cell through a data
+ * attribute the consumer writes, because a cell without its column name
+ * is a value with no question attached. */
+@media (max-width: 40rem) {
+    .kp-datatable[data-kp-cards] .kp-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    .kp-datatable[data-kp-cards] .kp-table,
+    .kp-datatable[data-kp-cards] .kp-table tbody,
+    .kp-datatable[data-kp-cards] .kp-table tr,
+    .kp-datatable[data-kp-cards] .kp-table td {
+        display: block;
+        width: auto;
+    }
+
+    .kp-datatable[data-kp-cards] .kp-table tr {
+        margin-block-end: 0.75rem;
+        padding: 0.5rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius, 0.5rem);
+        background: var(--card);
+    }
+
+    .kp-datatable[data-kp-cards] .kp-table td {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: space-between;
+        border: 0;
+    }
+
+    .kp-datatable[data-kp-cards] .kp-table td::before {
+        content: attr(data-label);
+        color: var(--muted-foreground);
+        font-weight: 500;
+    }
+}
+
+/* --- Forms [TH38] ---------------------------------------------------- */
+
+.kp-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* The summary is a landmark, not a banner: it takes focus when a submit
+ * fails, so it needs a boundary that reads at 3:1 and a colour that says
+ * something is wrong without being the only carrier — the heading says it
+ * in words. */
+.kp-form__summary {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--destructive);
+    border-radius: var(--radius, 0.5rem);
+    background: hsl(from var(--destructive) h s l / 0.08);
+}
+
+.kp-form__summary:focus-visible {
+    outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+.kp-form__summary-title {
+    margin: 0 0 0.375rem;
+    font-weight: 600;
+}
+
+.kp-form__summary ul {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+}
+
+/* A required marking that is not only an asterisk: the word is there for
+ * anyone who never learned what the star means, and for a screen reader
+ * that reads it as "star". */
+.kp-field__required {
+    margin-inline-start: 0.25rem;
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 400;
+}
+
+.kp-field__required::before {
+    content: '\002A\00a0';
+    color: var(--destructive);
+}
+
+/* --- The small patterns [TH50, TH51, TH52, TH53, TH54] --------------- */
+
+/* An empty state that knows which emptiness it is. "Nog geen items" and
+ * "niets gevonden" are different messages, and offering "maak er een" to
+ * someone who just typed a filter is noise. */
+.kp-empty__title {
+    margin: 0 0 0.25rem;
+    color: var(--foreground);
+    font-weight: 600;
+}
+
+.kp-empty__body {
+    margin: 0 0 0.75rem;
+}
+
+/* Copyable value [TH53] */
+.kp-copyable {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.kp-copyable__value {
+    font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+/* Confirmed in words on the button, not by colour: a green flash is
+ * invisible to a screen reader and to anyone who looked away. */
+.kp-copyable__button[data-kp-copied] {
+    border-color: var(--success);
+    color: var(--success-foreground);
+    background: var(--success);
+}
+
+/* Status parts [TH52] */
+.kp-health {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+}
+
+/* The dot is the second carrier, never the only one: the word beside it
+ * is what makes this readable to someone who cannot tell the colours
+ * apart [DI4]. */
+.kp-health__dot {
+    width: 0.625rem;
+    height: 0.625rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--muted);
+}
+
+.kp-health[data-state='ok'] .kp-health__dot {
+    background: var(--success);
+}
+
+.kp-health[data-state='warn'] .kp-health__dot {
+    background: var(--warning);
+}
+
+.kp-health[data-state='down'] .kp-health__dot {
+    background: var(--destructive);
+}
+
+.kp-timeline {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kp-timeline__item {
+    display: grid;
+    grid-template-columns: 0.75rem 1fr;
+    gap: 0.75rem;
+    padding-block: 0.5rem;
+}
+
+/* The rule down the left is drawn on the marker, so a one-item timeline
+ * does not get a line hanging under it. */
+.kp-timeline__item:not(:last-child) .kp-timeline__marker {
+    background-image: linear-gradient(var(--border), var(--border));
+    background-repeat: no-repeat;
+    background-position: 50% 0.75rem;
+    background-size: 1px 100%;
+}
+
+.kp-timeline__marker {
+    width: 0.75rem;
+    height: 0.75rem;
+    margin-block-start: 0.25rem;
+    border: 2px solid var(--primary);
+    border-radius: 999px;
+}
+
+.kp-timeline__when {
+    display: block;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Diff view [TH54] */
+.kp-diff {
+    margin: 0;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8125rem;
+}
+
+.kp-diff__line {
+    display: grid;
+    grid-template-columns: 3rem 1ch 1fr;
+    gap: 0.5rem;
+    padding-inline: 0.5rem;
+    white-space: pre-wrap;
+}
+
+/* The sign in its own column is the carrier that survives when the colour
+ * does not — printed, in high contrast, or for a reader who cannot tell
+ * green from red [DI4]. */
+.kp-diff__sign {
+    color: var(--muted-foreground);
+}
+
+.kp-diff__number {
+    color: var(--muted-foreground);
+    text-align: end;
+    font-variant-numeric: tabular-nums;
+}
+
+.kp-diff__line[data-kind='added'] {
+    background: hsl(from var(--success) h s l / 0.14);
+}
+
+.kp-diff__line[data-kind='removed'] {
+    background: hsl(from var(--destructive) h s l / 0.12);
+}
+
+/* Visually hidden, still announced. Used where a change is obvious on
+ * screen and silent otherwise — a button whose own label changed, for
+ * instance, which a screen reader does not report on its own. */
+.kp-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    border: 0;
+    clip-path: inset(50%);
+}
+
+/* --- Tree, reorder and split pane [TH45, TH46, TH55] ----------------- */
+
+.kp-tree,
+.kp-tree [role='group'] {
+    margin: 0;
+    padding-inline-start: 1rem;
+    list-style: none;
+}
+
+.kp-tree {
+    padding-inline-start: 0;
+}
+
+.kp-tree [role='treeitem'] {
+    padding: 0.25rem 0.375rem;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    cursor: pointer;
+}
+
+.kp-tree [role='treeitem']:hover {
+    background: var(--muted);
+}
+
+/* The twisty is a second carrier beside aria-expanded, and it points the
+ * way the branch will go rather than the way it is. */
+.kp-tree [role='treeitem'][aria-expanded]::before {
+    content: '▸';
+    display: inline-block;
+    width: 1em;
+    color: var(--muted-foreground);
+}
+
+.kp-tree [role='treeitem'][aria-expanded='true']::before {
+    content: '▾';
+}
+
+.kp-tree [role='treeitem'][aria-expanded='false'] + [role='group'],
+.kp-tree [role='treeitem'][aria-expanded='false'] > [role='group'] {
+    display: none;
+}
+
+.kp-reorder {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kp-reorder [data-kp-item] {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    margin-block-end: 0.375rem;
+    background: var(--card);
+}
+
+/* A real button, not a decorative grip: it has to be reachable by Tab or
+ * the arrow keys have nothing to act on. */
+.kp-reorder [data-kp-handle] {
+    padding: 0.125rem 0.375rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    background: none;
+    color: var(--muted-foreground);
+    font: inherit;
+    cursor: grab;
+}
+
+.kp-split {
+    display: grid;
+    /* One custom property drives the whole layout, so the keyboard and
+     * the pointer move the same thing. */
+    grid-template-columns: var(--kp-split, 50%) auto 1fr;
+    align-items: stretch;
+    min-height: 8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    overflow: hidden;
+}
+
+.kp-split__pane {
+    padding: 0.75rem;
+    overflow: auto;
+}
+
+.kp-split__separator {
+    width: 0.5rem;
+    border: 0;
+    border-inline: 1px solid var(--border);
+    background: var(--muted);
+    cursor: col-resize;
+}
+
+.kp-split__separator:focus-visible {
+    outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+    outline-offset: -2px;
+}
+
+/* --- Date picker [TH43] ---------------------------------------------- */
+
+.kp-datepicker {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 0.5rem;
+}
+
+.kp-datepicker__panel {
+    position: absolute;
+    top: 100%;
+    inset-inline-start: 0;
+    z-index: 20;
+    margin-block-start: 0.25rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+    box-shadow: 0 8px 24px hsl(from var(--foreground) h s l / 0.12);
+}
+
+.kp-datepicker__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-block-end: 0.5rem;
+}
+
+.kp-datepicker__title {
+    font-weight: 600;
+}
+
+.kp-datepicker__grid {
+    display: grid;
+    grid-template-columns: repeat(7, 2rem);
+    gap: 0.125rem;
+    text-align: center;
+}
+
+.kp-datepicker__weekday {
+    padding-block: 0.25rem;
+    color: var(--muted-foreground);
+    font-size: 0.75rem;
+}
+
+.kp-datepicker__day {
+    padding: 0.25rem 0;
+    border: 1px solid transparent;
+    border-radius: calc(var(--radius, 0.5rem) / 2);
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+}
+
+.kp-datepicker__day:hover {
+    background: var(--muted);
+}
+
+/* The chosen day carries a border as well as a fill, so it is still the
+ * chosen day when the fill is the same colour as the hover [DI4]. */
+.kp-datepicker__day[aria-selected='true'] {
+    border-color: var(--border-strong);
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+/* --- Upload and wizard [TH44, TH48] ---------------------------------- */
+
+.kp-upload__zone {
+    display: block;
+    padding: 1.5rem;
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    text-align: center;
+    cursor: pointer;
+}
+
+.kp-upload__zone[data-kp-dragging] {
+    border-color: var(--primary);
+    color: var(--foreground);
+}
+
+.kp-upload__list {
+    margin: 0.75rem 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.kp-upload__file {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    margin-block-end: 0.375rem;
+}
+
+.kp-upload__size {
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* One element, filled by a gradient stop: a second element for the fill
+ * would need its own width kept in step with aria-valuenow. */
+.kp-upload__bar {
+    grid-column: 1 / -1;
+    height: 0.25rem;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--primary) var(--kp-progress, 0%), var(--muted) var(--kp-progress, 0%));
+}
+
+.kp-upload__message {
+    grid-column: 1 / -1;
+    color: var(--muted-foreground);
+    font-size: 0.8125rem;
+}
+
+.kp-upload__file[data-state='error'] {
+    border-color: var(--destructive);
+}
+
+.kp-upload__file[data-state='error'] .kp-upload__message {
+    color: var(--destructive);
+}
+
+.kp-wizard__steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+    counter-reset: kp-step;
+}
+
+.kp-wizard__steps li {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--muted-foreground);
+    counter-increment: kp-step;
+}
+
+.kp-wizard__steps li::before {
+    content: counter(kp-step);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The current step is marked by weight AND by the filled circle, and
+ * aria-current="step" carries it for everyone else [DI4]. */
+.kp-wizard__steps li[data-state='current'] {
+    color: var(--foreground);
+    font-weight: 600;
+}
+
+.kp-wizard__steps li[data-state='current']::before {
+    border-color: var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
+}
+
+.kp-wizard__steps li[data-state='done']::before {
+    content: '✓';
+    border-color: var(--success);
+    color: var(--success);
+}
+
+.kp-wizard__actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-block-start: 1rem;
+}
+
+.kp-wizard [data-kp-step]:focus-visible {
+    outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+    outline-offset: 4px;
+}
+
+/* --- Colour picker [TH57] -------------------------------------------- */
+
+.kp-colorpicker {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    max-width: 22rem;
+}
+
+.kp-colorpicker__swatch {
+    grid-column: 1;
+    width: 2.5rem;
+    height: 2.5rem;
+    /* A boundary, because a pale swatch on a pale card is otherwise an
+     * invisible square [DI4]. */
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius, 0.5rem);
+}
+
+.kp-colorpicker__value {
+    grid-column: 2;
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 0.8125rem;
+}
+
+.kp-colorpicker__contrast {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--destructive);
+    font-size: 0.8125rem;
+}
+
+/* The verdict is in the text; the colour is the second carrier, never the
+ * only one [DI4]. */
+.kp-colorpicker[data-kp-contrast-ok] .kp-colorpicker__contrast {
+    color: var(--muted-foreground);
+}
+
+/* --- Movable grid layout [TH56] -------------------------------------- */
+
+.kp-grid {
+    display: grid;
+    grid-template-columns: repeat(var(--kp-grid-columns, 6), 1fr);
+    grid-auto-rows: 4rem;
+    gap: 0.5rem;
+}
+
+.kp-grid__tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    background: var(--card);
+    color: var(--card-foreground);
+    overflow: hidden;
+}
+
+/* The tile is a tab stop, because moving it is a keyboard gesture first
+ * and a drag second. */
+.kp-grid__tile:focus-visible {
+    outline: var(--focus-ring-width, 2px) solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+/* On a narrow screen the arrangement stops being an arrangement: one
+ * column, source order. A six-column dashboard at 320 px is six columns
+ * of nothing [DI11]. */
+@media (max-width: 40rem) {
+    .kp-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .kp-grid__tile {
+        grid-column: 1 / -1 !important;
+    }
+}

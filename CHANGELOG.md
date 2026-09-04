@@ -11,7 +11,37 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.3.1.
+Nothing since 2.3.2.
+
+## [2.3.2] — 2026-09-04
+
+### Changed
+
+- **The vendored kp-themes files move from v1.0.0 to v1.2.0** (W13). Nothing
+  visible changes, and that was measured rather than assumed before the copy
+  was made: `themes.css` differs in exactly one line — the version banner —
+  so the eleven palettes are byte-identical; `theme-picker.js` is identical;
+  `theme-core.js` and `theme-registry.js` gained only the JSDoc types of
+  v1.1.0, which kyu does not read. `components.css` grew from 21 KB to 43 KB
+  with v1.2.0's twenty-two components, purely by addition — the old file is a
+  byte-exact prefix of the new one, and the five classes kyu uses sit
+  untouched.
+
+- **The no-flash snippet comes from the package now.** kyu hand-wrote the six
+  lines that put the visitor's stored theme on `<html>` before first paint;
+  v1.2.0 ships them as `NO_FLASH_SNIPPET`, so the copy is gone. kyu still
+  inlines the text rather than importing the module — a module arrives too
+  late to prevent the flash it exists to prevent — but the text now has one
+  source, and a test compares what the document head inlines against the
+  vendored file. It was shown red twice before being trusted: once on a
+  single stray character, once with the snippet moved below the stylesheet
+  link, where it is the right text at the wrong moment.
+
+  The package's own comment on that file names kyu as the consumer whose
+  home-grown copy grew a list of which themes are dark and had it wrong.
+
+Nothing about the HTTP contract, the environment variables or the deployment
+changed. Upgrading is replacing the binary.
 
 ## [2.3.1] — 2026-09-04
 

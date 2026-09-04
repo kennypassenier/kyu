@@ -4,18 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}kyu{% endblock %}</title>
+<!-- The package's NO_FLASH_SNIPPET, verbatim from static/no-flash.js. Without
+     it the page renders in `formal` and then jumps to the visitor's theme.
+     kyu inlines the text rather than importing the module, which is what the
+     package prescribes for a server that writes its own HTML: a module
+     arrives too late to prevent the flash it exists to prevent.
+     Byte-for-byte on purpose — a test compares this against the vendored
+     file, so the two cannot drift. kyu carried its own hand-written copy of
+     these six lines until 2.3.2; the package's version of that copy is how
+     kyu once came to believe in four dark themes. -->
 <script>
-/* Before the first paint: the visitor's last theme, or the default. Without
-   this the page renders in `formal` and then jumps to the chosen theme —
-   the flash the package's initializeTheme() exists to prevent.
-   Kept deliberately tiny and duplication-free: it does not know which themes
-   exist or which are dark. theme.js settles both once the picker is in the
-   DOM, a few milliseconds later. */
 (function () {
-  try {
-    var t = localStorage.getItem('theme');
-    if (t) document.documentElement.dataset.theme = t;
-  } catch (e) { /* blocked storage: the default stands */ }
+    try {
+        var t = localStorage.getItem('theme');
+        if (t) document.documentElement.dataset.theme = t;
+    } catch (e) {}
 })();
 </script>
 <link rel="preconnect" href="https://fonts.bunny.net">
@@ -42,7 +45,7 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 .tabular { font-variant-numeric: tabular-nums; }
 </style>
 <script src="/static/app.js?v={{ assets }}" defer></script>
-<!-- The package's own picker (v1.0.0). It attaches on import to the markup
+<!-- The package's own picker (v1.2.0). It attaches on import to the markup
      below; kyu writes that markup server-side rather than letting the module
      build it, because a menu that only exists after JavaScript runs is an
      empty box on first paint. -->

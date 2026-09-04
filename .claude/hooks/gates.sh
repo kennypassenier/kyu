@@ -45,22 +45,22 @@ fi
 
 # W13 · the vendored kp-themes files. Two checks, guarding two risks.
 #
-# kyu has no npm, so five files from @kp-soft/themes are COPIES here. A copy
+# kyu has no npm, so six files from @kp-soft/themes are COPIES here. A copy
 # fails in two different ways, and one check cannot see both.
 
 # (a) ARE THEY WHAT WE CLAIM? Verified against the release's own SHA256SUMS,
 # recorded in static/KP_THEMES.sha256. This holds offline and does not depend
-# on any other directory: it says the five copies are unmodified and are the
+# on any other directory: it says the six copies are unmodified and are the
 # tag named in that file. Catches an edited copy, a truncated copy, and a
 # copy taken from a working tree that had drifted past its tag — which is a
-# real hazard, because kp-themes' HEAD sits four commits beyond v1.0.0.
+# real hazard, because kp-themes' HEAD moves on between releases.
 if ! (cd static && sha256sum -c KP_THEMES.sha256 >/dev/null 2>&1); then
   {
     echo "gates: a vendored kp-themes file does not match the release checksums."
     (cd static && sha256sum -c KP_THEMES.sha256 2>&1 | grep -v ': OK$')
     echo
     echo "What now: these files are vendored VERBATIM — do not edit them here."
-    echo "If kp-themes released a new version, re-copy the five files and"
+    echo "If kp-themes released a new version, re-copy the six files and"
     echo "refresh the checksums in the same commit:"
     echo "  gh release download <tag> --repo kennypassenier/kp-themes -p SHA256SUMS -O -"
     echo "Then read MIGRATION.md there: a new version may change the markup"
@@ -83,14 +83,15 @@ if [ -d "$KYU_THEME_UPSTREAM" ]; then
               "css/components.css:components.css" \
               "js/theme-core.js:theme-core.js" \
               "js/theme-picker.js:theme-picker.js" \
-              "js/theme-registry.js:theme-registry.js"; do
+              "js/theme-registry.js:theme-registry.js" \
+              "js/no-flash.js:no-flash.js"; do
     upstream="$KYU_THEME_UPSTREAM/${pair%%:*}"
     [ -f "$upstream" ] || { behind="$behind  ${pair%%:*} no longer exists upstream\n"; continue; }
     diff -q "static/${pair##*:}" "$upstream" >/dev/null 2>&1 || behind="$behind  ${pair%%:*}\n"
   done
   if [ -n "$behind" ]; then
     {
-      echo "gates: NOTICE — kp-themes has moved on since kyu vendored v1.0.0."
+      echo "gates: NOTICE — kp-themes has moved on since kyu vendored v1.2.0."
       printf "%b" "$behind"
       echo "  (the commit is not blocked; check MIGRATION.md and decide)"
     } >&2
