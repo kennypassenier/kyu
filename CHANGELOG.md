@@ -11,7 +11,21 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.3.0.
+Nothing since 2.3.1.
+
+## [2.3.1] — 2026-09-04
+
+### Fixed
+
+- **`data-bs-theme` is set before first paint, not after it.** The script
+  that makes Bootstrap's own components follow the active theme sits after
+  the stylesheet links — where the theme's `color-scheme` is already
+  readable — but waited for `DOMContentLoaded` anyway. Under a dark theme
+  that left a flash of light Bootstrap chrome on load.
+
+  Found by the almanac session hitting the mirror image while adopting the
+  same package: their read ran *before* the links and got `normal`. Between
+  the two, the whole window is accounted for.
 
 ## [2.3.0] — 2026-09-04
 
