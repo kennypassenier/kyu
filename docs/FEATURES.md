@@ -254,58 +254,61 @@ backup-under-load → restore → invariants-hold E2E test.
 Per-topic form, payload prefilled with last real payload, send button.
 **Proven by:** UI route test → message lands on topic.
 
-### W13 · The house themes *(added at the 2026-09-02 mini-round)*
+### W13 · The house themes *(added 2026-09-02, moved to the package's own picker 2026-09-04)*
 
-Kenny asked for the seven themes from `@kp-soft/themes` — the shared
-package born out of JobTracker's Phase 3 (T17) and Phase 5 (P0) decisions
-— with *the same picker and the same way of storing the choice in the
-browser*. Not a lookalike: the same contract, so a theme chosen in one of
-his apps behaves identically in the next.
+Kenny asked for the themes from `@kp-soft/themes` with *the same picker and
+the same way of storing the choice in the browser*. Not a lookalike: the
+same contract, so a theme chosen in one of his apps behaves identically in
+the next.
 
-- **The seven:** formal (the default), light, dark, cyberpunk, pastel,
-  terminal, topo. Three of them are dark: dark, cyberpunk, terminal.
-- **The contract that must not drift**, because three projects share it:
-  `localStorage` key `theme`, the seven names as values, applied as
-  `data-theme` on `<html>` plus the class `dark`, default `formal`.
-- **kyu cannot use the package.** It has no npm and no build step, and the
-  package ships a React hook and a JSX component. `css/themes.css` is
-  therefore vendored verbatim with its version and commit recorded above
-  it, and the switcher's behaviour is reimplemented in ~130 lines of
-  plain JavaScript.
-- **One list, not three.** The themes live once in `dashboard.rs`, are
-  rendered server-side into the picker, and the browser script reads what
-  it needs off that markup — no `THEME_META` copy in JavaScript.
-- **The bridge is kyu's own file.** `static/theme-bridge.css` maps the
-  package's tokens onto Bootstrap's `--bs-*` variables, and sets
-  `data-bs-theme` for the dark themes so Bootstrap's own components follow
-  instead of staying light under dark tokens. Keeping it separate means
-  re-copying the upstream file never overwrites it.
-- **Deliberately not taken:** `cyberpunk-register.css` (much of it targets
-  shadcn `data-slot` attributes and the React fx, so it would be dead
-  weight here) and the four `fx/` components (React).
+**Since v1.0.0 that is no longer kyu's code.** The first implementation
+(kyu 2.2.0) hand-wrote the switcher's behaviour, because the package only
+shipped a React hook and a JSX component and kyu has no npm and no build
+step. kyu and almanac were rebuilding the same thing separately; that was
+raised with the package, and v1.0.0 ships a framework-free channel. kyu now
+vendors it instead of maintaining a second implementation of someone else's
+behaviour.
 
-Proven by `tests/w13_themes.rs`: all seven offered with their swatches and
-dark flags, the storage contract pinned literally, the assets served with
-the right types while the traversal guard still holds, and every theme the
-picker offers actually defined in the stylesheet.
+- **Eleven themes**: formal (the default), light, dark, cyberpunk, pastel,
+  terminal, topo, high-contrast, sepia, blueprint, solstice.
+- **The contract three projects share**: `localStorage` key `theme`, the
+  theme names as values, `data-theme` on `<html>`, default `formal`.
+- **Five files are vendored verbatim** — `themes.css`, `components.css`,
+  `theme-core.js`, `theme-picker.js`, `theme-registry.js` — byte-for-byte
+  copies of the v1.0.0 tag, never edited here.
+- **kyu writes the markup, the package writes the behaviour.** The menu is
+  rendered server-side because a menu built by JavaScript is an empty box on
+  first paint, and this dashboard is server-rendered HTML. The vendored
+  module attaches to the package's contract attributes
+  (`data-kp-theme-picker`, `data-kp-theme`, `.kp-swatch`,
+  `data-kp-theme-status`).
+- **No colour copies anywhere.** v1.0.0 removed them on purpose: a swatch
+  wears the theme it previews, reading that theme's live custom properties.
+  The dark flag is gone from kyu's side too — the package derives it from
+  each theme's own `color-scheme`, which is how kyu came to believe in four
+  dark themes when there are three.
+- **`static/theme-bridge.css` remains kyu's own file**, mapping the tokens
+  onto Bootstrap's `--bs-*` variables, since this dashboard's furniture is
+  Bootstrap. Kept separate so re-copying upstream never overwrites it.
 
-**Keeping the copy honest** (decided 2026-09-02). A vendored file goes
-stale in silence — the colours still work, the page still renders, and
-nothing says the package moved on. `.claude/hooks/gates.sh` therefore
-compares `static/themes.css` against `~/Projects/kp-themes/css/themes.css`
-whenever that repository is on the machine, and refuses the commit when they
-differ, naming the exact lines. Where it is absent (CI) it says so out loud
-rather than passing quietly. Proven by changing one character and watching
-the gate refuse, then reverting.
+**Keeping the copies honest.** `.claude/hooks/gates.sh` compares all five
+against `~/Projects/kp-themes` whenever that repository is on the machine
+and refuses the commit when any differs, naming the file. Where it is absent
+(CI) it says so out loud rather than passing quietly. Proven by changing one
+label and watching the gate refuse, then reverting.
 
-**No contrast gate here, on purpose** (Kenny, 2026-09-02). Both JobTracker
-and the almanac session proposed vendoring `check-contrast.mjs` and running
-it in kyu's CI. It was declined with its reason written into the copy's own
-header: kp-themes runs that gate before it tags, so this file has already
-passed it, and re-running it would mean pulling Node into a Rust pipeline to
-re-answer an answered question. It would only ever catch someone editing
-this copy, which is forbidden anyway. The risk a copy actually runs is
-staleness, and contrast says nothing about that.
+**No contrast gate here, on purpose** (Kenny, 2026-09-02). kp-themes runs
+`check-contrast.mjs` before it tags, so these files have already passed it;
+re-running it would mean pulling Node into a Rust pipeline to re-answer an
+answered question, and it would only catch someone editing a vendored copy.
+The risk a copy actually runs is staleness, and contrast says nothing about
+that — the gate above guards the risk that is there.
+
+Proven by `tests/w13_themes.rs`: the picker offers exactly the themes the
+vendored registry defines and no others, the contract attributes are
+present, the storage contract is read from the served registry rather than
+from a literal, the whole ES module chain is reachable while the traversal
+guard still holds, and every theme offered is defined in the stylesheet.
 
 ## Later (2)
 

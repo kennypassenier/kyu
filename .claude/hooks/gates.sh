@@ -43,44 +43,56 @@ if [ -d src ]; then
   fi
 fi
 
-# W13 · the vendored theme stylesheet must still match kp-themes.
+# W13 · the vendored kp-themes files must still match the package.
 #
-# static/themes.css is a COPY of @kp-soft/themes css/themes.css, because kyu
-# has no npm and no build step. A copy goes stale in silence: the colours
-# still work, the page still renders, and nothing anywhere says the shared
-# package moved on. That is the same shape as the backup that failed for two
-# nights while its timer reported it had fired (F179).
+# kyu has no npm, so five files from @kp-soft/themes are COPIES here. A copy
+# goes stale in silence: the colours still work, the page still renders, and
+# nothing says the package moved on. That is the same shape as the backup
+# that failed for two nights while its timer reported it had fired (F179).
 #
-# So: whenever the sibling repository is on this machine — which is where all
-# of Kenny's work happens — compare the two and refuse the commit if they
-# differ. Everything above the marker line is kyu's own provenance note and
-# is not part of the comparison.
+# Whenever the sibling repository is on this machine — which is where all of
+# Kenny's work happens — compare every copy byte for byte. The files are
+# vendored UNMODIFIED for exactly this reason: no header to skip, no marker
+# to get wrong, just diff.
 #
 # On CI the sibling does not exist. The check says so out loud rather than
 # passing quietly, because a check that silently does nothing is worse than
 # no check at all (standing rule 12).
-KYU_THEME_UPSTREAM=${KYU_THEME_UPSTREAM:-$HOME/Projects/kp-themes/css/themes.css}
-if [ -f "$KYU_THEME_UPSTREAM" ]; then
-  # Cut everything up to the marker, then drop the blank line that
-  # separates the note from the copy: whitespace between the two must not
-  # be able to report a difference that is not there.
-  vendored=$(sed '1,/end of kyu.s provenance note/d' static/themes.css | sed '/./,$!d')
-  if ! printf '%s\n' "$vendored" | diff -q - "$KYU_THEME_UPSTREAM" >/dev/null 2>&1; then
+KYU_THEME_UPSTREAM=${KYU_THEME_UPSTREAM:-$HOME/Projects/kp-themes}
+if [ -d "$KYU_THEME_UPSTREAM" ]; then
+  drift=""
+  for pair in "css/themes.css:themes.css" \
+              "css/components.css:components.css" \
+              "js/theme-core.js:theme-core.js" \
+              "js/theme-picker.js:theme-picker.js" \
+              "js/theme-registry.js:theme-registry.js"; do
+    upstream="$KYU_THEME_UPSTREAM/${pair%%:*}"
+    ours="static/${pair##*:}"
+    if [ ! -f "$upstream" ]; then
+      drift="$drift  $upstream no longer exists in kp-themes\n"
+    elif ! diff -q "$ours" "$upstream" >/dev/null 2>&1; then
+      drift="$drift  $ours differs from ${pair%%:*}\n"
+    fi
+  done
+  if [ -n "$drift" ]; then
     {
-      echo "gates: static/themes.css no longer matches kp-themes."
+      echo "gates: the vendored kp-themes files no longer match the package."
+      printf "%b" "$drift"
       echo
-      printf '%s\n' "$vendored" | diff - "$KYU_THEME_UPSTREAM" | head -20
-      echo
-      echo "What now: if kp-themes released a new version, re-copy it and update"
-      echo "the version and commit in the provenance note at the top:"
-      echo "  { head -n \"\$(grep -n 'end of kyu.s provenance note' static/themes.css | cut -d: -f1)\" static/themes.css; cat $KYU_THEME_UPSTREAM; } > /tmp/themes.css && mv /tmp/themes.css static/themes.css"
-      echo "If instead someone edited kyu's copy: don't. The note at the top says why."
+      echo "What now: if kp-themes released a new version, re-copy the five"
+      echo "files and update the version named in src/http/handlers.rs:"
+      echo "  for f in css/themes.css css/components.css js/theme-core.js \\"
+      echo "           js/theme-picker.js js/theme-registry.js; do"
+      echo "    cp \"$KYU_THEME_UPSTREAM/\$f\" \"static/\$(basename \"\$f\")\"; done"
+      echo "Then check MIGRATION.md there: a new version may change the markup"
+      echo "contract the picker attaches to, which templates/layout.html writes."
+      echo "If instead someone edited kyu's copy: don't. They are vendored."
     } >&2
     exit 1
   fi
 else
   echo "gates: kp-themes is not on this machine ($KYU_THEME_UPSTREAM), so the" >&2
-  echo "       vendored static/themes.css was NOT compared against it." >&2
+  echo "       five vendored files were NOT compared against it." >&2
 fi
 
 # Standing rule 7, second clause: see gate_tree_fingerprint above.

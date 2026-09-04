@@ -27,81 +27,75 @@ use crate::store::queries::{
 /// message; the rest is announced rather than dropped in silence (AR11).
 pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
 
-/// The house themes, mirroring `@kp-soft/themes` v0.1.1 — the shared
-/// package JobTracker and kp-soft use.
+/// The house themes, from `@kp-soft/themes` **v1.0.0** — the shared package
+/// JobTracker, almanac and kp-soft use.
 ///
-/// Held here rather than in JavaScript so there is ONE list on kyu's side:
-/// the picker is rendered server-side from this, and the browser script
-/// reads what it needs off the rendered markup instead of carrying a second
-/// copy that can drift. The three colours are the theme's own
-/// `--background`, `--primary` and whether it is dark, which is all a swatch
-/// and the Bootstrap dark-mode switch need. Everything else — the full token
-/// set, the typography, the texture registers — lives in the vendored
-/// `static/themes.css` and is never duplicated here.
+/// Only the name and the label. v1.0.0 removed the colour copies on purpose
+/// (their TH24): a swatch now wears the theme it previews, reading the live
+/// custom properties instead of a duplicate that drifts when a palette is
+/// adjusted. The dark flag is gone from here for the same reason — the
+/// package derives it from each theme's own `color-scheme`, which is how
+/// kyu came to believe in four dark themes when there are three.
 ///
-/// The order is the package's order, and `formal` is its default.
+/// This list still exists because kyu renders its picker server-side: a
+/// menu built by JavaScript is an empty box until the script runs, and this
+/// dashboard is server-rendered HTML. It is kept honest by a gate that
+/// compares it against the package's generated `js/theme-registry.js` and
+/// refuses the commit when they disagree — the same guard as the vendored
+/// stylesheets.
 pub const THEMES: &[ThemeView] = &[
     ThemeView {
         name: "formal",
         label: "Formeel",
-        bg: "hsl(40,25%,97%)",
-        primary: "hsl(218,45%,24%)",
-        dark: false,
     },
     ThemeView {
         name: "light",
         label: "Licht",
-        bg: "hsl(0,0%,100%)",
-        primary: "hsl(243,60%,45%)",
-        dark: false,
     },
     ThemeView {
         name: "dark",
         label: "Donker",
-        bg: "hsl(226,22%,8%)",
-        primary: "hsl(255,85%,74%)",
-        dark: true,
     },
     ThemeView {
         name: "cyberpunk",
         label: "Cyberpunk",
-        bg: "hsl(258,40%,6%)",
-        primary: "hsl(315,95%,64%)",
-        dark: true,
     },
     ThemeView {
         name: "pastel",
         label: "Pastel",
-        bg: "hsl(285,45%,97%)",
-        primary: "hsl(330,55%,42%)",
-        dark: false,
     },
     ThemeView {
         name: "terminal",
         label: "Terminal",
-        bg: "hsl(120,10%,5%)",
-        primary: "hsl(120,90%,50%)",
-        dark: true,
     },
     ThemeView {
         name: "topo",
         label: "Topografisch",
-        bg: "hsl(42,32%,95%)",
-        primary: "hsl(158,42%,24%)",
-        dark: false,
+    },
+    ThemeView {
+        name: "high-contrast",
+        label: "Hoog contrast",
+    },
+    ThemeView {
+        name: "sepia",
+        label: "Sepia",
+    },
+    ThemeView {
+        name: "blueprint",
+        label: "Blauwdruk",
+    },
+    ThemeView {
+        name: "solstice",
+        label: "Zonnewende",
     },
 ];
 
-/// One theme as the picker needs it.
+/// One theme as the picker's markup needs it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ThemeView {
     pub name: &'static str,
-    /// Shown to the reader. Dutch, because the package's labels are Dutch
-    /// and Kenny asked for these exact themes rather than a translation.
+    /// Shown to the reader. Dutch, because the package's labels are Dutch.
     pub label: &'static str,
-    pub bg: &'static str,
-    pub primary: &'static str,
-    pub dark: bool,
 }
 
 /// Templates are embedded in the binary, so the image stays a single file

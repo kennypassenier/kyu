@@ -1247,13 +1247,27 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 /// image needs no filesystem layout.
 const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
 const APP_JS: &str = include_str!("../../static/app.js");
-/// The house themes, vendored verbatim from `@kp-soft/themes` v0.1.1 — the
-/// shared package JobTracker and kp-soft use. Never edited here.
+// ── @kp-soft/themes v1.0.0, vendored VERBATIM ──────────────────────────
+//
+// kyu has no npm and no build step, so the shared package cannot be a
+// dependency the way it is in JobTracker. These five files are byte-for-byte
+// copies of the v1.0.0 tag, never edited here: `.claude/hooks/gates.sh`
+// compares each one against ~/Projects/kp-themes and refuses the commit when
+// they differ, which is what keeps a copy from going stale in silence.
+//
+// v1.0.0 ships the framework-free channel kyu asked for, so the hand-written
+// picker this project carried in 2.2.0 is gone: the behaviour now comes from
+// the package that owns it.
 const THEMES_CSS: &str = include_str!("../../static/themes.css");
-/// kyu's own mapping of those tokens onto Bootstrap, kept separate so
-/// re-copying the upstream file never overwrites it.
+const COMPONENTS_CSS: &str = include_str!("../../static/components.css");
+const THEME_CORE_JS: &str = include_str!("../../static/theme-core.js");
+const THEME_PICKER_JS: &str = include_str!("../../static/theme-picker.js");
+const THEME_REGISTRY_JS: &str = include_str!("../../static/theme-registry.js");
+
+/// kyu's OWN file, not vendored: it maps the package's tokens onto
+/// Bootstrap's `--bs-*` variables. Kept separate so re-copying the upstream
+/// stylesheets never overwrites it.
 const THEME_BRIDGE_CSS: &str = include_str!("../../static/theme-bridge.css");
-const THEME_JS: &str = include_str!("../../static/theme.js");
 
 /// A short fingerprint of the assets, appended to their URLs in the
 /// templates.
@@ -1270,8 +1284,11 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
         .bytes()
         .chain(APP_JS.bytes())
         .chain(THEMES_CSS.bytes())
+        .chain(COMPONENTS_CSS.bytes())
+        .chain(THEME_CORE_JS.bytes())
+        .chain(THEME_PICKER_JS.bytes())
+        .chain(THEME_REGISTRY_JS.bytes())
         .chain(THEME_BRIDGE_CSS.bytes())
-        .chain(THEME_JS.bytes())
     {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
@@ -1289,14 +1306,22 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
         "bootstrap.min.css" => (BOOTSTRAP_CSS, "text/css; charset=utf-8"),
         "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
         "themes.css" => (THEMES_CSS, "text/css; charset=utf-8"),
+        "components.css" => (COMPONENTS_CSS, "text/css; charset=utf-8"),
         "theme-bridge.css" => (THEME_BRIDGE_CSS, "text/css; charset=utf-8"),
-        "theme.js" => (THEME_JS, "text/javascript; charset=utf-8"),
+        // The picker is an ES module importing ./theme-core.js, which
+        // imports ./theme-registry.js. Served flat under /static, those
+        // relative specifiers resolve here, so all three must be reachable
+        // or the picker fails to load with nothing on the page to say why.
+        "theme-core.js" => (THEME_CORE_JS, "text/javascript; charset=utf-8"),
+        "theme-picker.js" => (THEME_PICKER_JS, "text/javascript; charset=utf-8"),
+        "theme-registry.js" => (THEME_REGISTRY_JS, "text/javascript; charset=utf-8"),
         _ => {
             return ApiError::new(
                 StatusCode::NOT_FOUND,
                 format!("kyu serves no asset named {file:?}"),
-                "the dashboard needs only bootstrap.min.css, app.js, \
-                 themes.css, theme-bridge.css and theme.js."
+                "the dashboard needs bootstrap.min.css, app.js, themes.css, \
+                 components.css, theme-bridge.css, theme-core.js, \
+                 theme-picker.js and theme-registry.js."
                     .to_string(),
             )
             .into_response();

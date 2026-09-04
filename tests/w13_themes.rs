@@ -1,14 +1,15 @@
 //! [W13] The house themes and their picker.
 //!
-//! kyu uses `@kp-soft/themes` v0.1.1 — the shared package JobTracker and
-//! kp-soft use — so the same seven themes look the same everywhere and a
-//! choice made in one place feels like the same mechanism in the next.
+//! kyu consumes `@kp-soft/themes` v1.0.0 — the shared package JobTracker,
+//! almanac and kp-soft use — so the same eleven themes look the same
+//! everywhere and a choice made in one app behaves the same in the next.
 //!
-//! kyu cannot USE the package: it has no npm and no build step, and the
-//! package ships a React hook and a JSX component. What it can do, and what
-//! these tests pin, is honour the same contract: the same seven themes, the
-//! same storage key, the same default. That contract is shared across
-//! projects, so it must not be possible to rename it here by accident.
+//! Since v1.0.0 the package ships the framework-free channel kyu needed, so
+//! the picker's behaviour is no longer kyu's to reimplement: the module is
+//! vendored verbatim and attaches to markup kyu's server writes. What these
+//! tests pin is the seam between the two — the contract attributes, and the
+//! fact that the theme list kyu renders and the list the package generated
+//! still agree. That agreement is the thing a vendored copy loses silently.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -62,84 +63,119 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
     (Hub { addr }, dir)
 }
 
-const THEMES: [(&str, &str, bool); 7] = [
-    ("formal", "Formeel", false),
-    ("light", "Licht", false),
-    ("dark", "Donker", true),
-    ("cyberpunk", "Cyberpunk", true),
-    ("pastel", "Pastel", false),
-    ("terminal", "Terminal", true),
-    ("topo", "Topografisch", false),
-];
+/// The eleven names, read out of the package's own generated registry
+/// rather than written here: a literal list in this test would be one more
+/// copy to go stale, which is the failure the package removed in v1.0.0.
+fn themes_from_registry(registry: &str) -> Vec<String> {
+    registry
+        .split("name: '")
+        .skip(1)
+        .filter_map(|rest| rest.split('\'').next())
+        .map(str::to_string)
+        .collect()
+}
 
 #[tokio::test]
-async fn w13_the_picker_offers_all_seven_themes_with_their_swatches() {
+async fn w13_the_picker_offers_exactly_the_themes_the_package_defines() {
+    // The seam: kyu renders the menu server-side (a menu built by
+    // JavaScript is an empty box on first paint), so its list and the
+    // package's generated one are two things that must agree. Comparing
+    // them here means a vendored update that adds or renames a theme
+    // cannot leave the picker quietly behind.
+    let (hub, _dir) = spawn().await;
+    let page = hub.text("/").await;
+    let registry = hub.text("/static/theme-registry.js").await;
+
+    let expected = themes_from_registry(&registry);
+    assert_eq!(
+        expected.len(),
+        11,
+        "the package should define eleven themes; found {expected:?}"
+    );
+
+    for name in &expected {
+        assert!(
+            page.contains(&format!("data-kp-theme=\"{name}\"")),
+            "the picker must offer {name}"
+        );
+        assert!(
+            page.contains(&format!("class=\"kp-swatch\" data-theme=\"{name}\"")),
+            "and {name} must get a swatch that wears the theme itself, \
+             rather than a colour copied out of the stylesheet"
+        );
+    }
+    assert_eq!(
+        page.matches("data-kp-theme=\"").count(),
+        expected.len(),
+        "and it must offer no themes the package does not define"
+    );
+}
+
+#[tokio::test]
+async fn w13_the_markup_carries_the_packages_contract_attributes() {
+    // Every one of these is a contract value of @kp-soft/themes (their
+    // TH26): the vendored module attaches to them. Renaming one here would
+    // leave a picker that renders perfectly and does nothing at all.
     let (hub, _dir) = spawn().await;
     let page = hub.text("/").await;
 
-    for (name, label, dark) in THEMES {
+    for attribute in [
+        "data-kp-theme-picker",
+        "data-kp-theme-status",
+        "class=\"kp-swatch\"",
+        "class=\"kp-menu\"",
+    ] {
         assert!(
-            page.contains(&format!("data-theme=\"{name}\"")),
-            "the picker must offer {name}"
-        );
-        assert!(page.contains(label), "and name it in Dutch as {label:?}");
-        assert!(
-            page.contains(&format!(
-                "data-theme=\"{name}\" data-dark=\"{}\"",
-                if dark { "true" } else { "false" }
-            )),
-            "{name} must be marked dark={dark}, which is what drives the \
-             .dark class and Bootstrap's own dark mode"
+            page.contains(attribute),
+            "the markup must carry {attribute}"
         );
     }
     assert!(
-        page.matches("theme-picker__swatch").count() == 7,
-        "every theme gets a swatch previewing it without activating it"
-    );
-    assert!(
-        page.contains("linear-gradient(135deg,"),
-        "and the swatch is the package's own two-tone gradient"
+        page.contains("type=\"module\" src=\"/static/theme-picker.js"),
+        "and load the package's picker as a module, which is how it attaches"
     );
 }
 
 #[tokio::test]
 async fn w13_the_storage_contract_matches_the_shared_package() {
-    // The one thing that must never drift silently: JobTracker, kp-soft and
-    // kyu all write the SAME key with the SAME values, so behind one
-    // hostname the choice follows you between apps. A rename here would be
-    // invisible until someone noticed their theme "not sticking".
+    // What must never drift silently: JobTracker, almanac, kp-soft and kyu
+    // all write the SAME key with the SAME values, so behind one hostname a
+    // choice follows you between apps. Read from the vendored registry, so
+    // this asserts what kyu actually serves rather than what it intended.
     let (hub, _dir) = spawn().await;
-    let script = hub.text("/static/theme.js").await;
+    let registry = hub.text("/static/theme-registry.js").await;
 
     assert!(
-        script.contains("'theme'"),
-        "the localStorage key is 'theme', exactly as the package uses it"
+        registry.contains("STORAGE_KEY = 'theme'"),
+        "the localStorage key is 'theme'"
     );
     assert!(
-        script.contains("'formal'"),
-        "and the default theme is formal, as in the package"
-    );
-    assert!(
-        script.contains("classList.toggle('dark'"),
-        "dark themes also carry the .dark class the package sets"
+        registry.contains("DEFAULT_THEME = 'formal'"),
+        "and the default theme is formal"
     );
 
-    // The head script applies the stored theme before first paint.
     let page = hub.text("/").await;
     assert!(
         page.contains("localStorage.getItem('theme')"),
-        "the no-flash script reads the same key"
+        "the no-flash snippet in <head> reads that same key before first paint"
     );
 }
 
 #[tokio::test]
-async fn w13_the_theme_assets_are_served_and_nothing_else_is() {
+async fn w13_the_module_chain_is_reachable_and_nothing_else_is() {
+    // theme-picker.js imports ./theme-core.js, which imports
+    // ./theme-registry.js. Served flat, those relative specifiers resolve
+    // under /static — so a missing one breaks the picker with nothing on the
+    // page to say why.
     let (hub, _dir) = spawn().await;
 
     for (path, expected) in [
         ("/static/themes.css", "text/css"),
+        ("/static/components.css", "text/css"),
         ("/static/theme-bridge.css", "text/css"),
-        ("/static/theme.js", "text/javascript"),
+        ("/static/theme-core.js", "text/javascript"),
+        ("/static/theme-picker.js", "text/javascript"),
+        ("/static/theme-registry.js", "text/javascript"),
     ] {
         let response = hub.get(path).await;
         assert_eq!(response.status(), 200, "{path} must be served");
@@ -155,8 +191,8 @@ async fn w13_the_theme_assets_are_served_and_nothing_else_is() {
         );
     }
 
-    // The allowlist is the whole defence of this handler; adding assets must
-    // not have turned it into a path join.
+    // The allowlist is the whole defence of this handler; adding five assets
+    // must not have turned it into a path join.
     assert_eq!(
         hub.get("/static/themes.css/../../etc/passwd")
             .await
@@ -164,19 +200,26 @@ async fn w13_the_theme_assets_are_served_and_nothing_else_is() {
         404,
         "the static handler still serves only what it names"
     );
+    assert_eq!(
+        hub.get("/static/theme.js").await.status(),
+        404,
+        "and the hand-written picker of 2.2.0 is gone, not merely unused"
+    );
 }
 
 #[tokio::test]
-async fn w13_every_theme_block_the_picker_offers_exists_in_the_stylesheet() {
-    // The picker is rendered from Rust, the tokens come from a vendored copy
-    // of someone else's file. If those two ever disagree, a theme would be
-    // selectable and do nothing at all.
+async fn w13_every_theme_the_picker_offers_exists_in_the_stylesheet() {
+    // A theme could be selectable and do nothing at all if the registry and
+    // the stylesheet disagreed — they are separate files in the package, and
+    // kyu vendored both.
     let (hub, _dir) = spawn().await;
     let css = hub.text("/static/themes.css").await;
+    let registry = hub.text("/static/theme-registry.js").await;
 
-    for (name, _, _) in THEMES {
+    for name in themes_from_registry(&registry) {
         assert!(
-            css.contains(&format!("[data-theme='{name}']")),
+            css.contains(&format!("data-theme='{name}'"))
+                || css.contains(&format!("data-theme=\"{name}\"")),
             "themes.css must define {name}; the picker offers it"
         );
     }

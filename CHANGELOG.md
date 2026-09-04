@@ -11,7 +11,28 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.2.0.
+Nothing since 2.3.0.
+
+## [2.3.0] — 2026-09-04
+
+### Changed
+
+- **The themes come from the package's own picker now** (W13). kp-themes
+  v1.0.0 ships the framework-free channel kyu asked for, so the switcher
+  behaviour kyu hand-wrote in 2.2.0 is gone: five files are vendored verbatim
+  and the module attaches to markup kyu's server writes. One implementation
+  of that behaviour instead of two, in the project that owns it.
+
+- **Eleven themes instead of seven.** high-contrast, sepia, blueprint and
+  solstice join formal, light, dark, cyberpunk, pastel, terminal and topo.
+
+- **Swatches wear the theme they preview.** v1.0.0 removed the colour copies
+  that used to live in JavaScript, so a swatch reads the live custom
+  properties instead of a duplicate that drifts when a palette is adjusted.
+  kyu's own theme list shrank to names and labels for the same reason.
+
+Nothing about the HTTP contract, the environment variables or the deployment
+changed. Upgrading is replacing the binary.
 
 ## [2.2.0] — 2026-09-02
 
