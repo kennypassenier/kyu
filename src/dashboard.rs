@@ -27,7 +27,7 @@ use crate::store::queries::{
 /// message; the rest is announced rather than dropped in silence (AR11).
 pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
 
-/// The house themes, from `@kp-soft/themes` **v1.0.0** — the shared package
+/// The house themes, from `@kp-soft/themes` **v1.2.0** — the shared package
 /// JobTracker, almanac and kp-soft use.
 ///
 /// Only the name and the label. v1.0.0 removed the colour copies on purpose

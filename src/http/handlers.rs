@@ -1247,11 +1247,11 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 /// image needs no filesystem layout.
 const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
 const APP_JS: &str = include_str!("../../static/app.js");
-// ── @kp-soft/themes v1.0.0, vendored VERBATIM ──────────────────────────
+// ── @kp-soft/themes v1.2.0, vendored VERBATIM ──────────────────────────
 //
 // kyu has no npm and no build step, so the shared package cannot be a
 // dependency the way it is in JobTracker. These five files are byte-for-byte
-// copies of the v1.0.0 tag, never edited here: `.claude/hooks/gates.sh`
+// copies of the v1.2.0 tag, never edited here: `.claude/hooks/gates.sh`
 // compares each one against ~/Projects/kp-themes and refuses the commit when
 // they differ, which is what keeps a copy from going stale in silence.
 //
