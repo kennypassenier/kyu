@@ -83,7 +83,7 @@ fn free_port() -> u16 {
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
     let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
-        .env("KYU_DATA_DIR", data_dir)
+        .env("KYU_STATE_DIR", data_dir)
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG", "warn")
         .spawn()
@@ -237,30 +237,4 @@ async fn w12_an_in_flight_long_poll_is_answered_rather_than_cut_off() {
         "and answered properly: nothing was published, so 204"
     );
     assert_eq!(hub.wait_for_exit(Duration::from_secs(15)), Some(0));
-}
-
-#[tokio::test]
-async fn w12_the_shutdown_budget_is_configurable_and_refuses_nonsense() {
-    // Standing rule of this ecosystem: an operational limit is never a bare
-    // number in the source. And per standing rule 12 a typo must be refused
-    // rather than quietly replaced by the default.
-    use kyu::config::{DEFAULT_SHUTDOWN_TIMEOUT_MS, parse_shutdown_timeout};
-
-    assert_eq!(
-        parse_shutdown_timeout(None).unwrap(),
-        DEFAULT_SHUTDOWN_TIMEOUT_MS
-    );
-    assert_eq!(parse_shutdown_timeout(Some("250")).unwrap(), 250);
-    assert_eq!(parse_shutdown_timeout(Some(" 250 ")).unwrap(), 250);
-
-    let refused = parse_shutdown_timeout(Some("ten seconds")).expect_err("must be refused");
-    assert!(
-        refused.to_string().contains("KYU_SHUTDOWN_TIMEOUT_MS"),
-        "the error names the variable: {refused}"
-    );
-    let zero = parse_shutdown_timeout(Some("0")).expect_err("zero must be refused");
-    assert!(
-        zero.to_string().contains("10000"),
-        "and carries the remedy (standing rule 11): {zero}"
-    );
 }

@@ -295,12 +295,22 @@ promotes a message, so redelivery does not wait for the next poll.
 
 ## AR6 · Configuration: environment only *(critic-cleared)*
 
-`KYU_DATA_DIR`, `KYU_LISTEN`, `KYU_MAX_BODY_BYTES`, log
+`KYU_STATE_DIR`, `KYU_LISTEN`, `KYU_MAX_BODY_BYTES`, log
 level/format, plus global *defaults* (idle-flag/archive thresholds,
 default retention). Only what the process needs before it can open the
 store; all per-topic/per-subscription policy (K7, K9) lives in the
 database, set via API/dashboard. Rejected: a TOML file (a second place
 to look).
+
+**Amendment (3.0.0, chassis migration, 2026-09-05):** the transport knobs
+(`KYU_LISTEN`, `KYU_STATE_DIR` — the 2.x `KYU_DATA_DIR`, still honoured
+with a warning —, `KYU_MAX_BODY_BYTES`, `KYU_SHUTDOWN_TIMEOUT_MS`,
+`KYU_LOG*`, and the kit's new ones) are read by chassis from the same
+environment; the hub's own settings (door pair, defaults) stay the hub's
+env reads. The kit also reads an optional `<state_dir>/config.toml` for
+its knobs. The hub itself still has no config file, and nothing about it
+requires one — "environment only" holds for everything an operator must
+set.
 
 ## AR7 · Time and identifiers
 
@@ -350,7 +360,12 @@ current state in its WHERE clause.
 
 ## AR10 · Updates and migrations
 
-No self-updater: updates are image pulls via compose (K13). At startup
+No self-updater: updates are image pulls via compose (K13). **Amended
+3.0.0 (chassis migration):** the native deployment on CT 109 updates
+through the kit's supervised `kyu update` (signed release, `kyu.prev`
+kept, exit 0/1), called by the homelab's nightly — never autonomously
+unless `KYU_UPDATE_MODE` says so; the image path stays "pull a new
+image". At startup
 forward-only migrations apply inside a transaction; opening a schema
 NEWER than the binary knows is refused with a remedy.
 

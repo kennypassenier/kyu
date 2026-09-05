@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use kyu::engine::Engine;
 use kyu::engine::clock::SystemClock;
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 
@@ -35,7 +35,7 @@ async fn spawn_server() -> SocketAddr {
         .expect("a bound socket has an address");
 
     tokio::spawn(async move {
-        axum::serve(listener, router(state))
+        axum::serve(listener, router_with_probes(state))
             .await
             .expect("the test server must not fail");
     });

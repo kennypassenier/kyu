@@ -19,7 +19,7 @@ use kyu::config::Auth;
 use kyu::crypto::SecretKey;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 
@@ -70,7 +70,7 @@ async fn spawn(protected: bool) -> (Hub, tempfile::TempDir) {
         .expect("a port");
     let addr = listener.local_addr().expect("an address");
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
 
     (Hub { addr }, dir)

@@ -1,30 +1,18 @@
-//! Process configuration (AR6): environment variables only, because a
-//! config file would be a second place to look. Everything per-topic or
-//! per-subscription is *policy* (K7, K9) and lives in the database
-//! instead, set through the API or the dashboard.
+//! Process configuration (AR6, amended 3.0.0): the hub's own settings are
+//! environment variables only. The transport knobs — listen address, state
+//! directory, body limit, shutdown budget, logging — moved to chassis,
+//! which reads them from the same environment (and, optionally, from the
+//! kit's `config.toml`). Everything per-topic or per-subscription is
+//! *policy* (K7, K9) and lives in the database instead, set through the
+//! API or the dashboard.
 
-use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
 use crate::crypto::SecretKey;
 use crate::engine::Defaults;
 
-pub const DEFAULT_LISTEN: &str = "0.0.0.0:8080";
-pub const DEFAULT_DATA_DIR: &str = "/data";
-pub const DEFAULT_MAX_BODY_BYTES: u64 = 1024 * 1024;
-
-/// How long a graceful shutdown may take before the hub stops waiting and
-/// exits anyway (W12).
-///
-/// Ten seconds is long enough for in-flight requests to finish and for a
-/// WAL checkpoint on a store far larger than this hub is meant to hold, and
-/// short enough that systemd's own patience is never the thing that ends it.
-/// It is configurable because how long a stop may take is an operational
-/// question, not a property of the code: a host with slow storage may want
-/// more, and a laptop running the test suite wants less.
-pub const DEFAULT_SHUTDOWN_TIMEOUT_MS: u64 = 10_000;
 /// Shortest bootstrap token we accept. Long enough that a guess is not a
 /// realistic attack, short enough to type once into a compose file.
 pub const MIN_TOKEN_LEN: usize = 16;
@@ -34,14 +22,10 @@ pub const REVEAL_SECONDS: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    pub listen: SocketAddr,
+    /// The state root the kit resolved (`KYU_STATE_DIR`, 2.x `KYU_DATA_DIR`).
     pub data_dir: PathBuf,
+    /// The kit's body limit, mirrored so the publish handler can name it.
     pub max_body_bytes: u64,
-    /// How long a graceful shutdown may take before the hub gives up and
-    /// exits anyway (W12). Never blocks forever: a stop that hangs is worse
-    /// than a stop that is incomplete, because systemd resolves the first
-    /// one with SIGKILL after a delay nobody remembers configuring.
-    pub shutdown_timeout_ms: u64,
     /// Hub-wide defaults for things a topic or subscription can override
     /// (AR6): retention and the idle thresholds.
     pub defaults: Defaults,
@@ -139,122 +123,44 @@ impl Auth {
 }
 
 impl Config {
-    pub fn from_env() -> Result<Self> {
-        let listen = std::env::var("KYU_LISTEN").ok();
-        let data_dir = std::env::var("KYU_DATA_DIR").ok();
-        let max_body = std::env::var("KYU_MAX_BODY_BYTES").ok();
-        let mut config = Self::parse(listen.as_deref(), data_dir.as_deref(), max_body.as_deref())?;
-
-        config.defaults = Defaults {
-            retention_ms: duration_from_env("KYU_RETENTION_MS", config.defaults.retention_ms)?,
-            idle_flag_ms: duration_from_env(
-                "KYU_IDLE_FLAG_MS",
-                Some(config.defaults.idle_flag_ms),
-            )?
-            .unwrap_or(config.defaults.idle_flag_ms),
-            idle_archive_ms: duration_from_env(
-                "KYU_IDLE_ARCHIVE_MS",
-                Some(config.defaults.idle_archive_ms),
-            )?
-            .unwrap_or(config.defaults.idle_archive_ms),
-        };
-        config.auth = Auth::parse(
+    /// The hub's own settings from the environment, on top of what the kit
+    /// resolved (3.0.0). Present-but-invalid values fail loudly with a
+    /// remedy (AR4, standing rules 11 and 12) rather than falling back.
+    pub fn from_kit(state_dir: &Path, max_body_bytes: u64) -> Result<Self> {
+        Self::from_values(
+            state_dir,
+            max_body_bytes,
             std::env::var("KYU_TOKEN").ok().as_deref(),
             std::env::var("KYU_SECRET_KEY").ok().as_deref(),
-        )?;
-        config.shutdown_timeout_ms =
-            parse_shutdown_timeout(std::env::var("KYU_SHUTDOWN_TIMEOUT_MS").ok().as_deref())?;
-        Ok(config)
+        )
     }
 
-    /// Parses configuration from raw values, so tests never have to mutate
-    /// the process environment. Absent values take the documented
-    /// defaults; present-but-invalid values fail loudly with a remedy
-    /// (AR4, standing rules 11 and 12) rather than falling back.
-    pub fn parse(
-        listen: Option<&str>,
-        data_dir: Option<&str>,
-        max_body_bytes: Option<&str>,
+    /// `from_kit` with the door pair passed in, so tests never mutate the
+    /// process environment.
+    pub fn from_values(
+        state_dir: &Path,
+        max_body_bytes: u64,
+        token: Option<&str>,
+        key: Option<&str>,
     ) -> Result<Self> {
-        let listen_raw = listen.unwrap_or(DEFAULT_LISTEN);
-        let listen: SocketAddr = listen_raw.parse().with_context(|| {
-            format!(
-                "KYU_LISTEN is not a socket address: {listen_raw:?}. \
-                 Set it as HOST:PORT (for example 0.0.0.0:8080), \
-                 or unset it to use the default {DEFAULT_LISTEN}."
-            )
-        })?;
-
-        let data_dir = PathBuf::from(data_dir.unwrap_or(DEFAULT_DATA_DIR));
-        if data_dir.as_os_str().is_empty() {
-            bail!(
-                "KYU_DATA_DIR is empty. Set it to the directory holding \
-                 the store (for example /data), or unset it to use the \
-                 default {DEFAULT_DATA_DIR}."
-            );
-        }
-
-        let max_body_bytes = match max_body_bytes {
-            None => DEFAULT_MAX_BODY_BYTES,
-            Some(raw) => {
-                let parsed: u64 = raw.parse().with_context(|| {
-                    format!(
-                        "KYU_MAX_BODY_BYTES is not a whole number of bytes: {raw:?}. \
-                         Set it to a byte count (for example 1048576 for 1 MiB), \
-                         or unset it to use the default {DEFAULT_MAX_BODY_BYTES}."
-                    )
-                })?;
-                if parsed == 0 {
-                    bail!(
-                        "KYU_MAX_BODY_BYTES is 0, which would reject every \
-                         message. Set it to a byte count above zero (for example \
-                         1048576 for 1 MiB), or unset it to use the default \
-                         {DEFAULT_MAX_BODY_BYTES}."
-                    );
-                }
-                parsed
-            }
+        let defaults = Defaults::default();
+        let defaults = Defaults {
+            retention_ms: duration_from_env("KYU_RETENTION_MS", defaults.retention_ms)?,
+            idle_flag_ms: duration_from_env("KYU_IDLE_FLAG_MS", Some(defaults.idle_flag_ms))?
+                .unwrap_or(defaults.idle_flag_ms),
+            idle_archive_ms: duration_from_env(
+                "KYU_IDLE_ARCHIVE_MS",
+                Some(defaults.idle_archive_ms),
+            )?
+            .unwrap_or(defaults.idle_archive_ms),
         };
-
         Ok(Self {
-            listen,
-            data_dir,
+            data_dir: state_dir.to_path_buf(),
             max_body_bytes,
-            shutdown_timeout_ms: DEFAULT_SHUTDOWN_TIMEOUT_MS,
-            defaults: Defaults::default(),
-            auth: Auth::Unprotected,
+            defaults,
+            auth: Auth::parse(token, key)?,
         })
     }
-}
-
-/// Parses `KYU_SHUTDOWN_TIMEOUT_MS`.
-///
-/// Separate from `Config::parse` so it can be tested without touching the
-/// process environment, and refusing rather than falling back on nonsense
-/// (standing rule 12): a shutdown budget of zero would make every stop look
-/// like a timeout, and a typo silently becoming ten seconds is exactly the
-/// kind of quiet substitution that makes an operator distrust the knob.
-pub fn parse_shutdown_timeout(raw: Option<&str>) -> Result<u64> {
-    let Some(raw) = raw else {
-        return Ok(DEFAULT_SHUTDOWN_TIMEOUT_MS);
-    };
-    let parsed: u64 = raw.trim().parse().with_context(|| {
-        format!(
-            "KYU_SHUTDOWN_TIMEOUT_MS is not a whole number of milliseconds: \
-             {raw:?}. Set it to a millisecond count (for example 10000 for ten \
-             seconds), or unset it to use the default \
-             {DEFAULT_SHUTDOWN_TIMEOUT_MS}."
-        )
-    })?;
-    if parsed == 0 {
-        bail!(
-            "KYU_SHUTDOWN_TIMEOUT_MS is 0, which would abandon every shutdown \
-             before it started. Set it above zero (for example 10000 for ten \
-             seconds), or unset it to use the default \
-             {DEFAULT_SHUTDOWN_TIMEOUT_MS}."
-        );
-    }
-    Ok(parsed)
 }
 
 /// Reads a millisecond duration from the environment. The literal `never`
@@ -286,42 +192,6 @@ fn duration_from_env(name: &str, fallback: Option<i64>) -> Result<Option<i64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn l0_defaults_apply_when_nothing_is_set() {
-        let config = Config::parse(None, None, None).expect("defaults must parse");
-        assert_eq!(config.listen.to_string(), DEFAULT_LISTEN);
-        assert_eq!(config.data_dir, PathBuf::from(DEFAULT_DATA_DIR));
-        assert_eq!(config.max_body_bytes, DEFAULT_MAX_BODY_BYTES);
-    }
-
-    #[test]
-    fn l0_explicit_values_are_used() {
-        let config = Config::parse(Some("127.0.0.1:9000"), Some("/srv/kyu"), Some("2048"))
-            .expect("explicit values must parse");
-        assert_eq!(config.listen.to_string(), "127.0.0.1:9000");
-        assert_eq!(config.data_dir, PathBuf::from("/srv/kyu"));
-        assert_eq!(config.max_body_bytes, 2048);
-    }
-
-    #[test]
-    fn l0_invalid_listen_fails_with_a_remedy() {
-        let error = Config::parse(Some("not-an-address"), None, None)
-            .expect_err("an invalid address must not fall back to the default");
-        let message = format!("{error:#}");
-        assert!(message.contains("KYU_LISTEN"), "names the variable");
-        assert!(message.contains("HOST:PORT"), "carries a remedy: {message}");
-    }
-
-    #[test]
-    fn l0_invalid_max_body_fails_with_a_remedy() {
-        let error = Config::parse(None, None, Some("1 MiB"))
-            .expect_err("an unparseable byte count must not fall back");
-        assert!(
-            format!("{error:#}").contains("byte count"),
-            "carries a remedy"
-        );
-    }
 
     #[test]
     fn p7_no_token_and_no_key_runs_unprotected() {
@@ -404,15 +274,5 @@ mod tests {
         let auth = Auth::parse(None, None).expect("unprotected parses");
         assert!(!auth.matches_bootstrap(""));
         assert!(!auth.matches_bootstrap("anything"));
-    }
-
-    #[test]
-    fn l0_zero_max_body_is_refused() {
-        let error = Config::parse(None, None, Some("0"))
-            .expect_err("zero would reject every message and must be refused");
-        assert!(
-            format!("{error:#}").contains("above zero"),
-            "carries a remedy"
-        );
     }
 }

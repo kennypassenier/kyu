@@ -174,7 +174,7 @@ consumer is an environment variable.
 | Variable | Default | What it does |
 |---|---|---|
 | `KYU_LISTEN` | `0.0.0.0:8080` | Address to bind. |
-| `KYU_DATA_DIR` | `/data` | Where the store lives. |
+| `KYU_STATE_DIR` | `/var/lib/kyu` (the image sets `/data`) | Where the store lives. 3.0.0: was `KYU_DATA_DIR`, still honoured with a warning. |
 | `KYU_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
 | `KYU_LOG` | `info` | Log filter (`tracing` syntax). |
 | `KYU_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |

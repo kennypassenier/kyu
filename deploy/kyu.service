@@ -1,43 +1,71 @@
+# kyu — the golden unit (AR17), as the homelab's answers shaped it.
+#
+# StartLimitIntervalSec/Burst belong in [Unit]: in [Service] systemd
+# ignores them silently ("Unknown key") and a crash loop stops after five
+# tries. Wants= not Requires= for the network, so a slow link after a
+# power cut does not park the unit. Type=notify: the unit is active only
+# once the service sent READY=1 after binding (W9). ReadWritePaths covers
+# the binary's directory too, or self-update verifies, downloads and then
+# fails at the swap.
+#
+# Install: install -D -m755 kyu /opt/kyu/bin/kyu (the
+# service owns that directory: chown -R kyu: /opt/kyu), copy
+# this file to /etc/systemd/system/kyu.service, create the user
+# (kyu), the state dir (/var/lib/kyu) and the env file
+# (/etc/kyu/kyu.env, 0640 root:kyu), then
+# systemctl enable --now kyu.
+
 [Unit]
-Description=kyu — durable message hub
-Documentation=https://github.com/kennypassenier/kyu
-After=network-online.target
+Description=kyu — durable message hub — Accepts a message in one shape and delivers it in another, where the configuration chooses the destination
 Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+StartLimitBurst=0
 
 [Service]
-Type=simple
+Type=notify
 User=kyu
 Group=kyu
-# Config and data both live on the host now, bind-mounted in, so
-# destroying this container costs nothing (Kenny, P1 2026-08-31).
+# Config and data both live on the host, bind-mounted in (Kenny, P1
+# 2026-08-31), so destroying this container costs nothing. The env file sets
+# KYU_STATE_DIR=/appdata/kyu/kyu-config; the kit's default would be /var/lib/kyu.
 EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
-ExecStart=/usr/local/bin/kyu
-
-# Kenny asked for it to come back from trouble: always, not only on failure,
-# with a short pause so a crash loop cannot spin the CPU.
+WorkingDirectory=/appdata/kyu/kyu-config
+ExecStartPre=/opt/kyu/bin/kyu --check
+ExecStart=/opt/kyu/bin/kyu
 Restart=always
-RestartSec=2s
-# W12: kyu finishes in-flight requests and checkpoints the store on
-# SIGTERM, bounded by KYU_SHUTDOWN_TIMEOUT_MS (default 10s). systemd waits
-# comfortably longer, so its patience is never what ends a shutdown.
-TimeoutStopSec=30
-# Never give up. systemd's default is to stop trying after a few restarts in
-# a short window, which turns a transient fault into a permanent outage —
-# exactly what this service is here to avoid.
-StartLimitIntervalSec=0
-
-# The hub needs nothing but its data directory and a socket.
-NoNewPrivileges=true
-PrivateTmp=true
-PrivateDevices=true
+RestartSec=5s
+KillSignal=SIGTERM
+# Above the service's shutdown_timeout_ms (default 10 s), so N1's bound
+# is the one that decides, not systemd's.
+TimeoutStopSec=60
+# Mirrored so `--check` can warn when the shutdown timeout would outlive it (critic #20).
+Environment=KYU_TIMEOUT_STOP_SECS=60
+NoNewPrivileges=yes
+PrivateTmp=yes
 ProtectSystem=strict
-ProtectHome=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-RestrictSUIDSGID=true
-LockPersonality=true
-MemoryDenyWriteExecute=true
-ReadWritePaths=/appdata/kyu/kyu-config
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=/appdata/kyu/kyu-config /var/lib/kyu-pre-update /opt/kyu/bin
+# S2: the swap needs write access to the binary's OWN directory only; a
+# code-execution bug can then replace this service's binary, not latch or
+# its neighbours. The rest is systemd's free hardening for a network daemon.
+UMask=0077
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+PrivateDevices=yes
+ProtectProc=invisible
 
 [Install]
 WantedBy=multi-user.target

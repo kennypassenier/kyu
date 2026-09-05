@@ -4,28 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}kyu{% endblock %}</title>
-<!-- The package's NO_FLASH_SNIPPET, verbatim from static/no-flash.js. Without
-     it the page renders in `formal` and then jumps to the visitor's theme.
-     kyu inlines the text rather than importing the module, which is what the
-     package prescribes for a server that writes its own HTML: a module
-     arrives too late to prevent the flash it exists to prevent.
-     Byte-for-byte on purpose — a test compares this against the vendored
-     file, so the two cannot drift. -->
-<script>
-(function () {
-    try {
-        var t = localStorage.getItem("theme");
-        if (t) document.documentElement.setAttribute("data-theme", t);
-    } catch (e) {}
-})();
-</script>
-<link rel="preconnect" href="https://fonts.bunny.net">
+<!-- The package's no-flash snippet, served as a plain (non-module) script:
+     the kit's theme-boot.js, byte-for-byte the snippet noFlashSnippet()
+     returns (a test checks). Without it the page renders in `formal` and
+     then jumps to the visitor's theme. Until 3.0.0 it was inlined; the kit's
+     CSP (script-src 'self') stops inline scripts, and a blocking classic
+     script in <head> still runs before first paint. -->
+<script src="/static/theme-boot.js?v={{ assets }}"></script>
+
 <!-- Three themes carry their own display face — formal wants Fraunces,
      cyberpunk Chakra Petch, terminal Share Tech Mono, which also becomes
      that theme's body font. Without this they fall back to Georgia and a
      generic monospace, and cyberpunk in particular reads as half-applied. -->
-<link rel="stylesheet"
-      href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|fraunces:600,700|share-tech-mono:400|chakra-petch:500,600,700">
+<link rel="stylesheet" href="/static/fonts.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/themes.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/components.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/kyu.css?v={{ assets }}">

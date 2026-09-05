@@ -1,40 +1,27 @@
-# Statically linked musl binary, so the runtime image can be
-# distroless/static: no shell, no libc, nonroot by default (T9). The
-# build stage keeps a C toolchain because L1 links SQLite into the binary
-# (rusqlite `bundled`, T2).
-FROM rust:1-alpine AS build
-
-RUN apk add --no-cache build-base
-
+# Two stages on the same Debian the LXCs run (T8, chassis 3.0.0): a glibc
+# binary that also works copied out of the image. The runtime stage has no
+# shell tools, so the container HEALTHCHECK uses the binary's own
+# --healthcheck. The state volume stays /data and the user keeps uid 65532
+# (distroless nonroot until 2.x), so an existing volume needs no chown.
+FROM rust:1.97-slim-trixie AS build
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends pkg-config libssl-dev git && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-# The dashboard templates are compiled into the binary (include_str!), so the
-# build needs them even though nothing is mounted at runtime.
 COPY templates ./templates
 COPY static ./static
 RUN cargo build --release --locked && strip target/release/kyu
 
-# /data must belong to the nonroot user before Docker creates the volume
-# from it, otherwise the store directory is root-owned and unwritable.
-RUN mkdir -p /empty-data
-
-FROM gcr.io/distroless/static:nonroot
-
+FROM debian:trixie-slim
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends ca-certificates libssl3t64 && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 65532 --home /data --shell /usr/sbin/nologin kyu \
+    && mkdir -p /data && chown kyu:kyu /data
 COPY --from=build /src/target/release/kyu /usr/local/bin/kyu
-COPY --from=build --chown=65532:65532 /empty-data /data
-
-ENV KYU_LISTEN=0.0.0.0:8080 \
-    KYU_DATA_DIR=/data
-
+USER kyu
+ENV KYU_LISTEN=0.0.0.0:8080 KYU_STATE_DIR=/data
 EXPOSE 8080
 VOLUME ["/data"]
-USER nonroot:nonroot
-
-# The image has no shell and no curl, so the binary probes itself (W6).
-# start-period must exceed the worst-case migration, or a restart loop could
-# kill a migration mid-flight (AR10).
+# Self-update is off inside an image by detection (AR8); updates are a new image.
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=60s \
     CMD ["/usr/local/bin/kyu", "--healthcheck"]
-
 ENTRYPOINT ["/usr/local/bin/kyu"]

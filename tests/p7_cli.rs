@@ -24,7 +24,7 @@ fn run(args: &[&str]) -> (Option<i32>, String) {
     let dir = tempfile::tempdir().expect("a temp dir");
     let mut child = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .args(args)
-        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_STATE_DIR", dir.path())
         // Port 0 is not bindable as a listener address here, so pick
         // something out of the way: if the binary wrongly starts serving, it
         // must not collide with anything real.
@@ -76,7 +76,14 @@ async fn p7_version_prints_a_version_and_exits() {
 async fn p7_help_lists_what_the_binary_accepts() {
     let (code, output) = run(&["--help"]);
     assert_eq!(code, Some(0), "--help must answer and exit: {output}");
-    for expected in ["--healthcheck", "--version", "KYU_TOKEN"] {
+    // 3.0.0: the kit's flags plus the hub's own environment (help_extra).
+    for expected in [
+        "--healthcheck",
+        "--version",
+        "--check",
+        "KYU_TOKEN",
+        "KYU_STATE_DIR",
+    ] {
         assert!(
             output.contains(expected),
             "help must mention {expected}: {output}"
@@ -87,9 +94,10 @@ async fn p7_help_lists_what_the_binary_accepts() {
 #[tokio::test]
 async fn p7_an_unknown_flag_is_refused_with_a_remedy() {
     let (code, output) = run(&["--serve-forever"]);
+    // 3.0.0: the kit exits 1 for every refusal (2.x used 2 here).
     assert_eq!(
         code,
-        Some(2),
+        Some(1),
         "an unknown flag must be refused, not ignored. Output: {output}"
     );
     assert!(
@@ -108,14 +116,14 @@ async fn p7_a_stray_positional_argument_is_refused_too() {
     // written by someone who assumed a config file. Starting the hub and
     // ignoring the path is the worst of the available answers.
     let (code, output) = run(&["/etc/kyu.conf"]);
-    assert_eq!(code, Some(2), "a stray argument must be refused: {output}");
+    assert_eq!(code, Some(1), "a stray argument must be refused: {output}");
     assert!(
         output.contains("/etc/kyu.conf"),
         "the refusal names it: {output}"
     );
     assert!(
-        output.contains("KYU_"),
-        "and points at the environment, which is where configuration lives: {output}"
+        output.contains("--help"),
+        "and points at --help, which lists the flags and the environment: {output}"
     );
 }
 

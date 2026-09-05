@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 
@@ -58,7 +58,7 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
         .expect("a port");
     let addr = listener.local_addr().expect("an address");
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
     (Hub { addr }, dir)
 }
@@ -204,10 +204,17 @@ async fn w13_the_storage_contract_matches_the_shared_package() {
         "and the default theme is formal"
     );
 
+    // 3.0.0: the snippet is a blocking plain script in <head> (the kit's
+    // theme-boot.js; its CSP stops inline scripts); it still reads that key.
     let page = hub.text("/").await;
     assert!(
-        page.contains("localStorage.getItem(\"theme\")"),
-        "the no-flash snippet in <head> reads that same key before first paint"
+        page.contains("<script src=\"/static/theme-boot.js?v="),
+        "the no-flash script is loaded in <head>"
+    );
+    let snippet = hub.text("/static/theme-boot.js").await;
+    assert!(
+        snippet.contains("localStorage.getItem(\"theme\")"),
+        "and it reads the shared key before first paint"
     );
 }
 
@@ -291,10 +298,10 @@ async fn w13_every_theme_the_picker_offers_exists_in_the_stylesheet() {
 
 #[tokio::test]
 async fn w13_the_no_flash_snippet_is_the_packages_own() {
-    // kyu inlines these lines in <head> instead of importing the module,
-    // because a module arrives too late to prevent the flash it exists to
-    // prevent. That inlining is a copy, and a copy is what this suite exists
-    // to guard: until 2.3.2 kyu carried a hand-written version, and the
+    // kyu loads these lines as a plain script in <head> instead of importing
+    // the module, because a module arrives too late to prevent the flash it
+    // exists to prevent. That file is a copy, and a copy is what this suite
+    // exists to guard: until 2.3.2 kyu carried a hand-written version, and the
     // package's own comment names kyu as the consumer whose home-grown copy
     // once grew a list of which themes are dark and had it wrong.
     //
@@ -309,9 +316,16 @@ async fn w13_the_no_flash_snippet_is_the_packages_own() {
     let page = hub.text("/").await;
     let snippet = no_flash_snippet(NO_FLASH_JS, REGISTRY_JS);
 
-    let at = page.find(&snippet).unwrap_or_else(|| {
-        panic!("the document head must inline the package's snippet verbatim:\n{snippet}")
-    });
+    // 3.0.0: no longer inlined — the kit's CSP forbids that — but the file
+    // the head loads must still BE the package's snippet, verbatim.
+    let served = hub.text("/static/theme-boot.js").await;
+    assert!(
+        served.contains(&snippet),
+        "/static/theme-boot.js must carry the package's snippet verbatim:\n{snippet}\n--- served:\n{served}"
+    );
+    let at = page
+        .find("<script src=\"/static/theme-boot.js?v=")
+        .expect("the document head must load the no-flash script");
 
     // Position is half of what the snippet is for. It has to run before the
     // stylesheet that would paint a light background under a visitor who

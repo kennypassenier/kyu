@@ -86,9 +86,8 @@ pub fn router(state: AppState) -> Router {
     // the two static assets the pages need. Everything else lives in the
     // protected router below, so forgetting to think about a new route
     // fails closed rather than open (W2).
+    // 3.0.0: /healthz and /metrics are the kit's (fed by `crate::kit`).
     let open = Router::new()
-        .route("/healthz", get(handlers::healthz))
-        .route("/metrics", get(handlers::metrics))
         .route("/static/{file}", get(handlers::static_asset))
         .route("/login", get(handlers::login_form).post(handlers::login))
         .route("/logout", post(handlers::logout));
@@ -152,4 +151,51 @@ pub fn router(state: AppState) -> Router {
     open.merge(protected)
         .layer(axum::middleware::from_fn(csrf::same_origin_only))
         .with_state(state)
+}
+
+/// [`router`] plus `/healthz` and `/metrics` as the kit serves them (3.0.0),
+/// for in-process tests and embedders that run the hub without `chassis::App`.
+/// The binary must NOT use this: the kit mounts the same two routes itself
+/// and axum refuses a second handler on a path.
+pub fn router_with_probes(state: AppState) -> Router {
+    use axum::response::IntoResponse;
+    use chassis::ScrapeSource;
+    use chassis::shell::health::{Health, healthz};
+
+    use crate::kit::{KyuMetrics, StoreSubsystem, SweeperSubsystem};
+
+    let health = Health::new(
+        env!("CARGO_PKG_VERSION"),
+        Duration::from_secs(2),
+        vec![
+            Arc::new(StoreSubsystem(state.engine.clone())),
+            Arc::new(SweeperSubsystem {
+                engine: state.engine.clone(),
+                heartbeat: state.heartbeat.clone(),
+            }),
+        ],
+    );
+    let metrics = Arc::new(KyuMetrics {
+        engine: state.engine.clone(),
+        heartbeat: state.heartbeat.clone(),
+    });
+    let probes = Router::new()
+        .route("/healthz", get(healthz).with_state(health))
+        .route(
+            "/metrics",
+            get(move || {
+                let metrics = metrics.clone();
+                async move {
+                    (
+                        [(
+                            axum::http::header::CONTENT_TYPE,
+                            "text/plain; version=0.0.4",
+                        )],
+                        metrics.scrape(),
+                    )
+                        .into_response()
+                }
+            }),
+        );
+    router(state).merge(probes)
 }

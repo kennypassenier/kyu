@@ -18,7 +18,7 @@ them, so no test, no gate and no review could ever look at them (F179).
 deploys kyu — on LXC 109 the homelab's adoption put it at
 `/appdata/kyu/kyu-config/kyu.env`; elsewhere it may be `/etc/kyu/kyu.env`.
 
-**Nothing else may name a path.** The scripts read `KYU_DATA_DIR`,
+**Nothing else may name a path.** The scripts read `KYU_STATE_DIR`,
 `KYU_LISTEN` and `KYU_TOKEN` from the environment systemd hands them, and
 refuse loudly if any is missing rather than falling back on a guess. That is
 standing rule 28 — state has an address and Kenny owns it — applied to the
@@ -46,5 +46,5 @@ than the timer:
 
 ```bash
 systemctl status kyu-backup.service     # the timer firing says nothing
-ls -lt <KYU_DATA_DIR>/kyu.backup-*.db | head -1
+ls -lt <KYU_STATE_DIR>/kyu.backup-*.db | head -1
 ```

@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use kyu::engine::Engine;
 use kyu::engine::clock::SystemClock;
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
@@ -53,7 +53,7 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
         .expect("an ephemeral port");
     let addr = listener.local_addr().expect("a bound address");
     let server = tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
 
     (

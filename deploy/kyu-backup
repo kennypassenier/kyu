@@ -25,7 +25,7 @@ set -euo pipefail
 
 : "${KYU_TOKEN:?kyu-backup needs KYU_TOKEN. systemd passes it via EnvironmentFile= in kyu-backup.service; running this by hand means sourcing that same env file first.}"
 : "${KYU_LISTEN:?kyu-backup needs KYU_LISTEN (HOST:PORT) to reach the hub. Same source as KYU_TOKEN.}"
-: "${KYU_DATA_DIR:?kyu-backup needs KYU_DATA_DIR to know which directory to prune. Same source as KYU_TOKEN.}"
+: "${KYU_STATE_DIR:?kyu-backup needs KYU_STATE_DIR to know which directory to prune. Same source as KYU_TOKEN.}"
 
 # How many copies to keep. A count rather than an age, so a week of failed
 # runs cannot quietly delete the last good backup.
@@ -46,7 +46,7 @@ if [ "$status" != "200" ]; then
 fi
 echo "backup written: ${body}"
 
-mapfile -t stale < <(ls -1t "${KYU_DATA_DIR}"/kyu.backup-*.db 2>/dev/null | tail -n +$((KEEP + 1)))
+mapfile -t stale < <(ls -1t "${KYU_STATE_DIR}"/kyu.backup-*.db 2>/dev/null | tail -n +$((KEEP + 1)))
 for old in "${stale[@]:-}"; do
     [ -n "$old" ] || continue
     rm -f -- "$old"

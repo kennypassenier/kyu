@@ -52,83 +52,6 @@ fn notice(new: &NewSubscription) -> String {
     }
 }
 
-/// W6 · `GET /healthz`
-///
-/// Answers on the two things that can be broken while the process still
-/// accepts connections: a store that cannot be written to, and a sweeper
-/// that has stopped. Both are invisible from outside otherwise — publishes
-/// fail one by one, or messages quietly stop coming back.
-pub async fn healthz(State(state): State<AppState>) -> Response {
-    let engine = state.engine.clone();
-    let store_error = tokio::task::spawn_blocking(move || {
-        // Two questions, because they fail differently. The probe takes the
-        // write lock, which catches a read-only store. The failure record
-        // catches what a probe cannot: a disk that is full but writable only
-        // refuses at commit time, so the hub reports that a write actually
-        // failed rather than predicting that one would.
-        engine.store().probe_writable()?;
-        if let Some(ago) = engine.store().recent_write_failure() {
-            anyhow::bail!(
-                "a write failed {} seconds ago; the store may be full",
-                ago.as_secs()
-            );
-        }
-        Ok::<(), anyhow::Error>(())
-    })
-    .await
-    .map_err(|error| format!("the health probe did not run: {error}"))
-    .and_then(|probe| probe.map_err(|error| format!("{error:#}")))
-    .err();
-
-    let now = state.engine.now_ms();
-    let sweeper_alive = state.heartbeat.is_alive(now);
-
-    let healthy = store_error.is_none() && sweeper_alive;
-    let status = if healthy {
-        StatusCode::OK
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
-    };
-
-    let mut body = json!({
-        "status": if healthy { "ok" } else { "degraded" },
-        "store": if store_error.is_none() { "writable" } else { "unwritable" },
-        "sweeper": if sweeper_alive { "alive" } else { "stalled" },
-    });
-    let map = body.as_object_mut().expect("a JSON object");
-
-    if let Some(error) = &store_error {
-        tracing::error!(error = %error, "the store is not writable");
-        map.insert("error".to_string(), json!(error));
-        map.insert(
-            "remedy".to_string(),
-            json!(
-                "check free space on the data volume first, then that it is still \
-                 mounted, writable by this user and not locked by another process. \
-                 kyu reports itself unhealthy rather than accepting publishes it \
-                 cannot store, and recovers by itself once writes succeed again."
-            ),
-        );
-    } else if !sweeper_alive {
-        let behind_ms = now.saturating_sub(state.heartbeat.last_beat_ms());
-        tracing::error!(behind_ms, "the sweeper has stopped");
-        map.insert(
-            "error".to_string(),
-            json!(format!("the sweeper last ran {behind_ms} ms ago")),
-        );
-        map.insert(
-            "remedy".to_string(),
-            json!(
-                "restart the container. While the sweeper is stopped, expired leases are \
-                 not returned to the queue and nothing is dead-lettered, so messages \
-                 appear to hang rather than to fail."
-            ),
-        );
-    }
-
-    (status, axum::Json(body)).into_response()
-}
-
 #[derive(Debug, Deserialize)]
 pub struct PublishQuery {
     /// W4 · deliver this many milliseconds from now.
@@ -1253,78 +1176,6 @@ fn internal(message: String) -> ApiError {
 
 // ─── L8 · metrics and backup (W1, W8) ───────────────────────────────────────
 
-/// W1 · `GET /metrics` in Prometheus text format.
-///
-/// The series that answer "is something silently broken": a growing backlog,
-/// a dead-letter count above zero, an oldest-unacked age that keeps rising.
-pub async fn metrics(State(state): State<AppState>) -> Result<Response, ApiError> {
-    let engine = state.engine.clone();
-    let heartbeat = state.heartbeat.clone();
-
-    let body = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
-        let now = engine.now_ms();
-        engine.store().read(|conn| {
-            let counts = queries::delivery_counts(conn)?;
-            let topics = queries::scalar(conn, "SELECT count(*) FROM topics")?;
-            let subscriptions = queries::scalar(conn, "SELECT count(*) FROM subscriptions")?;
-            let messages = queries::scalar(conn, "SELECT count(*) FROM messages")?;
-            let bytes = queries::scalar(
-                conn,
-                "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size()",
-            )
-            .unwrap_or(0);
-
-            let mut out = String::new();
-            out.push_str("# HELP kyu_topics Topics on this hub.\n");
-            out.push_str("# TYPE kyu_topics gauge\n");
-            out.push_str(&format!("kyu_topics {topics}\n"));
-            out.push_str("# HELP kyu_subscriptions Subscriptions across all topics.\n");
-            out.push_str("# TYPE kyu_subscriptions gauge\n");
-            out.push_str(&format!("kyu_subscriptions {subscriptions}\n"));
-            out.push_str("# HELP kyu_messages Messages currently retained.\n");
-            out.push_str("# TYPE kyu_messages gauge\n");
-            out.push_str(&format!("kyu_messages {messages}\n"));
-            out.push_str("# HELP kyu_store_bytes Size of the store on disk.\n");
-            out.push_str("# TYPE kyu_store_bytes gauge\n");
-            out.push_str(&format!("kyu_store_bytes {bytes}\n"));
-            out.push_str("# HELP kyu_deliveries Deliveries by topic, subscription and state.\n");
-            out.push_str("# TYPE kyu_deliveries gauge\n");
-            for count in counts {
-                out.push_str(&format!(
-                    "kyu_deliveries{{topic=\"{}\",subscription=\"{}\",state=\"{}\"}} {}\n",
-                    escape_label(&count.topic),
-                    escape_label(&count.subscription),
-                    count.state,
-                    count.count
-                ));
-            }
-            out.push_str("# HELP kyu_sweeper_age_ms Time since the sweeper last ran.\n");
-            out.push_str("# TYPE kyu_sweeper_age_ms gauge\n");
-            out.push_str(&format!(
-                "kyu_sweeper_age_ms {}\n",
-                now.saturating_sub(heartbeat.last_beat_ms())
-            ));
-            Ok(out)
-        })
-    })
-    .await
-    .map_err(|error| internal(format!("the metrics task failed: {error}")))?
-    .map_err(|error| internal(format!("{error:#}")))?;
-
-    Ok((
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
-        body,
-    )
-        .into_response())
-}
-
-/// Label values are topic and subscription names, which AR8 already limits
-/// to `[a-z0-9._-]` — this is the belt to that braces.
-fn escape_label(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
-}
-
 /// W8 · `POST /api/backup`
 ///
 /// Writes a consistent copy of the store while the hub keeps running.
@@ -1462,7 +1313,24 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
         "components.js" => (COMPONENTS_JS, "text/javascript; charset=utf-8"),
         "strings.js" => (STRINGS_JS, "text/javascript; charset=utf-8"),
         "kyu-init.js" => (KYU_INIT_JS, "text/javascript; charset=utf-8"),
-        _ => {
+        other => {
+            // 3.0.0: the no-flash snippet (theme-boot.js) and the display
+            // faces (fonts.css, fonts/*.woff2) come from the kit's vendored
+            // set — the kit's CSP stops inline scripts and CDN fonts, and
+            // the hub works offline this way.
+            if let Some((_, content_type, bytes)) = chassis::shell::assets::ASSETS
+                .iter()
+                .find(|(name, _, _)| *name == other)
+            {
+                return (
+                    [
+                        (header::CONTENT_TYPE, *content_type),
+                        (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+                    ],
+                    *bytes,
+                )
+                    .into_response();
+            }
             return ApiError::new(
                 StatusCode::NOT_FOUND,
                 format!("kyu serves no asset named {file:?}"),

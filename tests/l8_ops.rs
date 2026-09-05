@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use kyu::engine::clock::{Clock, MockClock, SystemClock};
 use kyu::engine::{Defaults, Engine};
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
@@ -55,7 +55,7 @@ async fn spawn_at(dir: &Path) -> Hub {
         .expect("a port");
     let addr = listener.local_addr().expect("an address");
     let server = tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
     Hub { addr, server }
 }
@@ -321,7 +321,7 @@ async fn l8_logs_can_be_emitted_as_json_lines() {
     };
 
     let output = Command::new(env!("CARGO_BIN_EXE_kyu"))
-        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_STATE_DIR", dir.path())
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG_FORMAT", "json")
         .env("KYU_LOG", "info")
@@ -334,7 +334,13 @@ async fn l8_logs_can_be_emitted_as_json_lines() {
     let mut process = output;
     process.kill().expect("stop the hub");
     let captured = process.wait_with_output().expect("output");
-    let logs = String::from_utf8_lossy(&captured.stdout);
+    // 3.0.0: the kit writes its log lines to stderr (journald and docker
+    // read both streams); the hub's own events ride the same subscriber.
+    let logs = format!(
+        "{}{}",
+        String::from_utf8_lossy(&captured.stdout),
+        String::from_utf8_lossy(&captured.stderr)
+    );
 
     let first = logs
         .lines()

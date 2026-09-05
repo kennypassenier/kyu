@@ -4,20 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kyu — log in</title>
-<!-- Same no-flash snippet as layout.html, byte-for-byte: a login page is
-     still a page, and until 2.4.0 this one was the one place on kyu that
-     never picked up the visitor's stored theme at all. -->
-<script>
-(function () {
-    try {
-        var t = localStorage.getItem("theme");
-        if (t) document.documentElement.setAttribute("data-theme", t);
-    } catch (e) {}
-})();
-</script>
-<link rel="preconnect" href="https://fonts.bunny.net">
-<link rel="stylesheet"
-      href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|fraunces:600,700|share-tech-mono:400|chakra-petch:500,600,700">
+<!-- Same no-flash script as layout.html (the kit's theme-boot.js): a login
+     page is still a page, and until 2.4.0 this one was the one place on kyu
+     that never picked up the visitor's stored theme at all. -->
+<script src="/static/theme-boot.js?v={{ assets }}"></script>
+
+<link rel="stylesheet" href="/static/fonts.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/themes.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/components.css?v={{ assets }}">
 <link rel="stylesheet" href="/static/kyu.css?v={{ assets }}">

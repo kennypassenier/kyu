@@ -13,7 +13,7 @@ use std::time::Duration;
 use kyu::engine::clock::{Clock, MockClock, SystemClock};
 use kyu::engine::{Defaults, Engine};
 use kyu::events::EVENTS_TOPIC;
-use kyu::http::{AppState, Limits, router};
+use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::queries::StoredPolicy;
 use kyu::store::{Store, migrations};
 use kyu::sweeper::{self, Heartbeat};
@@ -70,7 +70,7 @@ async fn spawn_at(dir: &Path) -> Hub {
         .expect("a port");
     let addr = listener.local_addr().expect("an address");
     let server = tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
 
     Hub {
@@ -212,7 +212,7 @@ async fn p7_g2_a_hard_kill_at_startup_leaves_a_migratable_store() {
 
     for _ in 0..8 {
         let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
-            .env("KYU_DATA_DIR", dir.path())
+            .env("KYU_STATE_DIR", dir.path())
             .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
             .env("KYU_LOG", "error")
             .spawn()
@@ -293,9 +293,9 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
         status, 503,
         "a store that cannot accept a write is not healthy: {body}"
     );
-    assert_eq!(body["store"], "unwritable");
+    assert_eq!(body["subsystems"]["store"]["ok"], false);
     assert!(
-        body["remedy"]
+        body["subsystems"]["store"]["detail"]
             .as_str()
             .unwrap_or_default()
             .contains("free space"),
@@ -730,11 +730,12 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
     };
 
     let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
-        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_STATE_DIR", dir.path())
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG_FORMAT", "json")
         .env("KYU_LOG", "debug")
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn()
         .expect("start");
 
@@ -768,7 +769,12 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
     tokio::time::sleep(Duration::from_millis(300)).await;
     let _ = process.kill();
     let output = process.wait_with_output().expect("output");
-    let logs = String::from_utf8_lossy(&output.stdout);
+    // 3.0.0: the kit's subscriber writes to stderr (journald reads both).
+    let logs = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     assert!(
         !logs.contains(SECRET),
@@ -852,9 +858,15 @@ async fn p7_g11_healthz_answers_503_when_the_store_refuses_writes() {
     let health = body_json(response).await;
 
     assert_eq!(status, 503, "FEATURES promises a non-200 here: {health}");
-    assert_eq!(health["store"], "unwritable");
+    assert_eq!(health["subsystems"]["store"]["ok"], false);
     assert_eq!(health["status"], "degraded");
-    assert!(health["remedy"].as_str().unwrap_or_default().len() > 20);
+    assert!(
+        health["subsystems"]["store"]["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .len()
+            > 20
+    );
 }
 
 // ─── G12 · the events topic is a topic ──────────────────────────────────────

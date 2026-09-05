@@ -72,7 +72,7 @@ fn free_port() -> u16 {
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
     let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
-        .env("KYU_DATA_DIR", data_dir)
+        .env("KYU_STATE_DIR", data_dir)
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG", "warn")
         .spawn()
@@ -375,7 +375,7 @@ async fn l5_a_hard_kill_never_needs_manual_repair_to_restart() {
     )
     .expect("JSON");
     assert_eq!(health["status"], "ok");
-    assert_eq!(health["store"], "writable");
+    assert_eq!(health["subsystems"]["store"]["ok"], true);
     assert!(
         dir.path()
             .join("kyu.db")
@@ -399,9 +399,10 @@ async fn l5_healthz_reports_the_store_and_the_sweeper() {
         serde_json::from_str(&response.text().await.expect("a body")).expect("JSON");
 
     assert_eq!(health["status"], "ok");
-    assert_eq!(health["store"], "writable");
+    assert_eq!(health["subsystems"]["store"]["ok"], true);
+    assert_eq!(health["subsystems"]["store"]["detail"], "writable");
     assert_eq!(
-        health["sweeper"], "alive",
+        health["subsystems"]["sweeper"]["ok"], true,
         "a stopped sweeper is invisible from outside unless health says so"
     );
 }
@@ -415,7 +416,7 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
 
     use kyu::engine::Engine;
     use kyu::engine::clock::{Clock, SystemClock};
-    use kyu::http::{AppState, Limits, router};
+    use kyu::http::{AppState, Limits, router_with_probes};
     use kyu::store::Store;
     use kyu::sweeper::{Heartbeat, STALE_AFTER_MS};
 
@@ -440,7 +441,7 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
         .expect("a port");
     let addr = listener.local_addr().expect("an address");
     tokio::spawn(async move {
-        let _ = axum::serve(listener, router(state)).await;
+        let _ = axum::serve(listener, router_with_probes(state)).await;
     });
 
     let response = reqwest::get(format!("http://{addr}/healthz"))
@@ -455,10 +456,17 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
         "a hub whose sweeper has stopped is not healthy: {health}"
     );
     assert_eq!(health["status"], "degraded");
-    assert_eq!(health["sweeper"], "stalled");
-    assert_eq!(health["store"], "writable", "the store itself is fine");
+    assert_eq!(health["subsystems"]["sweeper"]["ok"], false);
+    assert_eq!(
+        health["subsystems"]["store"]["ok"], true,
+        "the store itself is fine"
+    );
     assert!(
-        health["remedy"].as_str().unwrap_or_default().len() > 20,
+        health["subsystems"]["sweeper"]["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .len()
+            > 20,
         "and it must say what to do about it: {health}"
     );
 }
@@ -474,7 +482,7 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
     let healthy = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
-        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_STATE_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");
     assert!(healthy.success(), "a healthy hub must exit 0");
@@ -485,7 +493,7 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
     let dead = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
-        .env("KYU_DATA_DIR", dir.path())
+        .env("KYU_STATE_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");
     assert!(

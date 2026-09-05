@@ -48,7 +48,7 @@ const KEY: &str = "00112233445566778899aabbccddeeff00112233445566778899aabbccdde
 async fn start(data_dir: &Path) -> Hub {
     let port = free_port();
     let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
-        .env("KYU_DATA_DIR", data_dir)
+        .env("KYU_STATE_DIR", data_dir)
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_TOKEN", TOKEN)
         .env("KYU_SECRET_KEY", KEY)
@@ -77,7 +77,7 @@ fn run_backup(hub: &Hub, data_dir: &Path, extra: &[(&str, &str)]) -> Output {
         .env("PATH", std::env::var("PATH").unwrap_or_default())
         .env("KYU_TOKEN", TOKEN)
         .env("KYU_LISTEN", format!("127.0.0.1:{}", hub.port))
-        .env("KYU_DATA_DIR", data_dir);
+        .env("KYU_STATE_DIR", data_dir);
     for (name, value) in extra {
         if value.is_empty() {
             command.env_remove(name);
@@ -113,7 +113,7 @@ async fn f179_the_script_takes_its_paths_from_the_environment_and_writes_a_backu
     assert_eq!(
         backups(dir.path()).len(),
         1,
-        "exactly one backup file must appear in KYU_DATA_DIR"
+        "exactly one backup file must appear in KYU_STATE_DIR"
     );
     assert!(
         String::from_utf8_lossy(&output.stdout).contains("backup written"),
@@ -130,7 +130,7 @@ async fn f179_a_missing_variable_is_refused_loudly_and_never_guessed() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let hub = start(dir.path()).await;
 
-    for missing in ["KYU_TOKEN", "KYU_LISTEN", "KYU_DATA_DIR"] {
+    for missing in ["KYU_TOKEN", "KYU_LISTEN", "KYU_STATE_DIR"] {
         let output = run_backup(&hub, dir.path(), &[(missing, "")]);
         assert!(
             !output.status.success(),

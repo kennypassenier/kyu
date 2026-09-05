@@ -30,21 +30,25 @@ call.
 **As a plain binary under systemd** — what Kenny actually runs, on LXC 109
 (`109-app-kyu`, `10.10.10.9`). No Docker on the box at all:
 
-1. Take the binary out of the published image on a machine that has Docker,
-   and copy it over. It is statically linked, so it needs nothing installed:
+1. Take the binary from the GitHub release (3.0.0: a glibc binary for
+   Debian trixie, signed — `kyu`, `SHA256SUMS`, `SHA256SUMS.minisig`,
+   `VERSION`) and install it at the kit's path:
    ```bash
-   id=$(docker create ghcr.io/kennypassenier/kyu:1.0.1)
-   docker cp "$id":/usr/local/bin/kyu ./kyu && docker rm "$id"
+   gh release download v3.0.0 -R kennypassenier/kyu -p kyu -p SHA256SUMS -p SHA256SUMS.minisig
+   minisign -Vm SHA256SUMS -P "$(cat RELEASE_PUBKEY)" && sha256sum -c SHA256SUMS
    scp kyu root@<proxmox>:/tmp/kyu
-   ssh root@<proxmox> 'pct push 109 /tmp/kyu /usr/local/bin/kyu --perms 755'
+   ssh root@<proxmox> 'pct exec 109 -- install -d /opt/kyu/bin && pct push 109 /tmp/kyu /opt/kyu/bin/kyu --perms 755'
    ```
+   The homelab does the same with `homelab install-native kyu` once the stack
+   file (`deploy/service.yml`) is adopted; from then on updates go through
+   `kyu update` (see §4).
 2. A system user that owns only its data, and a config file only it can read:
    ```bash
    adduser --system --group --home /var/lib/kyu --no-create-home kyu
    install -d -o kyu -g kyu -m 0750 /var/lib/kyu
    install -d -o root -g kyu -m 0750 /etc/kyu
    umask 077
-   printf 'KYU_TOKEN=%s\nKYU_SECRET_KEY=%s\nKYU_LISTEN=0.0.0.0:8080\nKYU_DATA_DIR=/var/lib/kyu\nKYU_LOG=info\n' \
+   printf 'KYU_TOKEN=%s\nKYU_SECRET_KEY=%s\nKYU_LISTEN=0.0.0.0:8080\nKYU_STATE_DIR=/var/lib/kyu\nKYU_LOG=info\n' \
      "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /etc/kyu/kyu.env
    chown root:kyu /etc/kyu/kyu.env && chmod 0640 /etc/kyu/kyu.env
    ```
@@ -123,16 +127,19 @@ a file with no reader. See AR12.
 1. Cut the release as in §2, so the new image exists.
 2. **Deployed via the homelab:** nothing to do. The nightly run updates it and
    rolls back on a failed health check (`com.homelab.update.policy=auto`).
-   Immediate instead: `homelab update stacks/<name>`.
+   Immediate instead: `homelab update-native kyu`.
 3. **Standalone with Docker:** `docker compose pull && docker compose up -d`.
-4. **Plain binary under systemd** — extract the new binary as in §1, then:
+4. **Plain binary under systemd** — 3.0.0: the hub updates itself,
+   supervised. The homelab's nightly runs the stack's `update_cmd`
+   (`systemd-run --wait … /opt/kyu/bin/kyu update`: verify the signature,
+   install, keep `kyu.prev`, exit 0) and restarts the unit; by hand:
    ```bash
-   ssh root@<proxmox> '
-     pct exec 109 -- systemctl stop kyu
-     pct push 109 /tmp/kyu /usr/local/bin/kyu --perms 755
-     pct exec 109 -- systemctl start kyu
-     pct exec 109 -- /usr/local/bin/kyu --version'
+   ssh root@<proxmox> 'pct exec 109 -- systemd-run --wait --pipe --collect --uid=kyu --gid=kyu \
+     --property=EnvironmentFile=/appdata/kyu/kyu-config/kyu.env \
+     --property=WorkingDirectory=/appdata/kyu/kyu-config /opt/kyu/bin/kyu update
+     && pct exec 109 -- systemctl restart kyu && pct exec 109 -- /opt/kyu/bin/kyu --version'
    ```
+   A release that does not verify installs nothing and says why.
    Walked for real on 2026-08-28 going from 1.0.0 to 1.0.1: an unacknowledged
    message was still waiting afterwards.
 5. Verify: `curl -sf $HUB/healthz`, and check the log line `schema migrated`
@@ -191,7 +198,7 @@ the service, never the timer:
 
 ```bash
 systemctl status kyu-backup.service          # not kyu-backup.timer
-ls -lt "$KYU_DATA_DIR"/kyu.backup-*.db | head -1
+ls -lt "$KYU_STATE_DIR"/kyu.backup-*.db | head -1
 ```
 
 Since 2026-09-02 a failure also announces itself: `OnFailure=` on the backup

@@ -27,7 +27,7 @@ services:
       - kyu-data:/data
     environment:
       KYU_LISTEN: 0.0.0.0:8080
-      KYU_DATA_DIR: /data
+      KYU_STATE_DIR: /data            # 3.0.0: was KYU_DATA_DIR (still honoured, with a warning)
       KYU_LOG: info
       # KYU_LOG_FORMAT: json          # one JSON object per line, for Loki
       #

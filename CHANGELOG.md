@@ -13,6 +13,58 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 Nothing since 2.5.0.
 
+## [3.0.0] — 2026-09-05 (unreleased; branch `chassis-migration`)
+
+Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.2.0.
+The hub — topics, subscriptions, leases, the SQLite store, the door policy
+(W2: unprotected, or `KYU_TOKEN` plus sealed app tokens), the dashboard and
+its themes — is unchanged. The kit now owns the command line, the transport
+knobs, logging, `/healthz`, `/metrics`, readiness, the graceful stop and
+signed self-update. The public interface (HTTP shapes plus environment
+variables) changes in three places, hence 3.0.0.
+
+### Migration
+
+- **`KYU_DATA_DIR` is `KYU_STATE_DIR`.** The old name is still honoured
+  with a warning on every start; the alias goes away in 4.0. Every other
+  variable keeps its name and meaning: `KYU_LISTEN`, `KYU_MAX_BODY_BYTES`,
+  `KYU_SHUTDOWN_TIMEOUT_MS`, `KYU_LOG`, `KYU_LOG_FORMAT`, `KYU_TOKEN`,
+  `KYU_SECRET_KEY`, `KYU_RETENTION_MS`, `KYU_IDLE_*`. New, from the kit:
+  `KYU_REQUEST_TIMEOUT_SECS`, `KYU_MAX_IN_FLIGHT`, `KYU_TRUSTED_PROXIES`,
+  `KYU_UPDATE_*` and the rest of `kyu --help`. There is still no config
+  file the hub needs; the kit reads an optional `<state_dir>/config.toml`
+  for its own knobs (AR6 amended).
+- **`/healthz` has the kit's shape:** `{"status","version","subsystems":
+  {"store":{"ok","detail"},"sweeper":{"ok","detail"}}}` — `status` is still
+  `ok`/`degraded` and the code still 503 when the store is unwritable or the
+  sweeper stalled; the flat `store`/`sweeper`/`remedy` fields are gone (the
+  remedy is in `detail`). `/metrics` keeps every `kyu_*` series and gains
+  the kit's build-info, uptime and request counters.
+- **Command line.** A refused argument exits **1** (was 2); `--help` lists
+  the kit's flags and the hub's own environment (exit 0). New: `--check`
+  (opens the store, prints the door mode), `--print-config`, `gen-secret`,
+  `kyu update`, `kyu rekey`. `--healthcheck` now counts **200 or 503 as
+  alive** — the process answers — so a degraded hub no longer fails the
+  container healthcheck; Uptime Kuma still sees the 503.
+- **Under the kit's layers:** request ids, security headers with a strict
+  CSP (`script-src 'self'`, `font-src 'self'`), an in-flight cap (503 +
+  `Retry-After`), a request timeout (long polls under `/t/` are exempt) and
+  the body limit as a layer (413 JSON). The no-flash theme snippet is a file
+  (`/static/no-flash.js`) and the display fonts are served by the hub from
+  the kit's vendored set — no CDN, works offline.
+- **Deployment.** `Type=notify` unit with the kit's hardening at
+  `/opt/kyu/bin/kyu` (`deploy/kyu.service`, on the CT 109 layout:
+  `/appdata/kyu/kyu-config` for env file and state); `deploy/service.yml`
+  for the homelab stack with `update_cmd`; journald drop-in. The image is
+  Debian trixie (glibc) with the same `/data` volume and uid 65532.
+- **Self-update, supervised.** Releases carry `kyu`, `SHA256SUMS`,
+  `SHA256SUMS.minisig` (trusted comment `kennypassenier/kyu v<version>`) and
+  `VERSION`; the release workflow is the kit's (`release.yml` replaces
+  `release-image.yml`, the image is still pushed), signing is
+  `scripts/sign-release.sh`. The homelab owns the nightly and calls
+  `kyu update`; the hub never updates on its own unless `KYU_UPDATE_MODE`
+  says so. ARCHITECTURE "no self-updater (K13)" is amended.
+
 ## [2.5.0] — 2026-09-05
 
 Three pieces of feedback from Kenny actually using the 2.4.0 dashboard,
