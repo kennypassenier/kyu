@@ -1,24 +1,36 @@
-# @kp-soft/themes v1.2.0 — the release's own SHA256SUMS, mapped onto
+# @kp-soft/themes v3.0.0 — the release's own SHA256SUMS, mapped onto
 # kyu's flat static/ paths. Fetched with:
-#   gh release download v1.2.0 --repo kennypassenier/kp-themes -p SHA256SUMS -O -
+#   gh release download v3.0.0 --repo kennypassenier/kp-themes -p SHA256SUMS -O -
 #
 # Why a recorded copy rather than a live fetch: this is checked by the
 # commit gate, and a gate that needs the network fails on a train. These
-# hashes say 'our six copies are unmodified AND are the tag we claim' —
+# hashes say 'our eight copies are unmodified AND are the tag we claim' —
 # a claim that holds offline and does not depend on what happens to be
 # in a sibling directory. Bumping the version means re-copying the files
 # AND refreshing this file, which is exactly the deliberate act it
 # should be.
 #
-# no-flash.js joined the list at v1.2.0. It is the only one here the
-# browser never fetches: kyu inlines its NO_FLASH_SNIPPET into the
-# document head, because a module arrives too late to prevent the flash
-# it exists to prevent. It is vendored so a test can compare what
-# layout.html inlines against the package's own text, and so this gate
-# notices when that text changes upstream.
-1d9d0ebb4ebe6bef70a8d0d4d4fd3549670389295df38979be62462259918ebe  themes.css
-34ebacefc3920ca64aa0b9d9786c3ff135cb68cf2816c89b8419b332b3c234ed  components.css
-a265ace58b6d360966adfccac96b092455c95f657aabf1273d8459a73febd14e  theme-core.js
-d38faabed8f9575f00c51a6465edcb6918020fd575bb06c22bdf65dd7ee91cea  theme-registry.js
-400703fd4dd26415698937b161f5419609d6e8f5a0b0129d712c09e93b4b47b1  theme-picker.js
-8597718d75623f754f66fa08f28314d0c13c0126ca25b55ad0ee63c383ef03c8  no-flash.js
+# components.js joined the list at v3.0.0. It carries the DI10/DI4
+# contract enforcement (a destructive control needs an undo or a
+# confirmation; a semantic colour needs words too), the confirm-arm
+# pattern for Revoke, and the skip link — kyu's own hand-rolled versions
+# of the first two are gone as of this version.
+#
+# strings.js is here for a different reason than the rest: since the
+# package's own 2.0.0, both theme-picker.js and components.js import
+# `getStrings` from it, so kyu cannot serve either without it — this is
+# not a nice-to-have, the picker does not load without it. Its hash below
+# is NOT from the release's own SHA256SUMS: the v3.0.0 manifest omits
+# both strings.js and forms.js, which is a gap in kp-themes' own release
+# process worth raising with them. Computed here from the v3.0.0 git tag
+# instead, which is the offline-verifiable next best thing — it still
+# catches an edited or truncated copy, it just cannot prove the tag
+# provenance the other seven hashes prove.
+261087057dff87483a0518f4b4ceec394c969559d5340508a5ae0c101c6e832c  themes.css
+2488777f797d9987fdf11123bf151d3507461d70d7eb5a68a02dfef57857ab46  components.css
+11a890a91cc6c797987608a525af40cbd2328357f76491c8dfd1616d152fdd21  theme-core.js
+cb5fa72d531bd797cdb2320f382d3dae7f93260adfa877294cfca72a0c102301  theme-registry.js
+1cdd3d6a63df88ed644731351551022538e96adabecc5cd177c3e498daf51836  theme-picker.js
+eb2cb80ca4df55981af43a2e0df1f03874f4a187ff960480f1a391caa645b7cc  no-flash.js
+a7781359cd3ddc0d1d26c90bd7ae551527625cb21655a4968254d153566ca7b1  components.js
+813fcb1627bdf6d89a812aba1f7525654a8377ee166fb1019be021785465deb9  strings.js

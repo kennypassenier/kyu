@@ -321,11 +321,10 @@ added a lint 1.97 had never heard of.
 
 MIT OR Apache-2.0, at your option.
 
-`static/bootstrap.min.css` is Bootstrap 5.3.3, copyright 2011-2024 The
-Bootstrap Authors, MIT licensed. It is vendored rather than loaded from a CDN
-so the hub works on a network with no route to the internet, and so opening
-the dashboard tells nobody outside that you did. Verified on download against
-the published integrity hash
-`sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH`.
-Note that `cargo-deny` does not police it — it is not a crate — so bumping it
-is a manual, deliberate act.
+The dashboard's CSS and JavaScript come from `@kp-soft/themes`, vendored
+verbatim under `static/` rather than loaded from a CDN — so the hub works on
+a network with no route to the internet, and so opening the dashboard tells
+nobody outside that you did. `static/KP_THEMES.sha256` records the release's
+own checksums for every file; `.claude/hooks/gates.sh` refuses a commit where
+a vendored copy has drifted from the tag it claims. See docs/FEATURES.md's
+W13 for which files, which version, and what kyu adds on top of them.

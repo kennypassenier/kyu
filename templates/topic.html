@@ -3,48 +3,43 @@
 
 {% block content %}
 {% macro snippet(id, caption, item) %}
-<p class="text-secondary mb-1 mt-3">{{ caption }}</p>
-<div class="d-flex align-items-start gap-2">
-  <pre class="snippet flex-grow-1" id="{{ id }}" data-secret="{{ item.full }}"
+<p class="text-secondary" style="margin: 0.75rem 0 0.25rem">{{ caption }}</p>
+<div style="display: flex; align-items: flex-start; gap: 0.5rem">
+  <pre class="snippet" style="flex-grow: 1" id="{{ id }}" data-secret="{{ item.full }}"
        data-masked="{{ item.shown }}" data-revealed="false">
 {{ item.shown }}</pre>
-  {% if protected %}
-  <div class="btn-group-vertical btn-group-sm flex-shrink-0">
-    <button type="button" class="btn btn-outline-secondary"
-            data-reveal-target="{{ id }}" data-reveal-seconds="{{ reveal_seconds }}">Reveal</button>
-    <button type="button" class="btn btn-outline-secondary" data-copy-target="{{ id }}">Copy</button>
+  <div style="display: flex; flex-direction: column; gap: 0.25rem; flex-shrink: 0">
+    {% if protected %}
+    <button type="button" class="kp-button" data-reveal-target="{{ id }}" data-reveal-seconds="{{ reveal_seconds }}">Reveal</button>
+    {% endif %}
+    <button type="button" class="kp-button" data-copy-target="{{ id }}">Copy</button>
   </div>
-  {% else %}
-  <div class="btn-group-vertical btn-group-sm flex-shrink-0">
-    <button type="button" class="btn btn-outline-secondary" data-copy-target="{{ id }}">Copy</button>
-  </div>
-  {% endif %}
 </div>
 {% endmacro %}
 
-<h1 class="h3 mb-1">{{ topic.name }}</h1>
+<h1 style="margin-bottom: 0.25rem">{{ topic.name }}</h1>
 <p class="text-secondary">
   <a href="/">all topics</a> ·
   {{ topic.messages }} message(s) retained ·
-  backlog {{ topic.backlog }}{% if topic.dead > 0 %} · <span class="badge text-bg-danger">{{ topic.dead }} dead</span>{% endif %}
+  backlog {{ topic.backlog }}{% if topic.dead > 0 %} · <span class="kp-badge kp-badge--destructive">{{ topic.dead }} dead</span>{% endif %}
 </p>
 
-<h2 class="h5 mt-4">Send and receive</h2>
+<h2>Send and receive</h2>
 {% if snippets.bootstrap_note %}
-<div class="alert alert-warning" role="alert">{{ snippets.bootstrap_note }}</div>
+<div class="kp-alert kp-alert--warning" role="alert">{{ snippets.bootstrap_note }}</div>
 {% endif %}
 
 {% if protected %}
-<div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-  <span class="text-secondary small">Commands use the token of:</span>
-  <a class="btn btn-sm {% if not snippets.app %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem">
+  <span class="text-secondary" style="font-size: 0.875rem">Commands use the token of:</span>
+  <a class="kp-button{% if not snippets.app %} kp-button--primary{% endif %}"
      href="/t/{{ topic.name }}/dashboard">this hub</a>
   {% for name in app_names %}
-  <a class="btn btn-sm {% if snippets.app == name %}btn-secondary{% else %}btn-outline-secondary{% endif %}"
+  <a class="kp-button{% if snippets.app == name %} kp-button--primary{% endif %}"
      href="/t/{{ topic.name }}/dashboard?app={{ name }}">{{ name }}</a>
   {% endfor %}
 </div>
-<p class="text-secondary small">
+<p class="text-secondary" style="font-size: 0.875rem">
   The token is masked here. <em>Copy</em> puts the whole working command on your
   clipboard without showing it; <em>Reveal</em> shows it for {{ reveal_seconds }} seconds.
 </p>
@@ -55,10 +50,10 @@
 {{ snippet("snippet-receive-envelope", "Or ask for one JSON document instead:", snippets.receive_envelope) }}
 {{ snippet("snippet-ack", "Then acknowledge it, so it is not delivered again:", snippets.ack) }}
 
-<h2 class="h5 mt-5">Subscriptions</h2>
+<h2>Subscriptions</h2>
 {% if subscriptions %}
-<div class="table-responsive">
-<table class="table align-middle">
+<div class="kp-table-wrap">
+<table class="kp-table">
   <thead>
     <tr>
       <th>Name</th><th>State</th><th class="text-end">Backlog</th><th class="text-end">In flight</th>
@@ -68,22 +63,22 @@
   <tbody>
   {% for subscription in subscriptions %}
   <tr>
-    <td class="fw-medium">{{ subscription.name }}</td>
+    <td style="font-weight: 500">{{ subscription.name }}</td>
     <td>
-      {% if subscription.state == "active" %}<span class="badge text-bg-success">active</span>
-      {% elif subscription.state == "flagged" %}<span class="badge text-bg-warning">flagged</span>
-      {% else %}<span class="badge text-bg-secondary">{{ subscription.state }}</span>{% endif %}
+      {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
+      {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
+      {% else %}<span class="kp-badge">{{ subscription.state }}</span>{% endif %}
     </td>
-    <td class="text-end tabular">{{ subscription.backlog }}</td>
-    <td class="text-end tabular">{{ subscription.claimed }}</td>
-    <td class="text-end tabular">
-      {% if subscription.dead > 0 %}<span class="badge text-bg-danger">{{ subscription.dead }}</span>{% else %}0{% endif %}
+    <td class="text-end">{{ subscription.backlog }}</td>
+    <td class="text-end">{{ subscription.claimed }}</td>
+    <td class="text-end">
+      {% if subscription.dead > 0 %}<span class="kp-badge kp-badge--destructive">{{ subscription.dead }}</span>{% else %}0{% endif %}
     </td>
-    <td class="text-end tabular">{{ subscription.lapsed }}</td>
-    <td class="tabular">
-      {% if subscription.oldest_unacked_at %}{{ subscription.oldest_unacked_at }}{% else %}<span class="text-secondary fst-italic">nothing waiting</span>{% endif %}
+    <td class="text-end">{{ subscription.lapsed }}</td>
+    <td>
+      {% if subscription.oldest_unacked_at %}{{ subscription.oldest_unacked_at }}{% else %}<span class="text-secondary italic">nothing waiting</span>{% endif %}
     </td>
-    <td class="small text-secondary">
+    <td class="text-secondary" style="font-size: 0.875rem">
       lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
       {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
       ttl {{ subscription.ttl_ms }}ms{% endif %}
@@ -94,14 +89,14 @@
 </table>
 </div>
 {% else %}
-<p class="text-secondary fst-italic">Nothing has polled this topic yet.</p>
+<p class="text-secondary italic">Nothing has polled this topic yet.</p>
 {% endif %}
 
-<h2 class="h5 mt-5">Dead letters</h2>
+<h2>Dead letters</h2>
 {% if dead_letters %}
 <p class="text-secondary">These gave up. Nothing is lost — each one waits here until you deal with it.</p>
-<div class="table-responsive">
-<table class="table align-middle">
+<div class="kp-table-wrap">
+<table class="kp-table">
   <thead>
     <tr><th>Subscription</th><th>Id</th><th>Died</th><th class="text-end">Attempts</th><th>Payload</th><th></th></tr>
   </thead>
@@ -110,22 +105,22 @@
   <tr>
     <td>{{ dead.subscription }}</td>
     <td><code>{{ dead.id }}</code></td>
-    <td class="tabular small">
-      {% if dead.dead_at %}{{ dead.dead_at }}{% else %}<span class="text-secondary fst-italic">unknown</span>{% endif %}<br>
+    <td style="font-size: 0.875rem">
+      {% if dead.dead_at %}{{ dead.dead_at }}{% else %}<span class="text-secondary italic">unknown</span>{% endif %}<br>
       <span class="text-secondary">published {{ dead.published_at }}</span>
     </td>
-    <td class="text-end tabular">{{ dead.attempts }}</td>
+    <td class="text-end">{{ dead.attempts }}</td>
     <td class="payload">
-      {% if dead.payload.binary %}<span class="text-secondary fst-italic">{{ dead.note }}</span>
+      {% if dead.payload.binary %}<span class="text-secondary italic">{{ dead.note }}</span>
       {% else %}<code>{{ dead.payload.text }}</code>
-        {% if dead.note %}<br><span class="text-secondary fst-italic">{{ dead.note }}</span>{% endif %}
+        {% if dead.note %}<br><span class="text-secondary italic">{{ dead.note }}</span>{% endif %}
       {% endif %}
     </td>
     <td class="text-end">
-      <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" class="m-0">
+      <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" style="margin: 0">
         <input type="hidden" name="subscription" value="{{ dead.subscription }}">
         <input type="hidden" name="id" value="{{ dead.id }}">
-        <button type="submit" class="btn btn-sm btn-outline-primary">Requeue</button>
+        <button type="submit" class="kp-button kp-button--primary">Requeue</button>
       </form>
     </td>
   </tr>
@@ -134,13 +129,13 @@
 </table>
 </div>
 {% else %}
-<p class="text-secondary fst-italic">Nothing has been dead-lettered on this topic.</p>
+<p class="text-secondary italic">Nothing has been dead-lettered on this topic.</p>
 {% endif %}
 
-<h2 class="h5 mt-5">Recent messages</h2>
+<h2>Recent messages</h2>
 {% if messages %}
-<div class="table-responsive">
-<table class="table align-middle">
+<div class="kp-table-wrap">
+<table class="kp-table">
   <thead>
     <tr><th>Id</th><th>Published</th><th>Type</th><th>Payload</th></tr>
   </thead>
@@ -148,14 +143,14 @@
   {% for message in messages %}
   <tr>
     <td><code>{{ message.id }}</code></td>
-    <td class="tabular small">
+    <td style="font-size: 0.875rem">
       {{ message.published_at }}{% if message.due_at %}<br><span class="text-secondary">due {{ message.due_at }}</span>{% endif %}
     </td>
-    <td class="small">{{ message.content_type }}</td>
+    <td style="font-size: 0.875rem">{{ message.content_type }}</td>
     <td class="payload">
-      {% if message.payload.binary %}<span class="text-secondary fst-italic">{{ message.note }}</span>
+      {% if message.payload.binary %}<span class="text-secondary italic">{{ message.note }}</span>
       {% else %}<code>{{ message.payload.text }}</code>
-        {% if message.note %}<br><span class="text-secondary fst-italic">{{ message.note }}</span>{% endif %}
+        {% if message.note %}<br><span class="text-secondary italic">{{ message.note }}</span>{% endif %}
       {% endif %}
     </td>
   </tr>
@@ -164,15 +159,15 @@
 </table>
 </div>
 {% else %}
-<p class="text-secondary fst-italic">No messages retained on this topic.</p>
+<p class="text-secondary italic">No messages retained on this topic.</p>
 {% endif %}
 
-<h2 class="h5 mt-5">Publish a test message</h2>
+<h2>Publish a test message</h2>
 <form method="post" action="/t/{{ topic.name }}/dashboard/publish">
-  <div class="mb-2">
-    <textarea class="form-control font-monospace" name="payload" rows="3"
+  <div class="kp-field" style="max-width: none; margin-bottom: 0.5rem">
+    <textarea class="kp-field__input kp-field__input--multiline" name="payload" rows="3"
               aria-label="payload">{% if messages %}{{ messages[0].payload.text }}{% else %}{"hello":"world"}{% endif %}</textarea>
   </div>
-  <button type="submit" class="btn btn-primary">Publish to {{ topic.name }}</button>
+  <button type="submit" class="kp-button kp-button--primary">Publish to {{ topic.name }}</button>
 </form>
 {% endblock %}

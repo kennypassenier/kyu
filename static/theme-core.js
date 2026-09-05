@@ -14,6 +14,14 @@
 //
 // This file is plain ESM with no dependencies. React sits on top of it,
 // not underneath.
+//
+// Since 3.0.0 [KT6]: where the theme lives is a choice — the root
+// element, the class that marks a dark theme and the storage key are
+// settable once with configureTheme() or per call; a change can be
+// refused by a listener on BEFORE_THEME_EVENT; the change event bubbles
+// from the root so a scoped listener can catch it; a strict apply
+// reports an unknown name instead of silently substituting the default;
+// and the cross-tab subscription can be declined.
 
 import { THEMES, DEFAULT_THEME, STORAGE_KEY } from './theme-registry.js';
 
@@ -25,21 +33,40 @@ import { THEMES, DEFAULT_THEME, STORAGE_KEY } from './theme-registry.js';
  * string — because narrowing an input breaks a consumer that reads a theme
  * out of config or a database, which is exactly what JobTracker and
  * kp-soft do. Narrowing a return value cannot break anyone.
- * The type below is the type itself:
- *
- * Re-exported from the generated registry so a consumer can name the type
- * without importing from two places. It was `string` until 1.1.0, which
- * meant `applyTheme('formeel')` type-checked and then silently fell back
- * to `formal` at runtime.
  *
  * @typedef {import('./theme-registry.js').ThemeName} ThemeName
  */
 
 /**
  * The event both channels listen to. A contract value: a consumer may
- * listen for it too, so it does not get renamed casually [TH26].
+ * listen for it too, so it does not get renamed casually [TH26]. It
+ * bubbles from the root, so `document.addEventListener` sees it as it
+ * always did, and so does a listener on the root itself.
  */
 export const THEME_EVENT = 'kp-theme-change';
+/** Fired before a change, cancelable: `{ theme, previous }`. preventDefault() keeps the current theme. */
+export const BEFORE_THEME_EVENT = 'kp-theme-before-change';
+
+/** @typedef {{ root?: Element, darkClass?: string | null, storageKey?: string }} ThemeConfig */
+
+/** The document-wide defaults, settable once by a consumer. */
+const config = { root: /** @type {Element | null} */ (null), darkClass: /** @type {string | null} */ ('dark'), storageKey: STORAGE_KEY };
+
+/**
+ * Set the defaults once: which element wears the theme (default: the
+ * document element), which class marks a dark theme (default `dark`; null
+ * for none), and the storage key.
+ *
+ * @param {ThemeConfig} next
+ */
+export function configureTheme(next) {
+    if (next.root !== undefined) config.root = next.root;
+    if (next.darkClass !== undefined) config.darkClass = next.darkClass;
+    if (next.storageKey !== undefined) config.storageKey = next.storageKey;
+}
+
+/** @param {Element | undefined} root */
+const rootOf = (root) => root ?? config.root ?? document.documentElement;
 
 // Widened back to string on purpose: this array is what the runtime check
 // searches, and `includes` on a ThemeName[] refuses the unknown string we
@@ -54,14 +81,17 @@ export const isTheme = (value) => typeof value === 'string' && NAMES.includes(va
 /** @param {unknown} value @returns {ThemeName | null} */
 const asTheme = (value) => (isTheme(value) ? value : null);
 
-/** @returns {ThemeName} the theme the document is currently wearing */
-export function currentTheme() {
+/**
+ * @param {{ root?: Element }} [options]
+ * @returns {ThemeName} the theme the root is currently wearing
+ */
+export function currentTheme({ root } = {}) {
     if (typeof document === 'undefined') return DEFAULT_THEME;
-    return asTheme(document.documentElement.dataset.theme) ?? DEFAULT_THEME;
+    return asTheme(rootOf(root).getAttribute('data-theme')) ?? DEFAULT_THEME;
 }
 
 /**
- * Put a theme on <html> and tell everyone.
+ * Put a theme on the root and tell everyone.
  *
  * Validation lives here rather than in each caller: this is the exported
  * entry point and was the only one that did not validate, which is how an
@@ -69,20 +99,29 @@ export function currentTheme() {
  * value was rejected by the hook (AR6, adopted from the critic).
  *
  * @param {unknown} theme
+ * @param {{ root?: Element, darkClass?: string | null, strict?: boolean, announce?: boolean }} [options]
+ *   strict: throw on an unknown name instead of substituting the default; announce: dispatch the events (default true)
  * @returns {ThemeName} the theme actually applied — DEFAULT_THEME for anything unknown
  */
-export function applyTheme(theme) {
-    const next = asTheme(theme) ?? DEFAULT_THEME;
-    const root = document.documentElement;
-    const previous = asTheme(root.dataset.theme);
-    root.dataset.theme = next;
+export function applyTheme(theme, { root, darkClass, strict = false, announce = true } = {}) {
+    const known = asTheme(theme);
+    if (known === null && strict) throw new RangeError(`kp-themes: "${String(theme)}" is not a theme`);
+    const next = known ?? DEFAULT_THEME;
+    const element = rootOf(root);
+    const previous = asTheme(element.getAttribute('data-theme'));
+    if (announce && previous !== next) {
+        const ask = new CustomEvent(BEFORE_THEME_EVENT, { bubbles: true, cancelable: true, detail: { theme: next, previous } });
+        if (!element.dispatchEvent(ask)) return previous ?? DEFAULT_THEME;
+    }
+    element.setAttribute('data-theme', next);
     // The `dark` class is what a consumer's existing `dark:` variants key
     // on. Kept as a contract value [TH26], derived from the token source
     // rather than from a hand-kept list: kyu believed in four dark themes
     // where there are three.
-    root.classList.toggle('dark', DARK.has(next));
-    if (previous !== next) {
-        document.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: { theme: next, previous } }));
+    const cls = darkClass === undefined ? config.darkClass : darkClass;
+    if (cls) element.classList.toggle(cls, DARK.has(next));
+    if (announce && previous !== next) {
+        element.dispatchEvent(new CustomEvent(THEME_EVENT, { bubbles: true, detail: { theme: next, previous, root: element } }));
     }
     return next;
 }
@@ -94,21 +133,25 @@ export function applyTheme(theme) {
  * fails to save is indistinguishable from a broken picker.
  *
  * @param {string} theme
+ * @param {{ key?: string, storage?: Storage }} [options]
  * @returns {boolean} whether the choice will survive a reload
  */
-export function storeTheme(theme) {
+export function storeTheme(theme, { key, storage } = {}) {
     try {
-        localStorage.setItem(STORAGE_KEY, theme);
+        (storage ?? localStorage).setItem(key ?? config.storageKey, theme);
         return true;
     } catch {
         return false;
     }
 }
 
-/** @returns {ThemeName | null} the stored choice, or null if there is none or storage is unreadable */
-export function storedTheme() {
+/**
+ * @param {{ key?: string, storage?: Storage }} [options]
+ * @returns {ThemeName | null} the stored choice, or null if there is none or storage is unreadable
+ */
+export function storedTheme({ key, storage } = {}) {
     try {
-        return asTheme(localStorage.getItem(STORAGE_KEY));
+        return asTheme((storage ?? localStorage).getItem(key ?? config.storageKey));
     } catch {
         return null;
     }
@@ -120,37 +163,43 @@ export function storedTheme() {
  * that knowledge lives in the generated registry [TH23].
  *
  * @param {string} [fallback]
+ * @param {{ root?: Element, key?: string }} [options]
  * @returns {ThemeName}
  */
-export function initializeTheme(fallback = DEFAULT_THEME) {
-    return applyTheme(storedTheme() ?? fallback);
+export function initializeTheme(fallback = DEFAULT_THEME, { root, key } = {}) {
+    return applyTheme(storedTheme({ key }) ?? fallback, { root });
 }
 
 /**
  * Listen for theme changes, whoever made them: this tab's React picker,
- * this tab's framework-free picker, or another tab.
+ * this tab's framework-free picker, or — unless declined — another tab.
  *
- * @param {(theme: ThemeName) => void} listener
+ * @param {(theme: ThemeName, detail: { previous: ThemeName | null, root: Element }) => void} listener
+ * @param {{ crossTab?: boolean, root?: Element, key?: string }} [options]
  * @returns {() => void} unsubscribe
  */
-export function onThemeChange(listener) {
+export function onThemeChange(listener, { crossTab = true, root, key } = {}) {
     if (typeof document === 'undefined') return () => {};
+    const target = root ?? document;
     /** @param {Event} e */
-    const onEvent = (e) => listener(/** @type {CustomEvent} */ (e).detail.theme);
+    const onEvent = (e) => {
+        const detail = /** @type {CustomEvent} */ (e).detail;
+        listener(detail.theme, { previous: detail.previous, root: detail.root });
+    };
     /** @param {StorageEvent} e */
     const onStorage = (e) => {
         // Another tab changed the choice. Translate it into the same
         // announcement rather than a second mechanism, so a subscriber
         // never has to know which tab a change came from.
-        if (e.key !== STORAGE_KEY) return;
+        if (e.key !== (key ?? config.storageKey)) return;
         const next = asTheme(e.newValue);
-        if (next && next !== currentTheme()) applyTheme(next);
+        if (next && next !== currentTheme({ root })) applyTheme(next, { root });
     };
-    document.addEventListener(THEME_EVENT, onEvent);
-    window.addEventListener('storage', onStorage);
+    target.addEventListener(THEME_EVENT, onEvent);
+    if (crossTab) window.addEventListener('storage', onStorage);
     return () => {
-        document.removeEventListener(THEME_EVENT, onEvent);
-        window.removeEventListener('storage', onStorage);
+        target.removeEventListener(THEME_EVENT, onEvent);
+        if (crossTab) window.removeEventListener('storage', onStorage);
     };
 }
 

@@ -11,7 +11,86 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.3.2.
+Nothing since 2.4.0.
+
+## [2.4.0] — 2026-09-05
+
+### Changed
+
+- **Bootstrap is gone; the dashboard wears @kp-soft/themes' own components**
+  (W13). kp-themes v3.0.0 ships twenty-two framework-free components,
+  themed natively — the eighteen kyu's templates needed (button, badge,
+  card, alert, table, nav, form field) replace `bootstrap.min.css`
+  (233 KB) and the 4 KB bridge that translated between the two. Nothing
+  in `templates/` still names a Bootstrap class.
+- **Eight files are vendored now, not six**: `components.js` carries the
+  DI10/DI4 contract enforcement kyu used to hand-roll (a destructive
+  control needs an undo or a confirmation; a semantic colour needs
+  words too) and the skip-link behaviour; `strings.js` is a hard
+  dependency both `theme-picker.js` and `components.js` import since the
+  package's own 2.0.0. `static/kyu-init.js` is new and kyu's own: since
+  3.0.0 every `js/*.js` import is pure, so something has to call
+  `attachThemePickers()`, `enforceContracts()`, `attachConfirmations()`
+  and `attachSkipLinks()` once the markup exists — kyu calls only those
+  four, not the package's own `js/auto.js`, which would attach twelve
+  behaviours this dashboard has no markup for (a data table, a date
+  picker, drag-reorder…).
+- **Revoking an app token now arms before it acts** (DI10): a first
+  click changes the button to "Really revoke?", a second click within
+  four seconds does it, and the button disarms itself if nothing
+  follows. The same mechanism that used to be kyu's own thirty-line
+  script is now three lines calling the vendored one.
+- **A skip link.** The first thing a keyboard user meets on every page is
+  now "Skip to content", not the theme picker.
+- **Theme labels are English**, matching the rest of this dashboard and
+  the package's own default since its 2.0.0 — they were Dutch before,
+  left over from a package that was Dutch-by-default when this list was
+  first written.
+- **The login page joined the theme system.** Until this release it was
+  the one page on kyu with no theme picker, no dark mode and no
+  no-flash snippet — plain Bootstrap regardless of what a visitor had
+  chosen everywhere else. It still offers no picker of its own (nothing
+  to switch to before logging in), but it now renders in whatever theme
+  is already stored.
+
+### Fixed
+
+- **A required field no longer renders red before anyone has touched
+  it.** `components.css`'s own `input:invalid` rule matches an empty
+  required field from the moment the page loads, which is correct CSS
+  and wrong UX for a page not using the package's `attachForms()` (kyu
+  does not — see below). `static/kyu.css` narrows this to `:user-invalid`,
+  which only matches once a field has been interacted with and left
+  invalid.
+
+### Not carried over, on purpose
+
+- **`js/forms.js`** (the package's accessible validation summary) is not
+  vendored. kyu's forms are simple enough that the server's own
+  `{% if error %}` banner already covers it, and — see below — the
+  v3.0.0 release's own `SHA256SUMS` does not list this file, so it
+  cannot be verified against the release the way the other eight are.
+- **TH63's light/dark theme-menu grouping** is not adopted. It needs
+  each theme's `dark` flag, which kyu deliberately removed from its own
+  side in 1.0.0 (a hand-kept copy of that flag is exactly how kyu once
+  came to believe in four dark themes when there are three); reading it
+  from the JS registry to build a grouped menu would mean building the
+  menu in JavaScript, which this dashboard's server-rendered picker
+  exists to avoid.
+
+### Worth knowing, not kyu's to fix
+
+- **kp-themes' own v3.0.0 release `SHA256SUMS` omits `js/strings.js` and
+  `js/forms.js`.** `strings.js` is not optional here — both
+  `theme-picker.js` and `components.js` import it, so kyu could not
+  serve either without it. Its hash in `KP_THEMES.sha256` is computed
+  from the v3.0.0 git tag rather than lifted from the release manifest,
+  which is the offline-verifiable next best thing but proves less: it
+  catches an edited or truncated copy, not that the copy is genuinely
+  the tagged release.
+
+Nothing about the HTTP contract, the environment variables or the
+deployment changed. Upgrading is replacing the binary.
 
 ## [2.3.2] — 2026-09-04
 

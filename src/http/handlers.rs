@@ -1245,29 +1245,39 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 /// The files the pages need, compiled into the binary like the templates
 /// (T4 amendment) so the container stays one artifact and the distroless
 /// image needs no filesystem layout.
-const BOOTSTRAP_CSS: &str = include_str!("../../static/bootstrap.min.css");
 const APP_JS: &str = include_str!("../../static/app.js");
-// ── @kp-soft/themes v1.2.0, vendored VERBATIM ──────────────────────────
+// ── @kp-soft/themes v3.0.0, vendored VERBATIM ──────────────────────────
 //
 // kyu has no npm and no build step, so the shared package cannot be a
-// dependency the way it is in JobTracker. These five files are byte-for-byte
-// copies of the v1.2.0 tag, never edited here: `.claude/hooks/gates.sh`
+// dependency the way it is in JobTracker. These eight files are byte-for-
+// byte copies of the v3.0.0 tag, never edited here: `.claude/hooks/gates.sh`
 // compares each one against ~/Projects/kp-themes and refuses the commit when
 // they differ, which is what keeps a copy from going stale in silence.
 //
-// v1.0.0 ships the framework-free channel kyu asked for, so the hand-written
-// picker this project carried in 2.2.0 is gone: the behaviour now comes from
-// the package that owns it.
+// Bootstrap and its bridge are gone since 2.4.0: every component on this
+// dashboard now wears the package's own classes, natively themed, so the
+// 233 KB of Bootstrap and the 4 KB translation layer over it both left.
 const THEMES_CSS: &str = include_str!("../../static/themes.css");
 const COMPONENTS_CSS: &str = include_str!("../../static/components.css");
 const THEME_CORE_JS: &str = include_str!("../../static/theme-core.js");
 const THEME_PICKER_JS: &str = include_str!("../../static/theme-picker.js");
 const THEME_REGISTRY_JS: &str = include_str!("../../static/theme-registry.js");
+/// The DI10/DI4 contract enforcement, the confirm-arm pattern behind
+/// `data-kp-confirm`, and the skip link — kyu's own hand-rolled versions of
+/// the first two are gone as of 2.4.0.
+const COMPONENTS_JS: &str = include_str!("../../static/components.js");
+/// Both `theme-picker.js` and `components.js` import `getStrings` from this
+/// since the package's own 2.0.0 — not vendored for its own sake, but
+/// because neither loads without it.
+const STRINGS_JS: &str = include_str!("../../static/strings.js");
 
-/// kyu's OWN file, not vendored: it maps the package's tokens onto
-/// Bootstrap's `--bs-*` variables. Kept separate so re-copying the upstream
-/// stylesheets never overwrites it.
-const THEME_BRIDGE_CSS: &str = include_str!("../../static/theme-bridge.css");
+/// kyu's OWN files, not vendored: `kyu.css` is layout glue and the handful
+/// of utilities the package deliberately does not ship; `kyu-init.js` calls
+/// only the four attach functions kyu's templates use, since every module
+/// import is pure since v3.0.0 and the package's own js/auto.js attaches
+/// sixteen behaviours this dashboard has no markup for.
+const KYU_CSS: &str = include_str!("../../static/kyu.css");
+const KYU_INIT_JS: &str = include_str!("../../static/kyu-init.js");
 
 /// A short fingerprint of the assets, appended to their URLs in the
 /// templates.
@@ -1280,15 +1290,17 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
     // FNV-1a: not cryptographic, and does not need to be — this answers
     // "did these bytes change", nothing more (T6: no crate for six lines).
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in BOOTSTRAP_CSS
+    for byte in APP_JS
         .bytes()
-        .chain(APP_JS.bytes())
         .chain(THEMES_CSS.bytes())
         .chain(COMPONENTS_CSS.bytes())
         .chain(THEME_CORE_JS.bytes())
         .chain(THEME_PICKER_JS.bytes())
         .chain(THEME_REGISTRY_JS.bytes())
-        .chain(THEME_BRIDGE_CSS.bytes())
+        .chain(COMPONENTS_JS.bytes())
+        .chain(STRINGS_JS.bytes())
+        .chain(KYU_CSS.bytes())
+        .chain(KYU_INIT_JS.bytes())
     {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
@@ -1303,25 +1315,28 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
 /// bug, and there are exactly two files.
 pub async fn static_asset(Path(file): Path<String>) -> Response {
     let (body, content_type) = match file.as_str() {
-        "bootstrap.min.css" => (BOOTSTRAP_CSS, "text/css; charset=utf-8"),
         "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
         "themes.css" => (THEMES_CSS, "text/css; charset=utf-8"),
         "components.css" => (COMPONENTS_CSS, "text/css; charset=utf-8"),
-        "theme-bridge.css" => (THEME_BRIDGE_CSS, "text/css; charset=utf-8"),
+        "kyu.css" => (KYU_CSS, "text/css; charset=utf-8"),
         // The picker is an ES module importing ./theme-core.js, which
-        // imports ./theme-registry.js. Served flat under /static, those
-        // relative specifiers resolve here, so all three must be reachable
-        // or the picker fails to load with nothing on the page to say why.
+        // imports ./theme-registry.js; kyu-init.js imports both the picker
+        // and ./components.js. Served flat under /static, those relative
+        // specifiers resolve here, so all four must be reachable or the
+        // dashboard fails to come alive with nothing on the page to say why.
         "theme-core.js" => (THEME_CORE_JS, "text/javascript; charset=utf-8"),
         "theme-picker.js" => (THEME_PICKER_JS, "text/javascript; charset=utf-8"),
         "theme-registry.js" => (THEME_REGISTRY_JS, "text/javascript; charset=utf-8"),
+        "components.js" => (COMPONENTS_JS, "text/javascript; charset=utf-8"),
+        "strings.js" => (STRINGS_JS, "text/javascript; charset=utf-8"),
+        "kyu-init.js" => (KYU_INIT_JS, "text/javascript; charset=utf-8"),
         _ => {
             return ApiError::new(
                 StatusCode::NOT_FOUND,
                 format!("kyu serves no asset named {file:?}"),
-                "the dashboard needs bootstrap.min.css, app.js, themes.css, \
-                 components.css, theme-bridge.css, theme-core.js, \
-                 theme-picker.js and theme-registry.js."
+                "the dashboard needs app.js, themes.css, components.css, \
+                 kyu.css, theme-core.js, theme-picker.js, theme-registry.js, \
+                 components.js, strings.js and kyu-init.js."
                     .to_string(),
             )
             .into_response();

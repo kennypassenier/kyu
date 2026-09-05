@@ -1,35 +1,52 @@
 <!doctype html>
-<html lang="en" data-bs-theme="auto">
+<html lang="en" data-theme="formal">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>kyu — log in</title>
-<link rel="stylesheet" href="/static/bootstrap.min.css?v={{ assets }}">
+<!-- Same no-flash snippet as layout.html, byte-for-byte: a login page is
+     still a page, and until 2.4.0 this one was the one place on kyu that
+     never picked up the visitor's stored theme at all. -->
+<script>
+(function () {
+    try {
+        var t = localStorage.getItem("theme");
+        if (t) document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+})();
+</script>
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link rel="stylesheet"
+      href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600|fraunces:600,700|share-tech-mono:400|chakra-petch:500,600,700">
+<link rel="stylesheet" href="/static/themes.css?v={{ assets }}">
+<link rel="stylesheet" href="/static/components.css?v={{ assets }}">
+<link rel="stylesheet" href="/static/kyu.css?v={{ assets }}">
 </head>
-<body class="d-flex align-items-center" style="min-height: 100vh">
-<main class="container" style="max-width: 26rem">
-  <h1 class="h4 mb-1">kyu</h1>
-  <p class="text-secondary mb-4">This hub is protected. Paste a token to continue.</p>
+<body style="display: flex; align-items: center; min-height: 100vh">
+<main style="max-width: 26rem; margin: 0 auto; padding: 1.5rem">
+  <h1 style="margin-bottom: 0.25rem; font-size: 1.5rem">kyu</h1>
+  <p class="text-secondary" style="margin-bottom: 1.5rem">This hub is protected. Paste a token to continue.</p>
 
   {% if error %}
-  <div class="alert alert-danger" role="alert">{{ error }}</div>
+  <div class="kp-alert kp-alert--destructive" role="alert" style="margin-bottom: 1rem">{{ error }}</div>
   {% endif %}
 
-  <form method="post" action="/login">
-    <div class="mb-3">
-      <label for="token" class="form-label">Token</label>
-      <input type="password" class="form-control font-monospace" id="token" name="token"
+  <form method="post" action="/login" style="display: flex; flex-direction: column; gap: 1rem">
+    <div class="kp-field" style="max-width: none">
+      <label class="kp-field__label" for="token">Token</label>
+      <input type="password" class="kp-field__input" id="token" name="token"
+             style="font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace)"
              autocomplete="current-password" autofocus required>
-      <div class="form-text">
+      <p class="kp-field__help">
         The value of <code>KYU_TOKEN</code> from your compose file, or any
         token from the apps page.
-      </div>
+      </p>
     </div>
-    <div class="form-check mb-3">
-      <input class="form-check-input" type="checkbox" id="remember" name="remember" value="1" checked>
-      <label class="form-check-label" for="remember">Stay logged in on this device</label>
+    <div class="kp-field kp-field--check" style="max-width: none">
+      <input class="kp-field__check" type="checkbox" id="remember" name="remember" value="1" checked>
+      <label class="kp-field__label" for="remember">Stay logged in on this device</label>
     </div>
-    <button type="submit" class="btn btn-primary w-100">Log in</button>
+    <button type="submit" class="kp-button kp-button--primary" style="width: 100%">Log in</button>
   </form>
 </main>
 </body>

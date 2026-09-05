@@ -120,7 +120,7 @@ done
 # The login page is useless without its stylesheet, and the stylesheet only
 # exists inside the binary — this is the check that would have caught the
 # templates/ omission in the Dockerfile the first time round.
-for ASSET in bootstrap.min.css app.js; do
+for ASSET in themes.css components.css kyu.css kyu-init.js app.js; do
     STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${DOOR_HUB}/static/${ASSET}")
     [ "$STATUS" = "200" ] || { echo "the image is missing ${ASSET} (status $STATUS)"; exit 1; }
 done

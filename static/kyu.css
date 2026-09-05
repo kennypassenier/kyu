@@ -1,0 +1,83 @@
+/* kyu's own file, not vendored: layout glue and the handful of utilities
+   @kp-soft/themes deliberately does not ship — its README lists "a build
+   step" and "runtime dependencies" under what is NOT there, and no
+   grid or spacing utilities are in `css/components.css` either. themes.css
+   and components.css are vendored verbatim; everything kyu-specific lives
+   here, so re-copying upstream never overwrites it.
+
+   Until 2.4.0 this file bridged the package's tokens onto Bootstrap's
+   --bs-* variables. Bootstrap is gone: every component on this dashboard
+   now wears @kp-soft/themes' own classes, and needs no bridge. */
+
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--theme-font-body, ui-sans-serif, system-ui, sans-serif);
+    margin: 0;
+    padding-bottom: 4rem;
+}
+
+main {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: 1.5rem clamp(0.75rem, 3vw, 1.5rem);
+}
+
+h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+
+/* Pushes whatever follows the links (the theme picker, the logout form)
+   to the far end of the nav — .kp-nav is a flex row, and this is the one
+   rule it does not decide for a consumer, because not every nav has a
+   trailing group. */
+.kp-nav__links { flex: 1; }
+
+.text-secondary { color: var(--muted-foreground); }
+.text-end { text-align: end; }
+.italic { font-style: italic; }
+
+code, pre { font-size: 0.85rem; }
+pre.snippet {
+    background: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: var(--radius, 0.5rem);
+    padding: 0.7rem 0.9rem;
+    margin: 0;
+    overflow-x: auto;
+}
+td.payload { max-width: 28rem; overflow-wrap: anywhere; }
+.secret {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    overflow-wrap: anywhere;
+}
+
+/* Badge tones. components.css ships one flat .kp-badge with no colour
+   variant — its own contract (DI4) says a badge's meaning must already be
+   in its text, so colour is only ever the second signal, and the package
+   does not invent one for a badge the way it does for .kp-alert. kyu still
+   wants that second signal for subscription and app state at a glance, so
+   these three follow exactly the token pattern .kp-alert's variants use:
+   same tokens, same shape, so a theme that adjusts --success adjusts this
+   too. Every badge that carries one of these still carries its word
+   first (`active`, `live`, `3 dead`) — the tone is decoration, not the
+   only carrier. */
+.kp-badge--success { background: var(--success); color: var(--success-foreground); }
+.kp-badge--warning { background: var(--warning); color: var(--warning-foreground); }
+.kp-badge--destructive { background: var(--destructive); color: var(--destructive-foreground); }
+
+/* components.css's own :invalid rule paints a destructive border the
+   instant a required field is empty — before a visitor has typed
+   anything, since that is what "invalid" natively means on an empty
+   required field. The package's own forms.js works around this with
+   novalidate and its own aria-invalid state, reporting on blur rather
+   than on load; kyu does not vendor forms.js (js/forms.js is missing
+   from the v3.0.0 release's own SHA256SUMS — see KP_THEMES.sha256),
+   so without an override every required field on this dashboard would
+   render red on first paint: the login token, the app name, the
+   publish textarea. :user-invalid only matches once a visitor has
+   interacted with the field and left it invalid, which is what
+   "invalid" should mean here. Supported in the same browsers the
+   package's own overlays already assume (AR15: modern Chrome and
+   Firefox). */
+input:invalid, select:invalid, textarea:invalid { border-color: inherit; }
+input:user-invalid, select:user-invalid, textarea:user-invalid { border-color: var(--destructive); }

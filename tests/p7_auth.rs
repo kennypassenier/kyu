@@ -458,7 +458,7 @@ async fn p7_the_apps_page_is_not_reachable_without_logging_in() {
 async fn p7_the_static_assets_are_open_and_nothing_else_is_reachable_through_them() {
     let (hub, _dir) = spawn(true).await;
 
-    for asset in ["bootstrap.min.css", "app.js"] {
+    for asset in ["themes.css", "kyu.css", "app.js"] {
         let response = client()
             .get(hub.url(&format!("/static/{asset}")))
             .send()
@@ -467,12 +467,12 @@ async fn p7_the_static_assets_are_open_and_nothing_else_is_reachable_through_the
         assert_eq!(response.status(), 200, "the login page needs {asset}");
     }
 
-    // The handler matches two literal names rather than joining a path, so
+    // The handler matches literal names rather than joining a path, so
     // there is nothing to traverse — this pins that. The exact refusal
     // differs on purpose: an unknown asset is a 404, while a probe that the
     // router normalises back to "/" lands on a protected route and gets a
     // 401. Either is fine; serving a file is not.
-    for probe in ["..%2f..%2fetc%2fpasswd", "bootstrap.min.css.map", "%2e%2e"] {
+    for probe in ["..%2f..%2fetc%2fpasswd", "themes.css.map", "%2e%2e"] {
         let response = client()
             .get(hub.url(&format!("/static/{probe}")))
             .send()

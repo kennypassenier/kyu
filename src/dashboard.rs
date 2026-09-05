@@ -27,7 +27,7 @@ use crate::store::queries::{
 /// message; the rest is announced rather than dropped in silence (AR11).
 pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
 
-/// The house themes, from `@kp-soft/themes` **v1.2.0** — the shared package
+/// The house themes, from `@kp-soft/themes` **v3.0.0** — the shared package
 /// JobTracker, almanac and kp-soft use.
 ///
 /// Only the name and the label. v1.0.0 removed the colour copies on purpose
@@ -46,15 +46,15 @@ pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
 pub const THEMES: &[ThemeView] = &[
     ThemeView {
         name: "formal",
-        label: "Formeel",
+        label: "Formal",
     },
     ThemeView {
         name: "light",
-        label: "Licht",
+        label: "Light",
     },
     ThemeView {
         name: "dark",
-        label: "Donker",
+        label: "Dark",
     },
     ThemeView {
         name: "cyberpunk",
@@ -70,11 +70,11 @@ pub const THEMES: &[ThemeView] = &[
     },
     ThemeView {
         name: "topo",
-        label: "Topografisch",
+        label: "Topographic",
     },
     ThemeView {
         name: "high-contrast",
-        label: "Hoog contrast",
+        label: "High contrast",
     },
     ThemeView {
         name: "sepia",
@@ -82,11 +82,11 @@ pub const THEMES: &[ThemeView] = &[
     },
     ThemeView {
         name: "blueprint",
-        label: "Blauwdruk",
+        label: "Blueprint",
     },
     ThemeView {
         name: "solstice",
-        label: "Zonnewende",
+        label: "Solstice",
     },
 ];
 
@@ -94,7 +94,11 @@ pub const THEMES: &[ThemeView] = &[
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ThemeView {
     pub name: &'static str,
-    /// Shown to the reader. Dutch, because the package's labels are Dutch.
+    /// Shown to the reader. English, matching the rest of this dashboard —
+    /// and, since the package's 2.0.0, its own default too. Before that
+    /// release the package's labels were Dutch and so was this list; kept
+    /// in step here rather than kept as a deliberate override, because
+    /// nothing else on this dashboard is Dutch.
     pub label: &'static str,
 }
 
@@ -480,6 +484,7 @@ pub fn render_topics(topics: Vec<TopicView>, now: Millis, protected: bool) -> Re
             topics => topics,
             now => now,
             protected => protected,
+            active_nav => "topics",
             assets => asset_version(),
         })
         .context("cannot render the topic list")
@@ -545,6 +550,7 @@ pub fn render_apps(apps: &[AppView], error: Option<&str>) -> Result<String> {
             apps => apps,
             error => error,
             protected => true,
+            active_nav => "apps",
             reveal_seconds => crate::config::REVEAL_SECONDS,
             assets => asset_version(),
         })
@@ -574,6 +580,7 @@ pub fn render_topic(
             now => now,
             protected => protected,
             app_names => app_names,
+            active_nav => "topics",
             reveal_seconds => crate::config::REVEAL_SECONDS,
             assets => asset_version(),
         })

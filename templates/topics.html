@@ -1,12 +1,12 @@
 {% extends "layout.html" %}
 {% block title %}kyu — topics{% endblock %}
 {% block content %}
-<h1 class="h3">Topics</h1>
+<h1>Topics</h1>
 <p class="text-secondary">Every topic on this hub. A topic exists once something publishes to it.</p>
 
 {% if topics %}
-<div class="table-responsive">
-<table class="table table-hover align-middle">
+<div class="kp-table-wrap">
+<table class="kp-table">
   <thead>
     <tr>
       <th>Topic</th>
@@ -21,14 +21,14 @@
   {% for topic in topics %}
   <tr>
     <td><a href="/t/{{ topic.name }}/dashboard">{{ topic.name }}</a></td>
-    <td class="text-end tabular">{{ topic.messages }}</td>
-    <td class="text-end tabular">{{ topic.subscriptions }}</td>
-    <td class="text-end tabular">{{ topic.backlog }}</td>
-    <td class="text-end tabular">
-      {% if topic.dead > 0 %}<span class="badge text-bg-danger">{{ topic.dead }}</span>{% else %}0{% endif %}
+    <td class="text-end">{{ topic.messages }}</td>
+    <td class="text-end">{{ topic.subscriptions }}</td>
+    <td class="text-end">{{ topic.backlog }}</td>
+    <td class="text-end">
+      {% if topic.dead > 0 %}<span class="kp-badge kp-badge--destructive">{{ topic.dead }}</span>{% else %}0{% endif %}
     </td>
-    <td class="tabular">
-      {% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="text-secondary fst-italic">never</span>{% endif %}
+    <td>
+      {% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="text-secondary italic">never</span>{% endif %}
     </td>
   </tr>
   {% endfor %}
@@ -36,13 +36,13 @@
 </table>
 </div>
 {% else %}
-<p class="text-secondary fst-italic">No topics yet.</p>
+<p class="text-secondary italic">No topics yet.</p>
 {% endif %}
 
-<h2 class="h5 mt-4">Start a topic</h2>
+<h2>Start a topic</h2>
 <p class="text-secondary">A topic exists as soon as something publishes to it:</p>
 <pre class="snippet">curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
-<p class="text-secondary mt-2">
+<p class="text-secondary" style="margin-top: 0.5rem">
   Then open the topic to see the receive and acknowledge commands, filled in
   with its own data{% if protected %} and a working token{% endif %}.
 </p>
