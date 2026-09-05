@@ -1239,6 +1239,217 @@ async fn p7_p1_the_dashboard_shows_dead_letters_and_requeues_them() {
     );
 }
 
+/// Two subscriptions on one topic, drained of the bootstrap leftovers that
+/// `bootstrap()` leaks into an already-existing subscription's queue:
+/// bootstrapping a SECOND subscription publishes its own throwaway message,
+/// which fans out to the FIRST subscription too (it already exists), and
+/// sits there until it is claimed. W15 and W16 both need two clean
+/// subscriptions before publishing the one message they actually test with,
+/// so this is shared between them.
+async fn bootstrap_two_clean(hub: &Hub, topic: &str, first: &str, second: &str) {
+    bootstrap(hub, topic, first).await;
+    bootstrap(hub, topic, second).await;
+    let leaked = receive(hub, topic, &format!("as={first}&wait=0")).await;
+    assert_eq!(
+        leaked.status(),
+        200,
+        "bootstrapping {second} after {first} publishes one message that fans out \
+         to {first} too, since {first} already exists by then"
+    );
+    let leaked_id = header(&leaked, "kyu-id").expect("an id");
+    let ack = reqwest::Client::new()
+        .post(hub.url(&format!("/t/{topic}/ack/{leaked_id}?as={first}")))
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(
+        ack.status(),
+        200,
+        "the leftover is drained, not left pending"
+    );
+}
+
+/// [W15] Kenny's own feedback after using the dashboard: Requeue existed,
+/// nothing to just throw a dead letter away existed. The button is the
+/// mirror image of Requeue — same table, same form shape, deletes instead
+/// of resetting the state — and it must not touch any other subscription's
+/// copy of the same message (AR2: one message, fanned out to N deliveries).
+#[tokio::test]
+async fn p7_w15_the_dead_letter_delete_button_removes_only_this_subscriptions_copy() {
+    let (hub, _dir) = spawn().await;
+    bootstrap_two_clean(&hub, "print.receipt", "printer", "archiver").await;
+
+    let id = publish(&hub, "print.receipt", r#"{"receipt":"kapot"}"#).await;
+    let received = receive(&hub, "print.receipt", "as=printer&wait=0").await;
+    assert_eq!(received.status(), 200);
+    assert_eq!(
+        header(&received, "kyu-id").as_deref(),
+        Some(id.as_str()),
+        "printer's queue is clean, so this is the message this test published"
+    );
+    assert_eq!(
+        reqwest::Client::new()
+            .post(hub.url(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true")))
+            .send()
+            .await
+            .expect("a response")
+            .status(),
+        200
+    );
+
+    let page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(page.contains("Delete"), "the button exists beside Requeue");
+    assert!(
+        page.contains("data-kp-destructive") && page.contains("data-kp-confirm"),
+        "and it arms before it acts, like Revoke on the apps page"
+    );
+
+    let deleted = reqwest::Client::new()
+        .post(hub.url("/t/print.receipt/dashboard/delivery/delete"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("subscription=printer&id={id}"))
+        .send()
+        .await
+        .expect("a response");
+    assert!(
+        deleted.status().is_success() || deleted.status().is_redirection(),
+        "the delete button returns to the page"
+    );
+
+    let after = reqwest::get(hub.url("/t/print.receipt/dashboard"))
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(
+        after.contains("Nothing has been dead-lettered"),
+        "gone from the topic's dead-letter list"
+    );
+
+    // archiver's own copy of the same message is untouched by printer's delete.
+    let for_archiver = receive(&hub, "print.receipt", "as=archiver&wait=0").await;
+    assert_eq!(
+        for_archiver.status(),
+        200,
+        "the other subscription's copy of the same message survives"
+    );
+    assert_eq!(
+        header(&for_archiver, "kyu-id").as_deref(),
+        Some(id.as_str())
+    );
+
+    // Deleting something that no longer exists is a 404, not a silent no-op.
+    let again = reqwest::Client::new()
+        .post(hub.url(&format!(
+            "/api/t/print.receipt/subs/printer/deliveries/{id}/delete"
+        )))
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(
+        again.status(),
+        404,
+        "deleting an already-gone delivery says so plainly"
+    );
+}
+
+/// [W16] Kenny's second question after the same session: could he click
+/// into a subscription and see its live backlog, not just the count. The
+/// dead-letters table was the precedent this reused — same shape, scoped
+/// to one subscription, `state IN (pending, claimed)` instead of `dead`.
+#[tokio::test]
+async fn p7_w16_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest() {
+    let (hub, _dir) = spawn().await;
+    bootstrap_two_clean(&hub, "print.receipt", "printer", "archiver").await;
+
+    let id = publish(&hub, "print.receipt", r#"{"receipt":"nog te doen"}"#).await;
+
+    // The topic page links to it.
+    let topic_page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(
+        topic_page.contains("/t/print.receipt/dashboard/subs/printer"),
+        "the subscription name on the topic page links to its own page"
+    );
+
+    let page = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/printer"))
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(page.contains(&id), "the pending item's id is shown");
+    assert!(
+        page.contains("nog te doen"),
+        "and its payload, the whole point of looking: {page}"
+    );
+    assert!(page.contains("Delete"), "with a way to remove it");
+
+    // archiver's backlog page exists and shows the same pending item too —
+    // it is the same message, fanned out to both.
+    let archiver_page = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/archiver"))
+        .await
+        .expect("a response");
+    assert_eq!(archiver_page.status(), 200);
+    let archiver_body = archiver_page.text().await.expect("a body");
+    assert!(
+        archiver_body.contains(&id),
+        "archiver's own pending copy shows on its own page"
+    );
+
+    // A name that never polled this topic at all is a 404, the same shape
+    // as an unknown topic.
+    let unknown = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/nobody")).await;
+    assert_eq!(
+        unknown.expect("a response").status(),
+        404,
+        "an unpolled name is not a page that happens to be empty"
+    );
+
+    // Delete printer's pending item; archiver's copy of the SAME message
+    // must survive, exactly like W15's dead-letter delete.
+    let deleted = reqwest::Client::new()
+        .post(hub.url("/t/print.receipt/dashboard/delivery/delete"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("subscription=printer&id={id}"))
+        .send()
+        .await
+        .expect("a response");
+    assert!(deleted.status().is_success() || deleted.status().is_redirection());
+
+    let after = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/printer"))
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(
+        after.contains("Nothing pending or claimed"),
+        "printer's backlog is empty now"
+    );
+
+    let for_archiver = receive(&hub, "print.receipt", "as=archiver&wait=0").await;
+    assert_eq!(
+        for_archiver.status(),
+        200,
+        "archiver's copy of the same message was never touched"
+    );
+    assert_eq!(
+        header(&for_archiver, "kyu-id").as_deref(),
+        Some(id.as_str())
+    );
+}
+
 #[tokio::test]
 async fn p7_p1_a_binary_dead_letter_is_announced_not_mangled() {
     let (hub, _dir) = spawn().await;

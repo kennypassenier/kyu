@@ -238,7 +238,7 @@ real binary): a clean exit code, a truncated log, the backlog intact
 across the stop, three SIGTERMs in a row still exiting 0, and an
 in-flight long poll answered rather than dropped.
 
-## Desired (7)
+## Desired (10)
 
 ### W1 · Prometheus metrics
 `/metrics`: per-subscription backlog, delivery/ack rates, DLQ counts,
@@ -388,6 +388,89 @@ other way round.**
 
 Neither is kyu's copy going stale; both are gaps in what the release itself
 ships. Kenny decides whether either is worth raising with the project.
+
+### W14 · Human-readable timestamps everywhere *(added at the 2026-09-05 mini-round)*
+
+Kenny's own feedback after using the 2.4.0 dashboard: `oldest_unacked_at`,
+`dead_at`, `published_at` and `due_at` were still 13-digit millisecond
+stamps, while `AppView.created_at` had used `human_age` ("just now", "3
+hours ago") since W2. The gap was even named in `human_age`'s own doc
+comment — "the rest of the dashboard prints raw millisecond stamps" — and
+never closed until someone actually read the page and noticed.
+
+`TopicView`, `SubscriptionView`, `DeadLetterView` and `MessageView` build
+their timestamp fields through `human_age(now, …)` now, the same way
+`AppView` already did; the `From<…>` conversions became `at(…, now)`
+constructors to make `now` available where it is needed. Six fields moved:
+a topic's last-published time, a subscription's oldest-unacked and
+last-poll times, a dead letter's death and publish times, and a message's
+publish and due times.
+
+Proven by `dashboard::tests::w14_every_view_reports_human_readable_time_not_raw_milliseconds`,
+one assertion per view against the exact string `human_age` produces for a
+known elapsed time — shown red first by reverting one field to
+`.to_string()` and watching it fail with the raw number.
+
+### W15 · Delete a dead letter *(added at the 2026-09-05 mini-round)*
+
+Also Kenny's own feedback, same session: Requeue existed, nothing to just
+throw a dead letter away existed, so anything nobody intended to retry sat
+on the list forever. `queries::delete_delivery` is the mirror image of
+`requeue_dead` — same lookup, `DELETE` instead of `UPDATE` — and it does
+not restrict itself to `state = 'dead'`, because W16 below needed the same
+mechanism for a delivery that has not given up yet. Only the `deliveries`
+row goes; the message and every other subscription's copy of it are
+untouched (AR2: one message, fanned out to N deliveries).
+
+The button sits beside Requeue, wired through the same DI10 arm-then-act
+pattern as Revoke on the apps page (`data-kp-destructive`,
+`data-kp-confirm`) rather than a native `confirm()` dialog.
+
+Proven by `tests/p7_hardening.rs`'s
+`p7_w15_the_dead_letter_delete_button_removes_only_this_subscriptions_copy`:
+two subscriptions on one topic, one message, delete one subscription's
+dead-lettered copy through the dashboard form and confirm the other
+subscription's copy of the identical message survives; a second delete of
+the same id answers 404, not a silent no-op.
+
+### W16 · Per-subscription backlog view *(added at the 2026-09-05 mini-round)*
+
+Kenny's third question in the same session: could he click into a
+subscription from the topic page and see what it is actually holding,
+not only the aggregate counts ("backlog: 3"). `GET
+/t/<topic>/dashboard/subs/<subscription>` is the dead-letters table's
+younger sibling — the same shape, scoped to one subscription's `sub_id`,
+`state IN ('pending', 'claimed')` instead of `'dead'`. The subscription's
+name on the topic page is now a link rather than plain text.
+
+Deliberately narrow: the only row action is Delete, reusing W15's
+mechanism exactly (a delivery in any state can be removed from one
+subscription's queue without touching the message or any other
+subscription). Editing a payload from this page was considered and set
+aside in the same mini-round as V3 below — the payload belongs to the
+message, not to a delivery, so "editing" one here would silently rewrite
+what every other subscription sees for it.
+
+Proven by `tests/p7_hardening.rs`'s
+`p7_w16_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest`:
+the topic page links to the subscription page, the pending item's id and
+payload show, an unpolled subscription name answers 404 rather than an
+empty page, and deleting one subscription's pending copy leaves the
+other subscription's copy of the same message deliverable.
+
+### Considered and set aside at the same mini-round
+
+- **Editing a payload before requeuing a dead letter.** The payload lives
+  on the message (`messages.payload`), shared by reference across every
+  subscription's delivery for it (confirmed in `tests/l3_fanout.rs`, and
+  AR2 calls storing it "verbatim"). Editing it in place would silently
+  rewrite what every other subscription — including ones that already
+  acked it — sees for that message. The existing "Publish a test message"
+  form is the practical workaround today: not scoped to the one failed
+  delivery, but it gets a corrected payload to every active subscription
+  without inventing a message-cloning mechanism. A targeted version (clone
+  the message, requeue the clone for one subscription only) remains a real
+  option, not attempted here.
 
 ## Later (2)
 

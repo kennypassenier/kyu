@@ -756,6 +756,33 @@ pub async fn requeue_dead(
         .into_response())
 }
 
+/// [W15, W16] `POST /api/t/{topic}/subs/{sub}/deliveries/{id}/delete` —
+/// removes one delivery for good, whatever state it is in. No wake:
+/// deleting creates no new pending work for the subscription's poller.
+pub async fn delete_delivery(
+    State(state): State<AppState>,
+    Path((topic, subscription, id)): Path<(String, String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let topic_for_log = topic.clone();
+    let subscription_for_log = subscription.clone();
+    let id_for_response = id.clone();
+    spawn_engine(move || engine.delete_delivery(&topic, &subscription, &id)).await?;
+
+    tracing::info!(
+        topic = %topic_for_log,
+        subscription = %subscription_for_log,
+        id = %id_for_response,
+        "dead letter deleted"
+    );
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(json!({ "deleted": id_for_response })),
+    )
+        .into_response())
+}
+
 // ─── L6 · history and lifecycle (K8, K9, K11) ───────────────────────────────
 
 /// K11 · `POST /api/t/{topic}/subs/{sub}/unarchive`
@@ -868,13 +895,14 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<Strin
     let engine = state.engine.clone();
     let protected = state.auth.is_protected();
     let page = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
+        let now = engine.now_ms();
         let topics = engine
             .store()
             .read(queries::topic_summaries)?
             .into_iter()
-            .map(TopicView::from)
+            .map(|summary| TopicView::at(summary, now))
             .collect();
-        dashboard::render_topics(topics, engine.now_ms(), protected)
+        dashboard::render_topics(topics, now, protected)
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
@@ -942,20 +970,21 @@ pub async fn dashboard_topic(
                 return Ok(None);
             };
 
+            let now = engine.now_ms();
             let subscriptions: Vec<SubscriptionView> =
                 queries::subscription_summaries(conn, topic_id)?
                     .into_iter()
-                    .map(SubscriptionView::from)
+                    .map(|summary| SubscriptionView::at(summary, now))
                     .collect();
             let messages: Vec<MessageView> =
                 queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?
                     .into_iter()
-                    .map(MessageView::from)
+                    .map(|message| MessageView::at(message, now))
                     .collect();
             let dead_letters: Vec<DeadLetterView> =
                 queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?
                     .into_iter()
-                    .map(DeadLetterView::from)
+                    .map(|dead| DeadLetterView::at(dead, now))
                     .collect();
 
             // The snippets carry this topic's own most recent payload and a
@@ -976,12 +1005,12 @@ pub async fn dashboard_topic(
             );
 
             Ok(Some(dashboard::render_topic(
-                TopicView::from(summary),
+                TopicView::at(summary, now),
                 subscriptions,
                 messages,
                 dead_letters,
                 snippets,
-                engine.now_ms(),
+                now,
                 protected,
                 app_names,
             )?))
@@ -998,6 +1027,71 @@ pub async fn dashboard_topic(
             format!("topic {topic:?} does not exist"),
             "a topic starts existing when something publishes to it. Open / to see \
              which topics this hub has.",
+        )),
+    }
+}
+
+/// How many backlog items a subscription page shows (W16). Bounded for the
+/// same reason `DEAD_LETTERS_SHOWN` is.
+const BACKLOG_SHOWN: usize = 50;
+
+/// [W16] `GET /t/{topic}/dashboard/subs/{subscription}` — one subscription's
+/// live backlog, individually rather than as a count.
+pub async fn dashboard_subscription(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+) -> Result<Html<String>, ApiError> {
+    let engine = state.engine.clone();
+    let topic_name = topic.clone();
+    let subscription_name = subscription.clone();
+    let protected = state.auth.is_protected();
+
+    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<String>> {
+        engine.store().read(|conn| {
+            let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
+                return Ok(None);
+            };
+            let Some(sub_id) =
+                queries::subscription_id_by_name_conn(conn, topic_id, &subscription_name)?
+            else {
+                return Ok(None);
+            };
+
+            let summary = queries::subscription_summaries(conn, topic_id)?
+                .into_iter()
+                .find(|summary| summary.name == subscription_name);
+            let Some(summary) = summary else {
+                return Ok(None);
+            };
+
+            let now = engine.now_ms();
+            let view = dashboard::SubscriptionView::at(summary, now);
+            let backlog: Vec<dashboard::BacklogItemView> =
+                queries::backlog_for_subscription(conn, sub_id, BACKLOG_SHOWN)?
+                    .into_iter()
+                    .map(|item| dashboard::BacklogItemView::at(item, now))
+                    .collect();
+
+            Ok(Some(dashboard::render_subscription(
+                &topic_name,
+                view,
+                backlog,
+                protected,
+            )?))
+        })
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error| internal(format!("{error:#}")))?;
+
+    match page {
+        Some(page) => Ok(Html(page)),
+        None => Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("subscription {subscription:?} on topic {topic:?} does not exist"),
+            "a subscription is created by polling, so this name has never polled this \
+             topic. Check the spelling, or open the topic's own page to see which \
+             subscriptions it has.",
         )),
     }
 }
@@ -1073,6 +1167,44 @@ pub async fn dashboard_requeue(
     state
         .notifiers
         .wake(&topic, std::slice::from_ref(&subscription_for_wake));
+
+    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+}
+
+/// [W15, W16] `POST /t/{topic}/dashboard/delivery/delete` — the Delete
+/// button beside Requeue on the dead-letter table, and the same button on
+/// the per-subscription backlog view.
+pub async fn dashboard_delete_delivery(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let form = String::from_utf8_lossy(&body);
+    let field = |name: &str| {
+        form.split('&')
+            .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            .map(urldecode)
+    };
+
+    let subscription = field("subscription").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "the delete form did not name a subscription",
+            "use the button on the dashboard, or call \
+             POST /api/t/<topic>/subs/<subscription>/deliveries/<id>/delete directly.",
+        )
+    })?;
+    let id = field("id").ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "the delete form did not name a message",
+            "use the button on the dashboard, which fills this in.",
+        )
+    })?;
+
+    let engine = state.engine.clone();
+    let topic_for_engine = topic.clone();
+    spawn_engine(move || engine.delete_delivery(&topic_for_engine, &subscription, &id)).await?;
 
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }

@@ -97,12 +97,20 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(handlers::dashboard_index))
         .route("/t/{topic}/dashboard", get(handlers::dashboard_topic))
         .route(
+            "/t/{topic}/dashboard/subs/{subscription}",
+            get(handlers::dashboard_subscription),
+        )
+        .route(
             "/t/{topic}/dashboard/publish",
             post(handlers::dashboard_publish),
         )
         .route(
             "/t/{topic}/dashboard/requeue",
             post(handlers::dashboard_requeue),
+        )
+        .route(
+            "/t/{topic}/dashboard/delivery/delete",
+            post(handlers::dashboard_delete_delivery),
         )
         .route("/apps", get(handlers::apps_page))
         .route("/apps/create", post(handlers::apps_create))
@@ -123,6 +131,10 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/api/t/{topic}/subs/{subscription}/dead/{id}/requeue",
             post(handlers::requeue_dead),
+        )
+        .route(
+            "/api/t/{topic}/subs/{subscription}/deliveries/{id}/delete",
+            post(handlers::delete_delivery),
         )
         .route(
             "/api/t/{topic}/subs/{subscription}/unarchive",
