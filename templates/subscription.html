@@ -1,0 +1,64 @@
+{% extends "layout.html" %}
+{% block title %}kyu — {{ topic_name }} / {{ subscription.name }}{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 0.25rem">{{ subscription.name }}</h1>
+<p class="text-secondary">
+  <a href="/t/{{ topic_name }}/dashboard">{{ topic_name }}</a> ·
+  {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
+  {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
+  {% else %}<span class="kp-badge">{{ subscription.state }}</span>{% endif %} ·
+  backlog {{ subscription.backlog }} · in flight {{ subscription.claimed }}
+  {% if subscription.dead > 0 %} · <span class="kp-badge kp-badge--destructive">{{ subscription.dead }} dead</span>{% endif %}
+</p>
+<p class="text-secondary" style="font-size: 0.875rem">
+  lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
+  {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
+  ttl {{ subscription.ttl_ms }}ms{% endif %}
+</p>
+
+<h2>Backlog</h2>
+{% if backlog %}
+<p class="text-secondary">
+  What this subscription is still holding — pending or claimed, oldest first.
+  Deleting one here removes it from this subscription only; every other
+  subscription's copy of the same message is untouched.
+</p>
+<div class="kp-table-wrap">
+<table class="kp-table">
+  <thead>
+    <tr><th>Id</th><th>State</th><th>Published</th><th class="text-end">Attempts</th><th>Payload</th><th></th></tr>
+  </thead>
+  <tbody>
+  {% for item in backlog %}
+  <tr>
+    <td><code>{{ item.id }}</code></td>
+    <td>
+      {% if item.state == "claimed" %}<span class="kp-badge kp-badge--warning">claimed</span>
+      {% else %}<span class="kp-badge">{{ item.state }}</span>{% endif %}
+    </td>
+    <td style="font-size: 0.875rem">{{ item.published_at }}</td>
+    <td class="text-end">{{ item.attempts }}</td>
+    <td class="payload">
+      {% if item.payload.binary %}<span class="text-secondary italic">{{ item.note }}</span>
+      {% else %}<code>{{ item.payload.text }}</code>
+        {% if item.note %}<br><span class="text-secondary italic">{{ item.note }}</span>{% endif %}
+      {% endif %}
+    </td>
+    <td class="text-end">
+      <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" style="margin: 0">
+        <input type="hidden" name="subscription" value="{{ subscription.name }}">
+        <input type="hidden" name="id" value="{{ item.id }}">
+        <button type="submit" class="kp-button kp-button--destructive"
+                data-kp-destructive data-kp-confirm="Really delete?">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="text-secondary italic">Nothing pending or claimed for this subscription right now.</p>
+{% endif %}
+{% endblock %}

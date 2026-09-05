@@ -20,8 +20,8 @@ use crate::crypto::SecretKey;
 use crate::events::{self, Event};
 use crate::store::Store;
 use crate::store::queries::{
-    self, AckOutcome, ClaimedMessage, DeadLetter, NackOutcome, Overdue, RequeueOutcome,
-    StoredPolicy,
+    self, AckOutcome, ClaimedMessage, DeadLetter, DeleteOutcome, NackOutcome, Overdue,
+    RequeueOutcome, StoredPolicy,
 };
 
 use clock::{Clock, Millis};
@@ -702,6 +702,24 @@ impl Engine {
                     id: message_id.to_string(),
                     subscription: subscription.to_string(),
                     state,
+                }),
+            }
+        })
+    }
+
+    /// [W15, W16] Removes one delivery for good, whatever state it is in —
+    /// a dead letter someone decided is not worth requeuing (W15), or a
+    /// still-pending or claimed item on the per-subscription backlog view
+    /// (W16). Only this subscription's delivery goes; the message and
+    /// every other subscription's copy of it are untouched.
+    pub fn delete_delivery(&self, topic: &str, subscription: &str, message_id: &str) -> Result<()> {
+        self.write(|tx| -> Result<()> {
+            let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            match queries::delete_delivery(tx, message_id, sub_id)? {
+                DeleteOutcome::Deleted => Ok(()),
+                DeleteOutcome::NoSuchDelivery => Err(EngineError::NoSuchDelivery {
+                    id: message_id.to_string(),
+                    subscription: subscription.to_string(),
                 }),
             }
         })

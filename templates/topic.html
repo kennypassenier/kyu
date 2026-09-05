@@ -63,7 +63,7 @@
   <tbody>
   {% for subscription in subscriptions %}
   <tr>
-    <td style="font-weight: 500">{{ subscription.name }}</td>
+    <td style="font-weight: 500"><a href="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}">{{ subscription.name }}</a></td>
     <td>
       {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
       {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
@@ -117,11 +117,19 @@
       {% endif %}
     </td>
     <td class="text-end">
-      <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" style="margin: 0">
-        <input type="hidden" name="subscription" value="{{ dead.subscription }}">
-        <input type="hidden" name="id" value="{{ dead.id }}">
-        <button type="submit" class="kp-button kp-button--primary">Requeue</button>
-      </form>
+      <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
+        <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" style="margin: 0">
+          <input type="hidden" name="subscription" value="{{ dead.subscription }}">
+          <input type="hidden" name="id" value="{{ dead.id }}">
+          <button type="submit" class="kp-button kp-button--primary">Requeue</button>
+        </form>
+        <form method="post" action="/t/{{ topic.name }}/dashboard/delivery/delete" style="margin: 0">
+          <input type="hidden" name="subscription" value="{{ dead.subscription }}">
+          <input type="hidden" name="id" value="{{ dead.id }}">
+          <button type="submit" class="kp-button kp-button--destructive"
+                  data-kp-destructive data-kp-confirm="Really delete?">Delete</button>
+        </form>
+      </div>
     </td>
   </tr>
   {% endfor %}

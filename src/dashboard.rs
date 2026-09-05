@@ -20,7 +20,7 @@ use serde::Serialize;
 use crate::engine::clock::Millis;
 use crate::engine::policy::Policy;
 use crate::store::queries::{
-    RecentMessage, StoredPolicy, SubscriptionSummary, TopicDeadLetter, TopicSummary,
+    BacklogItem, RecentMessage, StoredPolicy, SubscriptionSummary, TopicDeadLetter, TopicSummary,
 };
 
 /// How much of a payload the dashboard shows. Enough to recognise a
@@ -129,6 +129,12 @@ static ENVIRONMENT: LazyLock<Environment<'static>> = LazyLock::new(|| {
         .add_template("apps.html", include_str!("../templates/apps.html"))
         .expect("the apps template must compile");
     environment
+        .add_template(
+            "subscription.html",
+            include_str!("../templates/subscription.html"),
+        )
+        .expect("the subscription template must compile");
+    environment
 });
 
 /// How a payload is shown: text as text, binary announced as binary, and
@@ -193,21 +199,25 @@ impl PayloadView {
 #[derive(Debug, Clone, Serialize)]
 pub struct MessageView {
     pub id: String,
-    pub published_at: Millis,
-    pub due_at: Option<Millis>,
+    /// Human-readable ("3 minutes ago"), not the raw millisecond stamp —
+    /// see `human_age`. kyu's own dashboard was the one place on it that
+    /// still printed epoch numbers; found by Kenny reading his own topic
+    /// page.
+    pub published_at: String,
+    pub due_at: Option<String>,
     pub content_type: Option<String>,
     pub payload: PayloadView,
     pub note: Option<String>,
 }
 
-impl From<RecentMessage> for MessageView {
-    fn from(message: RecentMessage) -> Self {
+impl MessageView {
+    pub fn at(message: RecentMessage, now: Millis) -> Self {
         let payload = PayloadView::of(&message.payload);
         let note = payload.note();
         Self {
             id: message.id,
-            published_at: message.published_at,
-            due_at: message.due_at,
+            published_at: human_age(now, message.published_at),
+            due_at: message.due_at.map(|at| human_age(now, at)),
             content_type: message.content_type,
             payload,
             note,
@@ -221,23 +231,24 @@ impl From<RecentMessage> for MessageView {
 pub struct DeadLetterView {
     pub subscription: String,
     pub id: String,
-    pub published_at: Millis,
-    pub dead_at: Option<Millis>,
+    /// Human-readable, not the raw millisecond stamp — see `MessageView`.
+    pub published_at: String,
+    pub dead_at: Option<String>,
     pub attempts: i64,
     pub content_type: Option<String>,
     pub payload: PayloadView,
     pub note: Option<String>,
 }
 
-impl From<TopicDeadLetter> for DeadLetterView {
-    fn from(dead: TopicDeadLetter) -> Self {
+impl DeadLetterView {
+    pub fn at(dead: TopicDeadLetter, now: Millis) -> Self {
         let payload = PayloadView::of(&dead.letter.payload);
         let note = payload.note();
         Self {
             subscription: dead.subscription,
             id: dead.letter.id,
-            published_at: dead.letter.published_at,
-            dead_at: dead.letter.dead_at,
+            published_at: human_age(now, dead.letter.published_at),
+            dead_at: dead.letter.dead_at.map(|at| human_age(now, at)),
             attempts: dead.letter.attempts,
             content_type: dead.letter.content_type,
             payload,
@@ -254,8 +265,9 @@ pub struct SubscriptionView {
     pub claimed: i64,
     pub dead: i64,
     pub lapsed: i64,
-    pub last_poll_at: Option<Millis>,
-    pub oldest_unacked_at: Option<Millis>,
+    /// Human-readable, not the raw millisecond stamp — see `MessageView`.
+    pub last_poll_at: Option<String>,
+    pub oldest_unacked_at: Option<String>,
     pub lease_ms: i64,
     pub max_attempts: i64,
     pub backoff_ms: i64,
@@ -282,8 +294,8 @@ impl From<StoredPolicy> for StoredPolicyView {
     }
 }
 
-impl From<SubscriptionSummary> for SubscriptionView {
-    fn from(summary: SubscriptionSummary) -> Self {
+impl SubscriptionView {
+    pub fn at(summary: SubscriptionSummary, now: Millis) -> Self {
         let effective = Policy::effective(summary.policy);
         Self {
             name: summary.name,
@@ -292,8 +304,8 @@ impl From<SubscriptionSummary> for SubscriptionView {
             claimed: summary.claimed,
             dead: summary.dead,
             lapsed: summary.lapsed,
-            last_poll_at: summary.last_poll_at,
-            oldest_unacked_at: summary.oldest_unacked_at,
+            last_poll_at: summary.last_poll_at.map(|at| human_age(now, at)),
+            oldest_unacked_at: summary.oldest_unacked_at.map(|at| human_age(now, at)),
             lease_ms: effective.lease_ms,
             max_attempts: effective.max_attempts,
             backoff_ms: effective.backoff_ms,
@@ -311,11 +323,12 @@ pub struct TopicView {
     pub subscriptions: i64,
     pub backlog: i64,
     pub dead: i64,
-    pub last_published_at: Option<Millis>,
+    /// Human-readable, not the raw millisecond stamp — see `MessageView`.
+    pub last_published_at: Option<String>,
 }
 
-impl From<TopicSummary> for TopicView {
-    fn from(summary: TopicSummary) -> Self {
+impl TopicView {
+    pub fn at(summary: TopicSummary, now: Millis) -> Self {
         Self {
             name: summary.name,
             retention_ms: summary.retention_ms,
@@ -323,7 +336,7 @@ impl From<TopicSummary> for TopicView {
             subscriptions: summary.subscriptions,
             backlog: summary.backlog,
             dead: summary.dead,
-            last_published_at: summary.last_published_at,
+            last_published_at: summary.last_published_at.map(|at| human_age(now, at)),
         }
     }
 }
@@ -583,6 +596,61 @@ pub fn render_apps_setup(example_token: &str, example_key: &str) -> Result<Strin
         .context("cannot render the apps setup page")
 }
 
+/// [W16] One item on a subscription's live backlog, as the dashboard shows
+/// it. `state` is `pending` or `claimed` — everything `backlog_for_subscription`
+/// can return.
+#[derive(Debug, Clone, Serialize)]
+pub struct BacklogItemView {
+    pub id: String,
+    pub state: String,
+    /// Human-readable, not the raw millisecond stamp — see `MessageView`.
+    pub published_at: String,
+    pub attempts: i64,
+    pub content_type: Option<String>,
+    pub payload: PayloadView,
+    pub note: Option<String>,
+}
+
+impl BacklogItemView {
+    pub fn at(item: BacklogItem, now: Millis) -> Self {
+        let payload = PayloadView::of(&item.payload);
+        let note = payload.note();
+        Self {
+            id: item.id,
+            state: item.state,
+            published_at: human_age(now, item.published_at),
+            attempts: item.attempts,
+            content_type: item.content_type,
+            payload,
+            note,
+        }
+    }
+}
+
+/// [W16] `GET /t/{topic}/dashboard/subs/{subscription}` — one subscription's
+/// live backlog, individually rather than as a count. The dead-letters
+/// table on the topic page is this page's older sibling; this is the same
+/// shape for messages that have not given up yet.
+pub fn render_subscription(
+    topic_name: &str,
+    subscription: SubscriptionView,
+    backlog: Vec<BacklogItemView>,
+    protected: bool,
+) -> Result<String> {
+    ENVIRONMENT
+        .get_template("subscription.html")
+        .context("the subscription template is missing")?
+        .render(minijinja::context! {
+            topic_name => topic_name,
+            subscription => subscription,
+            backlog => backlog,
+            protected => protected,
+            active_nav => "topics",
+            assets => asset_version(),
+        })
+        .context("cannot render the subscription page")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn render_topic(
     topic: TopicView,
@@ -748,5 +816,90 @@ mod tests {
             "a single quote must be escaped for the shell: {}",
             snippets.publish.full
         );
+    }
+
+    /// [W14] Every timestamp the dashboard shows is human-readable, not the
+    /// raw millisecond stamp `human_age` exists for — found live by Kenny
+    /// reading his own topic page, where `oldest_unacked_at`, `dead_at`,
+    /// `published_at` and `due_at` were still 13-digit numbers while
+    /// `AppView.created_at` had already used `human_age` since W2. One test
+    /// per view, each asserting the exact string `human_age` would produce
+    /// for the same two timestamps, so a future field that reintroduces a
+    /// raw `Millis` fails to compile rather than fails this test.
+    #[test]
+    fn w14_every_view_reports_human_readable_time_not_raw_milliseconds() {
+        let now: Millis = 1_800_000_000_000;
+        let five_minutes_ago = now - 5 * 60_000;
+
+        let topic = TopicView::at(
+            TopicSummary {
+                name: "notify.kenny".to_string(),
+                retention_ms: None,
+                messages: 1,
+                subscriptions: 1,
+                backlog: 0,
+                dead: 0,
+                last_published_at: Some(five_minutes_ago),
+            },
+            now,
+        );
+        assert_eq!(topic.last_published_at.as_deref(), Some("5 minutes ago"));
+
+        let subscription = SubscriptionView::at(
+            SubscriptionSummary {
+                name: "printer".to_string(),
+                state: "active".to_string(),
+                backlog: 1,
+                claimed: 0,
+                dead: 0,
+                lapsed: 0,
+                last_poll_at: Some(five_minutes_ago),
+                oldest_unacked_at: Some(five_minutes_ago),
+                policy: StoredPolicy {
+                    lease_ms: None,
+                    max_attempts: None,
+                    backoff_ms: None,
+                    ttl_ms: None,
+                    idle_flag_ms: None,
+                    idle_archive_ms: None,
+                },
+            },
+            now,
+        );
+        assert_eq!(
+            subscription.oldest_unacked_at.as_deref(),
+            Some("5 minutes ago")
+        );
+        assert_eq!(subscription.last_poll_at.as_deref(), Some("5 minutes ago"));
+
+        let dead_letter = DeadLetterView::at(
+            TopicDeadLetter {
+                subscription: "printer".to_string(),
+                letter: crate::store::queries::DeadLetter {
+                    id: "01M1QJ".to_string(),
+                    published_at: five_minutes_ago,
+                    dead_at: Some(five_minutes_ago),
+                    attempts: 5,
+                    content_type: None,
+                    payload: b"kapot".to_vec(),
+                },
+            },
+            now,
+        );
+        assert_eq!(dead_letter.published_at, "5 minutes ago");
+        assert_eq!(dead_letter.dead_at.as_deref(), Some("5 minutes ago"));
+
+        let message = MessageView::at(
+            RecentMessage {
+                id: "01M1QJ".to_string(),
+                published_at: five_minutes_ago,
+                due_at: Some(five_minutes_ago),
+                content_type: None,
+                payload: b"hello".to_vec(),
+            },
+            now,
+        );
+        assert_eq!(message.published_at, "5 minutes ago");
+        assert_eq!(message.due_at.as_deref(), Some("5 minutes ago"));
     }
 }

@@ -11,7 +11,41 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.4.1.
+Nothing since 2.5.0.
+
+## [2.5.0] — 2026-09-05
+
+Three pieces of feedback from Kenny actually using the 2.4.0 dashboard,
+decided at one mini-round.
+
+### Added
+
+- **Every timestamp on the dashboard is human-readable now** (W14) — "3
+  minutes ago", not a 13-digit millisecond stamp. Six fields moved:
+  a topic's last-published time, a subscription's oldest-unacked and
+  last-poll times, a dead letter's death and publish times, a message's
+  publish and due times.
+- **Dead letters can be deleted, not only requeued** (W15). The button
+  sits beside Requeue, arms before it acts (the same DI10 pattern as
+  Revoke), and removes only the one subscription's copy — the message
+  and every other subscription's delivery of it are untouched.
+- **A subscription's own backlog page** (W16): click a subscription's
+  name on the topic page to see what it is individually holding —
+  pending or claimed, oldest first — rather than only the aggregate
+  counts. Each item can be deleted with the same mechanism as W15.
+
+### Considered and set aside
+
+- **Editing a payload before requeuing a dead letter.** The payload lives
+  on the message, shared by every subscription's delivery of it; editing
+  it in place would silently rewrite what every other subscription sees.
+  The existing "Publish a test message" form is today's workaround. See
+  docs/FEATURES.md for the full reasoning.
+
+Nothing about the HTTP contract's three verbs or the environment variables
+changed; the new `/api/t/<topic>/subs/<sub>/deliveries/<id>/delete` route
+is an addition alongside the existing dead-letter management routes, not a
+change to publish/receive/ack. Upgrading is replacing the binary.
 
 ## [2.4.1] — 2026-09-05
 
