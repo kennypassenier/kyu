@@ -19,17 +19,17 @@
 
 /** @type {readonly ThemeRecord[]} */
 export const THEMES = Object.freeze([
-    { name: 'formal', label: 'Formeel', dark: false },
-    { name: 'light', label: 'Licht', dark: false },
-    { name: 'dark', label: 'Donker', dark: true },
+    { name: 'formal', label: 'Formal', dark: false },
+    { name: 'light', label: 'Light', dark: false },
+    { name: 'dark', label: 'Dark', dark: true },
     { name: 'cyberpunk', label: 'Cyberpunk', dark: true },
     { name: 'pastel', label: 'Pastel', dark: false },
     { name: 'terminal', label: 'Terminal', dark: true },
-    { name: 'topo', label: 'Topografisch', dark: false },
-    { name: 'high-contrast', label: 'Hoog contrast', dark: false },
+    { name: 'topo', label: 'Topographic', dark: false },
+    { name: 'high-contrast', label: 'High contrast', dark: false },
     { name: 'sepia', label: 'Sepia', dark: false },
-    { name: 'blueprint', label: 'Blauwdruk', dark: true },
-    { name: 'solstice', label: 'Zonnewende', dark: true },
+    { name: 'blueprint', label: 'Blueprint', dark: true },
+    { name: 'solstice', label: 'Solstice', dark: true },
 ]);
 
 /**

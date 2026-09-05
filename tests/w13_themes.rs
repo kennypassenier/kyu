@@ -1,6 +1,6 @@
 //! [W13] The house themes and their picker.
 //!
-//! kyu consumes `@kp-soft/themes` v1.2.0 — the shared package JobTracker,
+//! kyu consumes `@kp-soft/themes` v3.0.0 — the shared package JobTracker,
 //! almanac and kp-soft use — so the same eleven themes look the same
 //! everywhere and a choice made in one app behaves the same in the next.
 //!
@@ -84,15 +84,34 @@ fn themes_from_registry(registry: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// The package's own no-flash snippet, read out of the vendored module rather
-/// than written here — the whole point of the test below is that this text has
-/// exactly one source.
-fn no_flash_snippet(module: &str) -> &str {
-    module
-        .split("export const NO_FLASH_SNIPPET = `")
+/// A `const NAME = '...'` read out of vendored JS text — the same shape
+/// `themes_from_registry` above reads records with, used here for the two
+/// plain string constants the snippet is built from.
+fn single_quoted_const<'a>(source: &'a str, name: &str) -> &'a str {
+    source
+        .split(&format!("{name} = '"))
         .nth(1)
-        .and_then(|rest| rest.split('`').next())
-        .expect("no-flash.js must export NO_FLASH_SNIPPET as a template literal")
+        .and_then(|rest| rest.split('\'').next())
+        .unwrap_or_else(|| panic!("expected `{name} = '...'` in the vendored source"))
+}
+
+/// The package's own no-flash snippet, with its two interpolations resolved
+/// from the SAME constants a browser would resolve them from — the
+/// registry's storage key and the module's own attribute — rather than
+/// hardcoded a second time here. Since 3.0.0 `NO_FLASH_SNIPPET` is no longer
+/// a literal; it is `noFlashSnippet()` called with defaults, and the
+/// template lives inside that function.
+fn no_flash_snippet(no_flash_js: &str, registry_js: &str) -> String {
+    let key = single_quoted_const(registry_js, "STORAGE_KEY");
+    let attribute = single_quoted_const(no_flash_js, "THEME_ATTRIBUTE");
+    let template = no_flash_js
+        .split("return `")
+        .nth(1)
+        .and_then(|rest| rest.split("`;\n}").next())
+        .expect("noFlashSnippet() must return a template literal");
+    template
+        .replace("${JSON.stringify(key)}", &format!("{key:?}"))
+        .replace("${JSON.stringify(attribute)}", &format!("{attribute:?}"))
 }
 
 #[tokio::test]
@@ -161,8 +180,9 @@ async fn w13_the_markup_carries_the_packages_contract_attributes() {
         );
     }
     assert!(
-        page.contains("type=\"module\" src=\"/static/theme-picker.js"),
-        "and load the package's picker as a module, which is how it attaches"
+        page.contains("type=\"module\" src=\"/static/kyu-init.js"),
+        "and load kyu's own bootstrap module, which calls attachThemePickers() \
+         now that every js/*.js import is pure since 3.0.0"
     );
 }
 
@@ -186,7 +206,7 @@ async fn w13_the_storage_contract_matches_the_shared_package() {
 
     let page = hub.text("/").await;
     assert!(
-        page.contains("localStorage.getItem('theme')"),
+        page.contains("localStorage.getItem(\"theme\")"),
         "the no-flash snippet in <head> reads that same key before first paint"
     );
 }
@@ -202,10 +222,13 @@ async fn w13_the_module_chain_is_reachable_and_nothing_else_is() {
     for (path, expected) in [
         ("/static/themes.css", "text/css"),
         ("/static/components.css", "text/css"),
-        ("/static/theme-bridge.css", "text/css"),
+        ("/static/kyu.css", "text/css"),
         ("/static/theme-core.js", "text/javascript"),
         ("/static/theme-picker.js", "text/javascript"),
         ("/static/theme-registry.js", "text/javascript"),
+        ("/static/components.js", "text/javascript"),
+        ("/static/strings.js", "text/javascript"),
+        ("/static/kyu-init.js", "text/javascript"),
     ] {
         let response = hub.get(path).await;
         assert_eq!(response.status(), 200, "{path} must be served");
@@ -235,6 +258,17 @@ async fn w13_the_module_chain_is_reachable_and_nothing_else_is() {
         404,
         "and the hand-written picker of 2.2.0 is gone, not merely unused"
     );
+    assert_eq!(
+        hub.get("/static/bootstrap.min.css").await.status(),
+        404,
+        "and Bootstrap, gone since 2.4.0, is not still served on the side"
+    );
+    assert_eq!(
+        hub.get("/static/theme-bridge.css").await.status(),
+        404,
+        "and its Bootstrap bridge went with it — kp-themes needs no bridge \
+         when it is the dashboard's only component library"
+    );
 }
 
 #[tokio::test]
@@ -257,23 +291,25 @@ async fn w13_every_theme_the_picker_offers_exists_in_the_stylesheet() {
 
 #[tokio::test]
 async fn w13_the_no_flash_snippet_is_the_packages_own() {
-    // kyu inlines these six lines in <head> instead of importing the module,
+    // kyu inlines these lines in <head> instead of importing the module,
     // because a module arrives too late to prevent the flash it exists to
     // prevent. That inlining is a copy, and a copy is what this suite exists
     // to guard: until 2.3.2 kyu carried a hand-written version, and the
     // package's own comment names kyu as the consumer whose home-grown copy
     // once grew a list of which themes are dark and had it wrong.
     //
-    // Read from the vendored file at compile time, so re-copying a newer
-    // kp-themes that changed the snippet fails here rather than leaving the
-    // document head one release behind in silence.
+    // Read from the vendored files at compile time, so re-copying a newer
+    // kp-themes that changed the snippet — or its storage key, or its
+    // attribute — fails here rather than leaving the document head one
+    // release behind in silence.
     const NO_FLASH_JS: &str = include_str!("../static/no-flash.js");
+    const REGISTRY_JS: &str = include_str!("../static/theme-registry.js");
 
     let (hub, _dir) = spawn().await;
     let page = hub.text("/").await;
-    let snippet = no_flash_snippet(NO_FLASH_JS);
+    let snippet = no_flash_snippet(NO_FLASH_JS, REGISTRY_JS);
 
-    let at = page.find(snippet).unwrap_or_else(|| {
+    let at = page.find(&snippet).unwrap_or_else(|| {
         panic!("the document head must inline the package's snippet verbatim:\n{snippet}")
     });
 

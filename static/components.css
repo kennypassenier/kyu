@@ -27,7 +27,47 @@
 [data-kp-theme-picker] {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.25rem;
+    gap: var(--kp-picker-gap, 0.25rem);
+}
+
+/* Grouped light and dark [TH63]. A group is a list item that presents a
+ * small label and its own list, so a flat picker becomes two short rows
+ * with a title each, and a menu becomes two sections with a rule between
+ * them. The label is aria-hidden because the inner list carries it as
+ * its accessible name; a screen reader hears "Light, list, 6 items". */
+[data-kp-theme-picker] .kp-theme-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--kp-picker-gap, 0.25rem);
+    flex-basis: 100%;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.kp-theme-group__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--kp-picker-gap, 0.25rem);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.kp-theme-group__label {
+    display: block;
+    font-size: var(--kp-picker-group-size, 0.6875rem);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}
+
+/* The second group starts with a rule: a separator, not a gap. */
+.kp-theme-group + .kp-theme-group {
+    margin-block-start: var(--kp-picker-gap, 0.25rem);
+    padding-block-start: var(--kp-picker-gap, 0.25rem);
+    border-block-start: 1px solid var(--border);
 }
 
 [data-kp-theme-picker] [data-kp-theme] {
@@ -77,14 +117,14 @@
 
 [data-kp-theme-picker] [data-kp-theme][data-selected='true']::after,
 [data-kp-theme-picker] [data-kp-theme].is-selected::after {
-    content: '✓';
+    content: var(--kp-glyph-check, '✓');
     font-size: 0.875em;
 }
 
 [data-kp-theme-status] {
     margin: 0.5rem 0 0;
     color: var(--destructive);
-    font-size: 0.875rem;
+    font-size: var(--kp-text-sm, 0.875rem);
 }
 
 /* --- Showing data [TH33] --------------------------------------------
@@ -156,7 +196,7 @@
     position: absolute;
     inset-inline-start: 0.5rem;
     inset-block-start: -100%;
-    z-index: 100;
+    z-index: var(--kp-z-skip, 100);
     padding: 0.5rem 0.875rem;
     border-radius: var(--radius, 0.5rem);
     background: var(--primary);
@@ -172,13 +212,13 @@
     padding: 1.5rem clamp(1rem, 4vw, 3rem);
     border-top: 1px solid var(--border);
     color: var(--muted-foreground);
-    font-size: 0.875rem;
+    font-size: var(--kp-text-sm, 0.875rem);
 }
 
 /* An error page is a message, not a wall: the destructive colour names
  * the failure, the body text explains it on the ordinary surface. */
 .kp-error {
-    max-width: 60ch;
+    max-width: var(--kp-error-max-width, 60ch);
     margin: 3rem auto;
     padding: 0 1rem;
 }
@@ -209,7 +249,7 @@
     gap: 0.5rem;
     /* min-height, not height: forced text spacing must make this taller
      * rather than clip the label [DI11]. */
-    min-height: 2.25rem;
+    min-height: var(--kp-control-height, 2.25rem);
     padding: 0.375rem 0.875rem;
     border: 1px solid transparent;
     border-radius: var(--radius, 0.5rem);
@@ -224,9 +264,9 @@
 @media (prefers-reduced-motion: no-preference) {
     .kp-button {
         transition:
-            background-color var(--fx-duration, 120ms) var(--fx-ease, ease),
-            border-color var(--fx-duration, 120ms) var(--fx-ease, ease),
-            translate var(--fx-duration, 120ms) var(--fx-ease, ease);
+            background-color var(--fx-duration, 150ms) var(--fx-ease, ease),
+            border-color var(--fx-duration, 150ms) var(--fx-ease, ease),
+            translate var(--fx-duration, 150ms) var(--fx-ease, ease);
     }
 
     /* --fx-lift is how far a control rises under the cursor. Three themes
@@ -313,8 +353,8 @@
     align-items: center;
     gap: 0.3em;
     padding: 0.125rem 0.5rem;
-    border-radius: 999px;
-    font-size: 0.8125rem;
+    border-radius: var(--kp-radius-pill, 999px);
+    font-size: var(--kp-text-sm, 0.8125rem);
     line-height: 1.4;
     background: var(--muted);
     color: var(--muted-foreground);
@@ -332,12 +372,38 @@
 
 .kp-card__title {
     margin: 0 0 0.25rem;
-    font-size: 1rem;
+    font-size: var(--kp-text-md, 1rem);
 }
 
 .kp-card__body {
     margin: 0;
     color: var(--muted-foreground);
+}
+
+/* The card's header row, actions and footer [KT6]: slots that were a
+ * fixed <h3> and a body div. */
+.kp-card__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--kp-space-sm, 0.5rem);
+}
+
+.kp-card__actions {
+    display: flex;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.kp-card__footer {
+    margin-block-start: var(--kp-space-md, 0.75rem);
+    padding-block-start: var(--kp-space-md, 0.75rem);
+    border-block-start: 1px solid var(--border);
+}
+
+/* A destructive button with an undo offers it inline, beside itself. */
+.kp-button__undo {
+    display: inline-flex;
+    margin-inline-start: var(--kp-space-xs, 0.25rem);
 }
 
 /* --- Alert [TH4] ----------------------------------------------------- */
@@ -384,22 +450,35 @@
     font-weight: 600;
 }
 
+.kp-alert__icon {
+    flex: none;
+}
+
+.kp-alert__body {
+    flex: 1;
+}
+
+.kp-alert__close {
+    margin-inline-start: auto;
+    flex: none;
+}
+
 /* --- Form field [TH5] ------------------------------------------------ */
 
 .kp-field {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    max-width: 28rem;
+    max-width: var(--kp-field-max-width, 28rem);
 }
 
 .kp-field__label {
-    font-size: 0.875rem;
+    font-size: var(--kp-text-sm, 0.875rem);
     font-weight: 600;
 }
 
 .kp-field__input {
-    min-height: 2.25rem;
+    min-height: var(--kp-control-height, 2.25rem);
     padding: 0.375rem 0.625rem;
     border: 1px solid var(--input);
     border-radius: var(--radius, 0.5rem);
@@ -409,19 +488,90 @@
 }
 
 .kp-field__help {
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     color: var(--muted-foreground);
 }
 
 /* The error is text, and it names what is wrong. A red border alone is
  * colour as the only carrier [DI4], and says nothing to a screen reader. */
 .kp-field__error {
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     color: var(--destructive);
 }
 
 .kp-field--invalid .kp-field__input {
     border-color: var(--destructive);
+}
+
+/* A field is not always a text box. Before this the component rendered an
+ * input whatever it was told, so every real form grew a hand-written half
+ * beside it — without the label, the error and the describedby wiring
+ * that are the point of the component. */
+
+.kp-field__input--multiline {
+    min-height: 5.5rem;
+    /* Vertical only: a textarea dragged wider than its column breaks the
+     * layout it sits in, and nobody needs it. */
+    resize: vertical;
+}
+
+/* The box comes before its label, because that is the order it is read in
+ * and the order it is clicked in. */
+.kp-field--check {
+    flex-direction: row;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.kp-field--check .kp-field__label {
+    font-weight: 400;
+}
+
+.kp-field--check .kp-field__help,
+.kp-field--check .kp-field__error {
+    /* Under both, not beside the label: an error squeezed into the gap
+     * next to a checkbox wraps to one word per line at 320 px [DI11]. */
+    flex-basis: 100%;
+}
+
+/* A radio group is a group: fieldset and legend, so the question is read
+ * before the answers rather than once per answer. */
+.kp-fieldset {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-inline-size: 0;
+}
+
+.kp-fieldset > legend {
+    padding: 0;
+}
+
+.kp-field__option {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: var(--kp-text-sm, 0.875rem);
+}
+
+.kp-field__check {
+    /* 1.15rem rather than the browser default 13 px: the box is the
+     * target, and a target under 24 px fails WCAG 2.5.8 for anyone whose
+     * hands are not steady. The label is clickable too, which is what
+     * actually makes the target big enough. */
+    inline-size: 1.15rem;
+    block-size: 1.15rem;
+    accent-color: var(--primary);
+    flex: none;
+}
+
+/* The error text carries the message [DI4]; this only makes the control
+ * itself findable when the summary sends someone to it. A checkbox has no
+ * border to colour, so it is an outline. */
+.kp-field--invalid .kp-field__check {
+    outline: var(--focus-ring-width, 2px) solid var(--destructive);
+    outline-offset: 2px;
 }
 
 /* --- Table [TH3] ----------------------------------------------------- */
@@ -447,7 +597,7 @@
 
 .kp-table thead th {
     border-bottom: 1px solid var(--border-strong);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     color: var(--muted-foreground);
 }
 
@@ -500,10 +650,16 @@
  * We write the looks, and only the behaviour the platform does not give.
  * ==================================================================== */
 
+/* The brand as a link home keeps the brand's look; the underline is the
+ * page's ordinary link rule, which is what says it is one. */
+a.kp-nav__brand {
+    color: inherit;
+}
+
 /* --- Dialog ---------------------------------------------------------- */
 
 .kp-dialog {
-    max-width: min(32rem, calc(100vw - 2rem));
+    max-width: var(--kp-dialog-max-width, min(32rem, calc(100vw - 2rem)));
     padding: 1.25rem;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius, 0.5rem);
@@ -528,6 +684,31 @@
     margin-top: 1rem;
 }
 
+/* The parts a dialog grew in 3.0.0: a description under the title, an
+ * optional close button in the corner, and a body class where there was
+ * a bare div. */
+.kp-dialog__description {
+    margin: 0 0 var(--kp-space-md, 0.75rem);
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.875rem);
+}
+
+.kp-dialog__close {
+    position: absolute;
+    inset-inline-end: var(--kp-space-sm, 0.5rem);
+    inset-block-start: var(--kp-space-sm, 0.5rem);
+}
+
+.kp-menu__separator {
+    margin: var(--kp-space-xs, 0.25rem) 0;
+    border: 0;
+    border-block-start: 1px solid var(--border);
+}
+
+.kp-menu__item--destructive {
+    color: var(--destructive);
+}
+
 /* --- Dropdown and tooltip, on the popover layer ----------------------- */
 
 .kp-popover {
@@ -547,7 +728,7 @@
 .kp-menu {
     display: flex;
     flex-direction: column;
-    min-width: 10rem;
+    min-width: var(--kp-menu-min-width, 10rem);
     margin: 0;
     padding: 0;
     list-style: none;
@@ -555,7 +736,7 @@
 
 .kp-menu__item {
     padding: 0.375rem 0.625rem;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     background: none;
     border: 0;
     font: inherit;
@@ -570,9 +751,9 @@
 }
 
 .kp-tooltip {
-    max-width: 18rem;
+    max-width: var(--kp-tooltip-max-width, 18rem);
     padding: 0.25rem 0.5rem;
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 /* --- Toast ----------------------------------------------------------- */
@@ -584,7 +765,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    z-index: 50;
+    /* Above the texture layer (80): a toast under a fixed overlay is a
+     * toast nobody can read [KT6]. Every layer reads the z-index scale. */
+    z-index: var(--kp-z-toast, 90);
 }
 
 .kp-toast {
@@ -593,6 +776,29 @@
     border-radius: var(--radius, 0.5rem);
     background: var(--popover);
     color: var(--popover-foreground);
+}
+
+/* A toast with a meaning wears the status colour as a leading rule, and
+ * says it in words too: the variant class is never the only carrier
+ * [DI4]. The assertive region is a second stack for errors. */
+.kp-toast--success {
+    border-inline-start: 3px solid var(--success);
+}
+
+.kp-toast--warning {
+    border-inline-start: 3px solid var(--warning);
+}
+
+.kp-toast--info {
+    border-inline-start: 3px solid var(--info);
+}
+
+.kp-toast--error {
+    border-inline-start: 3px solid var(--destructive);
+}
+
+.kp-toast__close {
+    margin-inline-start: auto;
 }
 
 /* --- Accordion ------------------------------------------------------- */
@@ -655,7 +861,7 @@
 }
 
 .kp-breadcrumb li + li::before {
-    content: '/';
+    content: var(--kp-glyph-breadcrumb, '/');
     margin-inline-end: 0.5rem;
     color: var(--muted-foreground);
 }
@@ -665,19 +871,50 @@
     text-decoration-thickness: 2px;
 }
 
+.kp-pagination__gap {
+    padding: 0 var(--kp-space-xs, 0.25rem);
+    color: var(--muted-foreground);
+}
+
 /* --- Progress, spinner, skeleton ------------------------------------- */
+
+.kp-progress__wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--kp-space-sm, 0.5rem);
+}
+
+.kp-progress__value {
+    font-size: var(--kp-text-sm, 0.8125rem);
+    color: var(--muted-foreground);
+}
+
+/* A skeleton comes in the shape of what it stands in for, and its gap is
+ * a knob rather than an inline style nothing could beat [KT6]. */
+.kp-skeleton--circle {
+    border-radius: 50%;
+    aspect-ratio: 1;
+}
+
+.kp-skeleton--block {
+    block-size: var(--kp-skeleton-block, 6rem);
+}
+
+.kp-skeleton + .kp-skeleton {
+    margin-block-start: var(--kp-skeleton-gap, 0.375rem);
+}
 
 .kp-progress {
     inline-size: 100%;
-    max-inline-size: 20rem;
+    max-inline-size: var(--kp-progress-max-width, 20rem);
     block-size: 0.5rem;
     accent-color: var(--primary);
 }
 
 .kp-spinner {
     display: inline-block;
-    inline-size: 1.25rem;
-    block-size: 1.25rem;
+    inline-size: var(--kp-spinner-size, 1.25rem);
+    block-size: var(--kp-spinner-size, 1.25rem);
     border: 2px solid var(--border-strong);
     border-block-start-color: var(--primary);
     border-radius: 50%;
@@ -685,8 +922,8 @@
 
 .kp-skeleton {
     display: block;
-    block-size: 1rem;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    block-size: var(--kp-skeleton-height, 1rem);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     background: var(--muted);
 }
 
@@ -697,10 +934,12 @@
  * three-flashes threshold of DI5 — check-motion.mjs measures that. */
 @media (prefers-reduced-motion: no-preference) {
     .kp-spinner {
-        animation: kp-spin 900ms linear infinite;
+        animation: kp-spin var(--kp-spinner-duration, 900ms) linear infinite;
     }
 
     .kp-skeleton {
+        /* A literal, not a knob: the pulse changes luminance and DI5 pins it
+     * above the flash threshold [KT6]. */
         animation: kp-pulse 1600ms ease-in-out infinite;
     }
 }
@@ -761,6 +1000,65 @@
     display: inline-block;
 }
 
+/* Inside a menu the groups stack: the label sits as a small heading
+ * above its rows and the separator between the groups runs full width,
+ * inset by the row padding so it reads as part of the list [TH63]. */
+.kp-menu .kp-theme-group {
+    display: block;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.kp-menu .kp-theme-group__list {
+    display: block;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.kp-menu .kp-theme-group__label {
+    padding: var(--kp-picker-group-pad, 0.375rem 0.625rem 0.125rem);
+}
+
+.kp-menu .kp-theme-group + .kp-theme-group {
+    margin-block-start: var(--kp-picker-gap, 0.25rem);
+    padding-block-start: var(--kp-picker-gap, 0.25rem);
+    border-block-start: 1px solid var(--border);
+}
+
+/* The React switcher renders its list itself rather than as a popover
+ * element, so it positions under the button here. Both channels share
+ * the option and group rules below. */
+.kp-theme-menu {
+    position: relative;
+}
+
+.kp-theme-menu__list {
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-start: 100%;
+    margin-block-start: var(--kp-menu-offset, 0.25rem);
+    min-inline-size: var(--kp-menu-min-width, 11rem);
+    z-index: var(--kp-z-popover, 20);
+}
+
+.kp-theme-menu__status {
+    padding: var(--kp-menu-item-pad, 0.375rem 0.625rem);
+    color: var(--destructive);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kp-theme-option__label {
+    flex: 1;
+}
+
+.kp-theme-option__check {
+    inline-size: 1rem;
+    block-size: 1rem;
+    margin-inline-start: auto;
+}
+
 /* The menu reuses .kp-popover and .kp-menu, so it inherits the overlay
  * looks rather than inventing a second set. */
 .kp-menu [data-kp-theme] {
@@ -770,7 +1068,7 @@
     inline-size: 100%;
     padding: 0.375rem 0.625rem;
     border: 0;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     background: none;
     color: inherit;
     font: inherit;
@@ -784,9 +1082,11 @@
 }
 
 /* In a menu the mark is a check at the end, not a border: a row does not
- * have a boundary to colour, and the check is the second channel [DI4]. */
-.kp-menu [data-kp-theme][data-selected='true']::after {
-    content: '✓';
+ * have a boundary to colour, and the check is the second channel [DI4].
+ * The glyph is a knob; the React half renders an SVG child instead and
+ * suppresses this one. */
+.kp-menu [data-kp-theme][data-selected='true']:not(:has(.kp-theme-option__check))::after {
+    content: var(--kp-glyph-check, '✓');
     margin-inline-start: auto;
 }
 
@@ -826,8 +1126,8 @@
 @media (prefers-reduced-motion: no-preference) {
     .kp-combobox__input {
         transition:
-            border-color var(--fx-duration) var(--fx-ease),
-            box-shadow var(--fx-duration) var(--fx-ease);
+            border-color var(--fx-duration, 150ms) var(--fx-ease),
+            box-shadow var(--fx-duration, 150ms) var(--fx-ease);
     }
 }
 
@@ -841,8 +1141,8 @@
     position: absolute;
     inset-inline: 0;
     top: 100%;
-    z-index: 20;
-    max-height: 15rem;
+    z-index: var(--kp-z-popover, 20);
+    max-height: var(--kp-combobox-list-max-height, 15rem);
     margin: 0.25rem 0 0;
     padding: 0.25rem;
     overflow-y: auto;
@@ -855,7 +1155,7 @@
 
 .kp-combobox__option {
     padding: 0.375rem 0.625rem;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     cursor: pointer;
 }
 
@@ -874,7 +1174,7 @@
 .kp-combobox__status {
     margin: 0;
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-tag-list {
@@ -892,10 +1192,10 @@
     gap: 0.25rem;
     padding: 0.125rem 0.25rem 0.125rem 0.5rem;
     border: 1px solid var(--border);
-    border-radius: 999px;
+    border-radius: var(--kp-radius-pill, 999px);
     background: var(--muted);
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-tag__remove {
@@ -908,7 +1208,7 @@
     height: 1.25rem;
     padding: 0;
     border: 0;
-    border-radius: 999px;
+    border-radius: var(--kp-radius-pill, 999px);
     background: none;
     color: inherit;
     font: inherit;
@@ -923,11 +1223,51 @@
 
 /* --- Command palette and shortcut sheet [TH40, TH49] ----------------- */
 
+/* Commands grouped under a small heading; the group hides when every
+ * command in it is filtered out [KT6]. */
+.kp-palette__group {
+    list-style: none;
+}
+
+.kp-palette__group > ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.kp-palette__group-label,
+.kp-shortcuts__group-label {
+    display: block;
+    margin: var(--kp-space-sm, 0.5rem) 0 var(--kp-space-xs, 0.25rem);
+    font-size: var(--kp-text-xs, 0.6875rem);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted-foreground);
+}
+
+.kp-palette__description {
+    margin-inline-start: var(--kp-space-sm, 0.5rem);
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kp-combobox__clear {
+    position: absolute;
+    inset-inline-end: var(--kp-space-sm, 0.5rem);
+    inset-block-start: 50%;
+    translate: 0 -50%;
+    border: 0;
+    background: none;
+    color: var(--muted-foreground);
+    cursor: pointer;
+}
+
 /* A dialog centred near the top rather than the middle: a palette that
  * grows downwards should not push its own input off-centre while you
  * type. */
 .kp-palette {
-    width: min(36rem, 92vw);
+    width: var(--kp-palette-width, min(36rem, 92vw));
     margin: 10vh auto auto;
     padding: 0;
     overflow: hidden;
@@ -945,11 +1285,11 @@
     background: none;
     color: inherit;
     font: inherit;
-    font-size: 1rem;
+    font-size: var(--kp-text-md, 1rem);
 }
 
 .kp-palette__list {
-    max-height: 50vh;
+    max-height: var(--kp-palette-list-max-height, 50vh);
     margin: 0;
     padding: 0.25rem;
     overflow-y: auto;
@@ -961,7 +1301,7 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 0.75rem;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     cursor: pointer;
 }
 
@@ -977,7 +1317,7 @@
 /* The key hint sits at the end and never competes with the label. */
 .kp-palette__keys {
     margin-inline-start: auto;
-    font-size: 0.75rem;
+    font-size: var(--kp-text-xs, 0.75rem);
 }
 
 .kp-palette__status {
@@ -985,11 +1325,11 @@
     padding: 0.5rem 1rem;
     border-top: 1px solid var(--border);
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-shortcuts {
-    width: min(28rem, 92vw);
+    width: var(--kp-shortcuts-width, min(28rem, 92vw));
     padding: 1.25rem;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius, 0.5rem);
@@ -1018,6 +1358,38 @@
 }
 
 /* --- DataTable [TH37] ------------------------------------------------ */
+
+/* The sort control is a button inside the header, so it is reachable
+ * from the keyboard [KT6]; it wears the header's own text and nothing of
+ * a button's. */
+.kp-table th:has(> .kp-datatable__sort) {
+    padding: 0;
+}
+
+.kp-datatable__sort {
+    /* The whole cell: the button takes the header's padding, so a click
+     * anywhere in the header sorts — the first cut was an 18 px strip at
+     * the top of a 52 px cell, and a click in the middle hit nothing. */
+    display: block;
+    inline-size: 100%;
+    padding: var(--kp-table-cell-pad, 0.5rem 0.625rem);
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: inherit;
+    text-align: inherit;
+    cursor: pointer;
+}
+
+.kp-datatable__page-size {
+    margin-inline-end: var(--kp-space-sm, 0.5rem);
+    font: inherit;
+}
+
+.kp-table tr[data-kp-clickable] {
+    cursor: pointer;
+}
 
 .kp-datatable {
     display: flex;
@@ -1051,25 +1423,25 @@
 }
 
 .kp-table th[data-kp-sort]::after {
-    content: '↕';
+    content: var(--kp-glyph-sortable, '↕');
     margin-inline-start: 0.375rem;
     opacity: 0.35;
 }
 
 .kp-table th[aria-sort='ascending']::after {
-    content: '↑';
+    content: var(--kp-glyph-ascending, '↑');
     opacity: 1;
 }
 
 .kp-table th[aria-sort='descending']::after {
-    content: '↓';
+    content: var(--kp-glyph-descending, '↓');
     opacity: 1;
 }
 
 .kp-datatable__status {
     margin: 0;
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-datatable__pager {
@@ -1080,7 +1452,7 @@
 
 .kp-datatable__page {
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1092,6 +1464,9 @@
  * attribute the consumer writes, because a cell without its column name
  * is a value with no question attached. */
 @media (max-width: 40rem) {
+    /* --kp-breakpoint-narrow is a contract value [TH26]: a media query
+     * cannot read a custom property, so this number is repeated in
+     * docs/USER_GUIDE.md rather than exposed as a knob. */
     .kp-datatable[data-kp-cards] .kp-table thead {
         position: absolute;
         width: 1px;
@@ -1132,6 +1507,18 @@
 
 /* --- Forms [TH38] ---------------------------------------------------- */
 
+/* A radio group laid out in a row rather than a column. */
+.kp-fieldset[data-kp-layout='inline'] {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--kp-space-md, 0.75rem);
+}
+
+.kp-fieldset[data-kp-layout='inline'] > legend {
+    flex-basis: 100%;
+}
+
 .kp-form {
     display: flex;
     flex-direction: column;
@@ -1170,12 +1557,12 @@
 .kp-field__required {
     margin-inline-start: 0.25rem;
     color: var(--muted-foreground);
-    font-size: 0.75rem;
+    font-size: var(--kp-text-xs, 0.75rem);
     font-weight: 400;
 }
 
 .kp-field__required::before {
-    content: '\002A\00a0';
+    content: var(--kp-glyph-required, '\002A\00a0');
     color: var(--destructive);
 }
 
@@ -1228,7 +1615,7 @@
     width: 0.625rem;
     height: 0.625rem;
     border: 1px solid var(--border-strong);
-    border-radius: 999px;
+    border-radius: var(--kp-radius-pill, 999px);
     background: var(--muted);
 }
 
@@ -1271,13 +1658,13 @@
     height: 0.75rem;
     margin-block-start: 0.25rem;
     border: 2px solid var(--primary);
-    border-radius: 999px;
+    border-radius: var(--kp-radius-pill, 999px);
 }
 
 .kp-timeline__when {
     display: block;
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1288,7 +1675,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius, 0.5rem);
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-diff__line {
@@ -1350,8 +1737,11 @@
 
 .kp-tree [role='treeitem'] {
     padding: 0.25rem 0.375rem;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     cursor: pointer;
+    /* The indent per level is a knob; the React tree sets the depth and
+     * the framework-free markup may set aria-level [KT6]. */
+    padding-inline-start: calc(var(--kp-tree-depth, 0) * var(--kp-tree-indent, 1rem));
 }
 
 .kp-tree [role='treeitem']:hover {
@@ -1361,14 +1751,14 @@
 /* The twisty is a second carrier beside aria-expanded, and it points the
  * way the branch will go rather than the way it is. */
 .kp-tree [role='treeitem'][aria-expanded]::before {
-    content: '▸';
+    content: var(--kp-glyph-closed, '▸');
     display: inline-block;
     width: 1em;
     color: var(--muted-foreground);
 }
 
 .kp-tree [role='treeitem'][aria-expanded='true']::before {
-    content: '▾';
+    content: var(--kp-glyph-open, '▾');
 }
 
 .kp-tree [role='treeitem'][aria-expanded='false'] + [role='group'],
@@ -1398,7 +1788,7 @@
 .kp-reorder [data-kp-handle] {
     padding: 0.125rem 0.375rem;
     border: 1px solid var(--border);
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     background: none;
     color: var(--muted-foreground);
     font: inherit;
@@ -1449,7 +1839,7 @@
     position: absolute;
     top: 100%;
     inset-inline-start: 0;
-    z-index: 20;
+    z-index: var(--kp-z-popover, 20);
     margin-block-start: 0.25rem;
     padding: 0.75rem;
     border: 1px solid var(--border-strong);
@@ -1481,13 +1871,13 @@
 .kp-datepicker__weekday {
     padding-block: 0.25rem;
     color: var(--muted-foreground);
-    font-size: 0.75rem;
+    font-size: var(--kp-text-xs, 0.75rem);
 }
 
 .kp-datepicker__day {
     padding: 0.25rem 0;
     border: 1px solid transparent;
-    border-radius: calc(var(--radius, 0.5rem) / 2);
+    border-radius: var(--kp-radius-sm, calc(var(--radius, 0.5rem) / 2));
     background: none;
     color: inherit;
     font: inherit;
@@ -1544,7 +1934,7 @@
 
 .kp-upload__size {
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1553,14 +1943,14 @@
 .kp-upload__bar {
     grid-column: 1 / -1;
     height: 0.25rem;
-    border-radius: 999px;
+    border-radius: var(--kp-radius-pill, 999px);
     background: linear-gradient(to right, var(--primary) var(--kp-progress, 0%), var(--muted) var(--kp-progress, 0%));
 }
 
 .kp-upload__message {
     grid-column: 1 / -1;
     color: var(--muted-foreground);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-upload__file[data-state='error'] {
@@ -1597,8 +1987,8 @@
     width: 1.5rem;
     height: 1.5rem;
     border: 1px solid var(--border-strong);
-    border-radius: 999px;
-    font-size: 0.8125rem;
+    border-radius: var(--kp-radius-pill, 999px);
+    font-size: var(--kp-text-sm, 0.8125rem);
     font-variant-numeric: tabular-nums;
 }
 
@@ -1616,7 +2006,7 @@
 }
 
 .kp-wizard__steps li[data-state='done']::before {
-    content: '✓';
+    content: var(--kp-glyph-check, '✓');
     border-color: var(--success);
     color: var(--success);
 }
@@ -1634,12 +2024,18 @@
 
 /* --- Colour picker [TH57] -------------------------------------------- */
 
+/* A channel is a label and a slider that lay out as siblings of the
+ * others: the wrapper contributes nothing to the box tree. */
+.kp-colorpicker__channel {
+    display: contents;
+}
+
 .kp-colorpicker {
     display: grid;
     grid-template-columns: auto 1fr;
     align-items: center;
     gap: 0.5rem 0.75rem;
-    max-width: 22rem;
+    max-width: var(--kp-colorpicker-max-width, 22rem);
 }
 
 .kp-colorpicker__swatch {
@@ -1655,14 +2051,14 @@
 .kp-colorpicker__value {
     grid-column: 2;
     font-family: var(--font-mono, ui-monospace, monospace);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .kp-colorpicker__contrast {
     grid-column: 1 / -1;
     margin: 0;
     color: var(--destructive);
-    font-size: 0.8125rem;
+    font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 /* The verdict is in the text; the colour is the second carrier, never the
@@ -1708,6 +2104,6 @@
     }
 
     .kp-grid__tile {
-        grid-column: 1 / -1 !important;
+        grid-column: 1 / -1;
     }
 }

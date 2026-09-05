@@ -254,7 +254,7 @@ backup-under-load → restore → invariants-hold E2E test.
 Per-topic form, payload prefilled with last real payload, send button.
 **Proven by:** UI route test → message lands on topic.
 
-### W13 · The house themes *(added 2026-09-02, moved to the package's own picker 2026-09-04)*
+### W13 · The house themes *(added 2026-09-02, moved to the package's own picker 2026-09-04, Bootstrap replaced 2026-09-05)*
 
 Kenny asked for the themes from `@kp-soft/themes` with *the same picker and
 the same way of storing the choice in the browser*. Not a lookalike: the
@@ -273,9 +273,10 @@ behaviour.
   terminal, topo, high-contrast, sepia, blueprint, solstice.
 - **The contract three projects share**: `localStorage` key `theme`, the
   theme names as values, `data-theme` on `<html>`, default `formal`.
-- **Six files are vendored verbatim** — `themes.css`, `components.css`,
-  `theme-core.js`, `theme-picker.js`, `theme-registry.js`, `no-flash.js` —
-  byte-for-byte copies of the v1.2.0 tag, never edited here.
+- **Eight files are vendored verbatim** — `themes.css`, `components.css`,
+  `theme-core.js`, `theme-picker.js`, `theme-registry.js`, `no-flash.js`,
+  `components.js`, `strings.js` — byte-for-byte copies of the v3.0.0 tag,
+  never edited here.
 - **The no-flash snippet is the package's**, not kyu's. `no-flash.js` is the
   only vendored file the browser never fetches: kyu inlines its
   `NO_FLASH_SNIPPET` into `<head>`, because a module arrives too late to
@@ -292,9 +293,27 @@ behaviour.
   The dark flag is gone from kyu's side too — the package derives it from
   each theme's own `color-scheme`, which is how kyu came to believe in four
   dark themes when there are three.
-- **`static/theme-bridge.css` remains kyu's own file**, mapping the tokens
-  onto Bootstrap's `--bs-*` variables, since this dashboard's furniture is
-  Bootstrap. Kept separate so re-copying upstream never overwrites it.
+- **Bootstrap is gone (2.4.0).** The dashboard now wears the package's own
+  components — button, badge, card, alert, table, nav, form field — which
+  are themed natively, so `bootstrap.min.css` (233 KB) and the 4 KB
+  `theme-bridge.css` that translated its `--bs-*` variables onto the
+  package's tokens both left with it. `static/kyu.css` is kyu's own file
+  now: layout glue, three badge-tone modifiers the package's `.kp-badge`
+  deliberately does not ship (colour is only ever badges' second signal;
+  DI4 says the word must already be there), and a `:user-invalid` override
+  — see "Two things kp-themes' own 3.0.0 release left for kyu to solve"
+  below.
+- **DI10 in kyu's own markup**: revoking an app token now arms before it
+  acts (`data-kp-destructive`, `data-kp-confirm`), using the vendored
+  `components.js` instead of a hand-rolled confirmation. A skip link
+  (`.kp-skip-link`) is new too, from the same file.
+- **`static/kyu-init.js` is new and kyu's own.** Every vendored `js/*.js`
+  import became pure at 3.0.0 — importing one attaches nothing. The
+  package's own answer, `js/auto.js`, attaches sixteen behaviours; kyu's
+  dashboard has markup for four of them (the theme picker, contract
+  enforcement, confirmations, the skip link), so `kyu-init.js` calls only
+  those, rather than paying for a data table and a date picker nothing on
+  this dashboard uses.
 
 **Keeping the copies honest.** Two checks in `.claude/hooks/gates.sh`, because
 a copy fails in two ways and one check cannot see both.
@@ -303,7 +322,10 @@ a copy fails in two ways and one check cannot see both.
   checksums, mapped onto kyu's flat paths; a mismatch **refuses** the commit.
   This holds offline and pins the tag, so an edited copy and a copy taken from
   a working tree that had drifted past its tag both fail. Proven by appending
-  one line to `no-flash.js` and watching it refuse.
+  one line to `no-flash.js` and watching it refuse. `strings.js`'s hash is the
+  one exception: it is computed from the v3.0.0 git tag rather than lifted
+  from the release's own `SHA256SUMS`, which omits it (see below) — still
+  offline-verifiable, but it cannot prove tag provenance the other seven do.
 - *Has the package moved on?* A comparison against `~/Projects/kp-themes`
   whenever that repository is on the machine — a **notice**, not a refusal,
   because being behind a release is a decision to make rather than a broken
@@ -327,7 +349,30 @@ Proven by `tests/w13_themes.rs`: the picker offers exactly the themes the
 vendored registry defines and no others, the contract attributes are
 present, the storage contract is read from the served registry rather than
 from a literal, the whole ES module chain is reachable while the traversal
-guard still holds, and every theme offered is defined in the stylesheet.
+guard still holds (and Bootstrap and its bridge are confirmed gone, not
+merely unreferenced), and every theme offered is defined in the stylesheet.
+
+**Two things kp-themes' own 3.0.0 release left for kyu to solve, not the
+other way round.**
+
+1. The release's `SHA256SUMS` lists `theme-core.js`, `theme-registry.js`,
+   `theme-picker.js`, `components.js`, `overlays.js` and `no-flash.js`, but
+   not `strings.js` — and both `theme-picker.js` and `components.js` import
+   it since the package's own 2.0.0. Without it neither module loads at
+   all, which a browser console catches instantly and a Rust test never
+   would (kyu's tests fetch the module text, not execute it). Vendored
+   anyway, hashed from the tag rather than the manifest.
+2. `components.css`'s `input:invalid` rule paints a destructive border on
+   an empty required field from the moment the page renders — correct for
+   a consumer using the package's `attachForms()` (which sets `novalidate`
+   and reports on blur instead), wrong for one that is not. kyu does not
+   vendor `js/forms.js` (also missing from the same `SHA256SUMS`, though
+   kyu never needed it), so every required field on this dashboard would
+   have rendered red on first paint without `kyu.css`'s `:user-invalid`
+   override.
+
+Neither is kyu's copy going stale; both are gaps in what the release itself
+ships. Kenny decides whether either is worth raising with the project.
 
 ## Later (2)
 
