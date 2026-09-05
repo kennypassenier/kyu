@@ -11,7 +11,21 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.4.0.
+Nothing since 2.4.1.
+
+## [2.4.1] — 2026-09-05
+
+### Fixed
+
+- **The apps page always exists now.** Found live by Kenny minutes after
+  2.4.0 shipped: with no `KYU_TOKEN` set there was no "Apps" link in the
+  nav at all, and `GET /apps` answered a bare JSON error with no page
+  around it. AR11's actual guarantee is unchanged — creating or revoking
+  an app token still refuses without a bootstrap token, because a per-app
+  token only means something once something already decides who may in —
+  but the page itself now renders on an unprotected hub too, explaining
+  that and handing over a freshly generated `KYU_TOKEN`/`KYU_SECRET_KEY`
+  pair ready to paste into the compose file.
 
 ## [2.4.0] — 2026-09-05
 

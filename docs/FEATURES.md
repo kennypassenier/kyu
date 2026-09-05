@@ -187,6 +187,21 @@ Phase 7 hardening gate and specified the shape across three rounds:
 rating): no token may appear in logs, metric labels or any rendered
 page except behind the reveal control.
 
+**The apps page always exists now** *(fixed 2026-09-05, found live by Kenny
+in the 2.4.0 preview)*. Until this fix the nav link was gated on
+`protected` and `GET /apps` on an unprotected hub answered a bare
+`{"error", "remedy"}` JSON body — so a hub started without `KYU_TOKEN` had
+no visible way to discover that app management exists at all, only an
+error nobody would see without already knowing to look for it. AR11's real
+guarantee is unchanged: `POST /apps/create` and `/apps/revoke` still refuse
+outright without a bootstrap token, because a per-app token only means
+something once something already decides who may in. What changed is the
+**page**: on an unprotected hub it now explains that, and hands over a
+freshly generated `KYU_TOKEN`/`KYU_SECRET_KEY` pair — the same way the CLI
+already prints one when refusing to start on a token without a key — ready
+to paste into the compose file. Proven in `tests/p7_auth.rs`, shown red
+against the pre-fix code before being trusted.
+
 ### W12 · Graceful shutdown on SIGTERM *(added at the 2026-09-02 mini-round)*
 
 Did not exist at the Phase 2 freeze and was never missed, because

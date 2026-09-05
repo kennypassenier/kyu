@@ -8,6 +8,33 @@
   the logs can say which app acted.
 </p>
 
+{% if not protected %}
+<div class="kp-alert kp-alert--warning" role="alert">
+  <div>
+    <strong>Apps need a door first.</strong>
+    A per-app token only means something once something already decides who
+    may come in at all (AR11: "something has to open the door before any app
+    exists"). Set <code>KYU_TOKEN</code> and <code>KYU_SECRET_KEY</code> in
+    your compose file and restart the hub — then this page manages a token
+    for every app that talks to it.
+  </div>
+</div>
+
+<h2>Paste this to get started</h2>
+<p class="text-secondary">
+  Freshly generated and safe to use as-is. Put both in the same compose
+  file and restart:
+</p>
+<pre class="snippet">KYU_TOKEN={{ example_token }}
+KYU_SECRET_KEY={{ example_key }}</pre>
+<p class="text-secondary" style="margin-top: 0.5rem">
+  <code>KYU_TOKEN</code> is what you log in with. <code>KYU_SECRET_KEY</code>
+  encrypts every app token this page will generate once it exists — losing
+  it later makes those tokens unreadable, not the hub itself; revoke and
+  regenerate them here if that happens.
+</p>
+{% else %}
+
 {% if error %}
 <div class="kp-alert kp-alert--destructive" role="alert">{{ error }}</div>
 {% endif %}
@@ -110,4 +137,5 @@
     </p>
   </div>
 </div>
+{% endif %}
 {% endblock %}

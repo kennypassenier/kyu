@@ -41,7 +41,7 @@
   <a class="kp-nav__brand" href="/">kyu</a>
   <ul class="kp-nav__links">
     <li><a class="kp-nav__link" href="/"{% if active_nav == "topics" %} aria-current="page"{% endif %}>Topics</a></li>
-    {% if protected %}<li><a class="kp-nav__link" href="/apps"{% if active_nav == "apps" %} aria-current="page"{% endif %}>Apps</a></li>{% endif %}
+    <li><a class="kp-nav__link" href="/apps"{% if active_nav == "apps" %} aria-current="page"{% endif %}>Apps</a></li>
   </ul>
   <!-- The shape @kp-soft/themes calls a theme menu: an icon button and a
        popover list. Every attribute here is a contract value of that

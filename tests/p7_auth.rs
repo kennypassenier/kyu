@@ -437,6 +437,84 @@ async fn p7_an_unprotected_hub_says_so_and_lets_everything_through() {
 }
 
 #[tokio::test]
+async fn p7_the_apps_page_exists_on_an_unprotected_hub_and_explains_the_fix() {
+    // AR11 keeps creating an app token behind a bootstrap token on purpose —
+    // a per-app token only means something once something already decides
+    // who may in at all. But the PAGE used to not exist at all here: no nav
+    // link (layout.html gated it on `protected`) and GET /apps answered a
+    // bare {"error", "remedy"} JSON body with no HTML around it. Found live,
+    // in a browser, by Kenny: "ik zie enkel de topics pagina, geen apps
+    // pagina" — a hidden link is indistinguishable from a missing feature.
+    let (hub, _dir) = spawn(false).await;
+
+    let index = client()
+        .get(hub.url("/"))
+        .send()
+        .await
+        .expect("a response")
+        .text()
+        .await
+        .expect("a body");
+    assert!(
+        index.contains("href=\"/apps\""),
+        "the Apps link must be in the nav even before the hub has a door"
+    );
+
+    let response = client()
+        .get(hub.url("/apps"))
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(
+        response.status(),
+        200,
+        "the page renders instead of erroring"
+    );
+    let page = response.text().await.expect("a body");
+    assert!(
+        page.contains("KYU_TOKEN") && page.contains("KYU_SECRET_KEY"),
+        "and it must hand over both variables needed to get a door, not just name them"
+    );
+
+    // The example values are real ones, not placeholders like <token> — a
+    // visitor should be able to paste them straight into a compose file.
+    let token = page
+        .split("KYU_TOKEN=")
+        .nth(1)
+        .and_then(|rest| rest.split('\n').next())
+        .expect("an example token");
+    let key = page
+        .split("KYU_SECRET_KEY=")
+        .nth(1)
+        .and_then(|rest| rest.split(['\n', '<']).next())
+        .expect("an example key");
+    assert!(
+        token.len() >= 32,
+        "the example token must be usable, not a placeholder: {token:?}"
+    );
+    assert_eq!(
+        key.len(),
+        64,
+        "the example key must be a real 32-byte hex key: {key:?}"
+    );
+
+    // The page explaining how to get a door must not itself pretend one
+    // exists: actually creating an app is still refused, exactly as before.
+    let create = client()
+        .post(hub.url("/apps/create"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body("name=sneaky")
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(
+        create.status(),
+        409,
+        "AR11 still holds: no bootstrap token means no app tokens either"
+    );
+}
+
+#[tokio::test]
 async fn p7_the_apps_page_is_not_reachable_without_logging_in() {
     let (hub, _dir) = spawn(true).await;
 
