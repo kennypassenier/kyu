@@ -1420,9 +1420,21 @@ pub async fn logout() -> Response {
 /// `GET /apps` — register, inspect and revoke the apps that may talk to the
 /// hub (W2). Tokens render masked; the reveal and copy controls live in
 /// `app.js`.
+///
+/// The page always exists, on a protected hub or not: AR11 still keeps
+/// actually *creating* an app token behind a bootstrap token (`apps_create`
+/// and `apps_revoke` below refuse exactly as before), but a visitor who has
+/// not set one up yet gets a page that says so and hands over a ready
+/// example, rather than a bare JSON error where a nav link used to lead
+/// nowhere at all.
 pub async fn apps_page(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
     let Some(key) = state.auth.key().cloned() else {
-        return Err(ApiError::from(EngineError::Unprotected));
+        let page = dashboard::render_apps_setup(
+            &crate::crypto::generate_token(),
+            &crate::crypto::SecretKey::generate_hex(),
+        )
+        .map_err(|error| ApiError::from(EngineError::Internal(error)))?;
+        return Ok(Html(page));
     };
     let engine = state.engine.clone();
     let now = engine.now_ms();

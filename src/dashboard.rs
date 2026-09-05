@@ -557,6 +557,32 @@ pub fn render_apps(apps: &[AppView], error: Option<&str>) -> Result<String> {
         .context("cannot render the apps page")
 }
 
+/// W2 · the apps page on a hub with no door yet.
+///
+/// AR11 keeps app-token *creation* behind a bootstrap token on purpose — a
+/// per-app token only means something once something already decides who
+/// may in at all. But the page itself should exist regardless, so a visitor
+/// finds the ten-second fix (set two environment variables and restart)
+/// rather than a route that looks like it was never built. `example_token`
+/// and `example_key` are generated fresh per request, the same way the CLI
+/// prints one when refusing to start on a token without a key.
+pub fn render_apps_setup(example_token: &str, example_key: &str) -> Result<String> {
+    ENVIRONMENT
+        .get_template("apps.html")
+        .context("the apps template is missing")?
+        .render(minijinja::context! {
+            apps => Vec::<AppView>::new(),
+            error => Option::<&str>::None,
+            protected => false,
+            example_token => example_token,
+            example_key => example_key,
+            active_nav => "apps",
+            reveal_seconds => crate::config::REVEAL_SECONDS,
+            assets => asset_version(),
+        })
+        .context("cannot render the apps setup page")
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn render_topic(
     topic: TopicView,
