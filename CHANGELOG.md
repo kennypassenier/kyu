@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-06
+
 Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.7.0
 (kyu's turn, 2026-09-06): the kit's CF-7 fix (dashboard forms from Chrome
 were refused under the former referrer policy), refusals rendered inside
