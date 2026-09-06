@@ -14,9 +14,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **Done** — all eleven phases complete |
+| Current phase | **3.0.0 released to the signature 2026-09-06** (tag `v3.0.0` = `37d4af3`, chassis-rs 1.7.1): the kit owns the door, the dashboard shell, the login and the per-app tokens (step 2, imported unchanged from 2.x); scaffold synced (kit CI/hooks/deny/Dockerfile/deploy), SQL guard and the CI-only container smoke in `.claude/hooks/gates.project.sh`, `.chassis.toml` with CT 109's measured state root, env file and vmid 109. 2.4.1 still runs on CT 109 |
 | Last completed gate | Mini-round (2026-09-05): three dashboard usability items from Kenny's own live use — human-readable timestamps, deleting a dead letter, a per-subscription backlog view (2.5.0) |
-| Next gate | None. kyu is released (2.5.0). Further work arrives as mini-rounds |
+| Next gate | Kenny signs v3.0.0 (`scripts/sign-release.sh v3.0.0`); the deploy on CT 109 is the Homelab Rust session's (V6: binary to `/opt/kyu/bin`, the kit unit, `KYU_DATA_DIR` → `KYU_STATE_DIR` in `kyu.env`). D-K1 dashboard adoption is done (step 2) |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
