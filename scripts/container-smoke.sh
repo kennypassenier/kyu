@@ -7,6 +7,8 @@ set -euo pipefail
 IMAGE="${1:-kyu:smoke}"
 NAME="kyu-smoke-$$"
 VOLUME="kyu-smoke-data-$$"
+# The kit's image keeps its state in /var/lib/kyu (scaffold Dockerfile, 3.0.0);
+# the volume mounts there, so an upgrade against the same volume sees it.
 PORT="${PORT:-18099}"
 HUB="http://localhost:${PORT}"
 # 3.0.0: the door is the kit's and never optional — every container in this
@@ -24,7 +26,7 @@ trap cleanup EXIT
 say() { printf '\n== %s\n' "$1"; }
 
 say "starting $IMAGE"
-docker run -d --name "$NAME" -p "${PORT}:8080" -v "${VOLUME}:/data" \
+docker run -d --name "$NAME" -p "${PORT}:8080" -v "${VOLUME}:/var/lib/kyu" \
     -e "KYU_TOKEN=${TOKEN}" -e "KYU_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
 
 for _ in $(seq 1 60); do
@@ -69,7 +71,7 @@ say "upgrade: the same volume against a freshly built image"
 # in reality is an existing volume meeting a new image — which is what every
 # pull on the LXC does.
 docker rm -f "$NAME" >/dev/null
-docker run -d --name "$NAME" -p "${PORT}:8080" -v "${VOLUME}:/data" \
+docker run -d --name "$NAME" -p "${PORT}:8080" -v "${VOLUME}:/var/lib/kyu" \
     -e "KYU_TOKEN=${TOKEN}" -e "KYU_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
 for _ in $(seq 1 60); do
     if curl -sf -o /dev/null "${HUB}/healthz"; then break; fi
@@ -100,7 +102,7 @@ cleanup_door() {
 }
 trap 'cleanup; cleanup_door' EXIT
 
-docker run -d --name "$DOOR" -p "${DOOR_PORT}:8080" -v "${DOOR_VOLUME}:/data" \
+docker run -d --name "$DOOR" -p "${DOOR_PORT}:8080" -v "${DOOR_VOLUME}:/var/lib/kyu" \
     -e "KYU_TOKEN=${TOKEN}" -e "KYU_SECRET_KEY=${KEY}" "$IMAGE" >/dev/null
 for _ in $(seq 1 60); do
     if curl -sf -o /dev/null "${DOOR_HUB}/healthz"; then break; fi
