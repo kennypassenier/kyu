@@ -1,0 +1,17 @@
+# Written by hand for the migrated project (chassis-rs MIGRATION.md §10 step 1);
+# read by `chassis sync` and `chassis release`.
+name = "kyu"
+description = "A self-documenting durable message hub for a homelab"
+repo = "kennypassenier/kyu"
+toolchain = "1.97"
+chassis_tag = "v1.7.1"
+chassis_repo = "https://github.com/kennypassenier/chassis-rs"
+kp_themes = "3.1.0"
+# Measured on CT 109 (2026-09-06, CF-6 d): state root and env file live in the
+# homelab's config dir; no latch (a plain env file). The binary moves from
+# /usr/local/bin (2.x) to /opt/kyu/bin with the 3.0.0 deploy (V6, homelab).
+state_dir = "/appdata/kyu/kyu-config"
+env_file = "/appdata/kyu/kyu-config/kyu.env"
+latch = false
+# Adopted by the homelab as stack kyu on CT 109 (2026-08-31).
+vmid = 109

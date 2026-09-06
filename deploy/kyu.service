@@ -11,12 +11,12 @@
 # Install: install -D -m755 kyu /opt/kyu/bin/kyu (the
 # service owns that directory: chown -R kyu: /opt/kyu), copy
 # this file to /etc/systemd/system/kyu.service, create the user
-# (kyu), the state dir (/var/lib/kyu) and the env file
-# (/etc/kyu/kyu.env, 0640 root:kyu), then
+# (kyu), the state dir (/appdata/kyu/kyu-config) and the env file
+# (/appdata/kyu/kyu-config/kyu.env, 0640 root:kyu), then
 # systemctl enable --now kyu.
 
 [Unit]
-Description=kyu — durable message hub — Accepts a message in one shape and delivers it in another, where the configuration chooses the destination
+Description=kyu — A self-documenting durable message hub for a homelab
 Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=0
@@ -26,9 +26,6 @@ StartLimitBurst=0
 Type=notify
 User=kyu
 Group=kyu
-# Config and data both live on the host, bind-mounted in (Kenny, P1
-# 2026-08-31), so destroying this container costs nothing. The env file sets
-# KYU_STATE_DIR=/appdata/kyu/kyu-config; the kit's default would be /var/lib/kyu.
 EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
 WorkingDirectory=/appdata/kyu/kyu-config
 ExecStartPre=/opt/kyu/bin/kyu --check
@@ -40,6 +37,10 @@ KillSignal=SIGTERM
 # is the one that decides, not systemd's.
 TimeoutStopSec=60
 # Mirrored so `--check` can warn when the shutdown timeout would outlive it (critic #20).
+# Explicit, not the binary's compiled-in default (CF-6 d, 2026-09-06): the
+# unit says where the state lives, so a binary built with another default
+# still runs against this machine's measured directory.
+Environment=KYU_STATE_DIR=/appdata/kyu/kyu-config
 Environment=KYU_TIMEOUT_STOP_SECS=60
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -48,7 +49,7 @@ ProtectHome=yes
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictSUIDSGID=yes
-ReadWritePaths=/appdata/kyu/kyu-config /var/lib/kyu-pre-update /opt/kyu/bin
+ReadWritePaths=/appdata/kyu/kyu-config /appdata/kyu/kyu-config-pre-update /opt/kyu/bin
 # S2: the swap needs write access to the binary's OWN directory only; a
 # code-execution bug can then replace this service's binary, not latch or
 # its neighbours. The rest is systemd's free hardening for a network daemon.

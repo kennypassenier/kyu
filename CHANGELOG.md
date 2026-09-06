@@ -11,11 +11,14 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-Nothing since 2.5.0.
-
-## [3.0.0] — 2026-09-05 (unreleased; branch `chassis-migration`)
-
-Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.4.1.
+Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.7.0
+(kyu's turn, 2026-09-06): the kit's CF-7 fix (dashboard forms from Chrome
+were refused under the former referrer policy), refusals rendered inside
+the layout, and the scaffold synced — the kit's CI (fmt · clippy · tests,
+cargo-deny, container build), hooks, `deny.toml`, Dockerfile and deploy
+files come from `chassis sync --write`; kyu's SQL guard (AR11) and the
+container smoke (CI only) live in `.claude/hooks/gates.project.sh`;
+`.chassis.toml` records CT 109's measured state root and env file.
 The hub — topics, subscriptions, leases, the SQLite store — is unchanged.
 The kit now owns the command line, the transport knobs, logging,
 `/healthz`, `/metrics`, readiness, the graceful stop, signed self-update
