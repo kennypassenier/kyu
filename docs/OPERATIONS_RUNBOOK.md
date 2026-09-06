@@ -308,9 +308,10 @@ names the variable and says to revoke and regenerate),
 
 ## 6 · Add or revoke an app
 
-1. Open `/apps` (you must be logged in).
-2. Type a name — lowercase letters, digits, dots, underscores, hyphens — and
-   press **Generate token**.
+1. Open **Apps** in the navigation (`/clients`; `/apps` redirects there —
+   you must be logged in).
+2. Type a name — letters, digits, dots, underscores, hyphens — and press
+   **Issue token**.
 3. *Copy* puts the whole working command on your clipboard without showing
    the token; *Reveal* shows it for ten seconds.
 4. Revoking takes effect on the **very next request**. There is no cache to

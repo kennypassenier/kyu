@@ -16,6 +16,23 @@ use std::time::Duration;
 
 use serde_json::Value;
 
+/// The door (W2, amended 2026-09-06): the hub no longer starts without a
+/// token, and every `/t/…` call carries it.
+const DOOR_TOKEN: &str = "a-login-token-that-is-long-enough";
+const DOOR_KEY: &str = "abababababababababababababababababababababababababababababababab";
+
+fn client() -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {DOOR_TOKEN}").parse().expect("a header"),
+    );
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .expect("a client")
+}
+
 struct Hub {
     process: Child,
     port: u16,
@@ -72,6 +89,8 @@ fn free_port() -> u16 {
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
     let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_TOKEN", DOOR_TOKEN)
+        .env("KYU_SECRET_KEY", DOOR_KEY)
         .env("KYU_STATE_DIR", data_dir)
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG", "warn")
@@ -82,7 +101,7 @@ async fn start(data_dir: &Path, port: u16) -> Hub {
 
     for _ in 0..100 {
         tokio::time::sleep(Duration::from_millis(50)).await;
-        if let Ok(response) = reqwest::get(hub.url("/healthz")).await
+        if let Ok(response) = client().get(hub.url("/healthz")).send().await
             && response.status() == 200
         {
             return hub;
@@ -92,7 +111,7 @@ async fn start(data_dir: &Path, port: u16) -> Hub {
 }
 
 async fn publish(hub: &Hub, topic: &str, body: String) -> Option<String> {
-    let response = reqwest::Client::new()
+    let response = client()
         .post(hub.url(&format!("/t/{topic}")))
         .header("content-type", "application/json")
         .body(body)
@@ -107,13 +126,15 @@ async fn publish(hub: &Hub, topic: &str, body: String) -> Option<String> {
 }
 
 async fn receive(hub: &Hub, topic: &str, subscription: &str) -> reqwest::Response {
-    reqwest::get(hub.url(&format!("/t/{topic}/next?as={subscription}&wait=0")))
+    client()
+        .get(hub.url(&format!("/t/{topic}/next?as={subscription}&wait=0")))
+        .send()
         .await
         .expect("the hub must answer")
 }
 
 async fn ack(hub: &Hub, topic: &str, id: &str, subscription: &str) -> reqwest::Response {
-    reqwest::Client::new()
+    client()
         .post(hub.url(&format!("/t/{topic}/ack/{id}?as={subscription}")))
         .send()
         .await
@@ -257,7 +278,7 @@ async fn l5_s4_a_short_outage_leaves_claimed_messages_claimed() {
 
     // A long lease: the outage will be far shorter than it.
     assert_eq!(
-        reqwest::Client::new()
+        client()
             .put(hub.url("/api/t/jobs.transcode/subs/worker/policy"))
             .body(r#"{"lease_ms":600000}"#)
             .send()
@@ -298,7 +319,7 @@ async fn l5_s4_a_long_outage_returns_in_flight_messages_to_the_queue() {
     // A short lease, so the downtime genuinely outlasts it — the difference
     // between a reboot and a week-long outage, compressed.
     assert_eq!(
-        reqwest::Client::new()
+        client()
             .put(hub.url("/api/t/jobs.transcode/subs/worker/policy"))
             .body(r#"{"lease_ms":200,"backoff_ms":0}"#)
             .send()
@@ -366,7 +387,9 @@ async fn l5_a_hard_kill_never_needs_manual_repair_to_restart() {
 
     let hub = start(dir.path(), port).await;
     let health: Value = serde_json::from_str(
-        &reqwest::get(hub.url("/healthz"))
+        &client()
+            .get(hub.url("/healthz"))
+            .send()
             .await
             .expect("a response")
             .text()
@@ -393,7 +416,11 @@ async fn l5_healthz_reports_the_store_and_the_sweeper() {
     let port = free_port();
     let hub = start(dir.path(), port).await;
 
-    let response = reqwest::get(hub.url("/healthz")).await.expect("a response");
+    let response = client()
+        .get(hub.url("/healthz"))
+        .send()
+        .await
+        .expect("a response");
     assert_eq!(response.status(), 200);
     let health: Value =
         serde_json::from_str(&response.text().await.expect("a body")).expect("JSON");
@@ -444,7 +471,9 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
         let _ = axum::serve(listener, router_with_probes(state)).await;
     });
 
-    let response = reqwest::get(format!("http://{addr}/healthz"))
+    let response = client()
+        .get(format!("http://{addr}/healthz"))
+        .send()
         .await
         .expect("a response");
     let status = response.status();
@@ -482,6 +511,8 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
     let healthy = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_TOKEN", DOOR_TOKEN)
+        .env("KYU_SECRET_KEY", DOOR_KEY)
         .env("KYU_STATE_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");
@@ -493,6 +524,8 @@ async fn l5_the_healthcheck_flag_answers_for_the_shell_less_image() {
     let dead = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .arg("--healthcheck")
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
+        .env("KYU_TOKEN", DOOR_TOKEN)
+        .env("KYU_SECRET_KEY", DOOR_KEY)
         .env("KYU_STATE_DIR", dir.path())
         .status()
         .expect("the healthcheck must run");

@@ -1,27 +1,27 @@
 //! Thin binary (AR1), on chassis since 3.0.0: the kit owns the command
 //! line, the configuration knobs, logging, `/healthz`, `/metrics`,
 //! readiness, the graceful stop and signed self-update. This file assembles
-//! the hub on top of it. The hub's door policy (W2: unprotected, or a
-//! bootstrap token plus sealed app tokens) and its dashboard stay the hub's.
+//! the hub on top of it. Since step 2 (2026-09-06) the kit also owns the
+//! door and the dashboard shell; the hub keeps its pages, its API and its
+//! store.
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use axum::Router;
 use chassis::{App, AppSpec};
 use kyu::config::Config;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
-use kyu::http::{AppState, Limits, router};
-use kyu::kit::{KyuMetrics, StoreSubsystem, SweeperSubsystem};
+use kyu::http::{AppState, Limits, assets};
+use kyu::kit::{import_app_tokens, mount};
 use kyu::store::Store;
 use kyu::sweeper::{self, Heartbeat};
 
 /// What `--help` says beyond the kit's knobs: the hub's own environment.
 const HELP_EXTRA: &str = "The hub's own environment (read next to the knobs above):
-  KYU_TOKEN            bootstrap token (16+ chars); unset = an UNPROTECTED hub (W2)
-  KYU_SECRET_KEY       64 hex chars sealing the app tokens; set exactly when KYU_TOKEN is
+  KYU_TOKEN            the login token (16+ chars) — required since 3.0.0, the kit refuses to start without it
+  KYU_SECRET_KEY       64 hex chars sealing app tokens and sessions; set together with KYU_TOKEN
   KYU_RETENTION_MS     default message retention in ms, or `never`
   KYU_IDLE_FLAG_MS     idle-subscription flag threshold in ms
   KYU_IDLE_ARCHIVE_MS  idle-subscription archive threshold in ms
@@ -43,6 +43,9 @@ async fn main() -> ExitCode {
         env.insert("KYU_STATE_DIR".to_string(), dir.clone());
     }
 
+    // K2-1: the kit seals its client store with the same key kyu sealed the
+    // app tokens with; the one-time import below needs the raw value.
+    let secret_hex = env.get("KYU_SECRET_KEY").cloned();
     let spec = AppSpec {
         name: "kyu",
         version: env!("CARGO_PKG_VERSION"),
@@ -52,9 +55,10 @@ async fn main() -> ExitCode {
     };
     let args: Vec<String> = std::env::args().collect();
     // The hub's routes need the store, which needs the state directory the
-    // kit resolves — so the router is attached below, as public routes with
-    // the hub's own door policy (W2) inside them.
-    let mut app = match App::from_args_with_env(spec, args, env, Router::new()) {
+    // kit resolves — so they are attached below. The only open routes are the
+    // hub's two page assets; the kit owns the door since step 2 (W2 amended
+    // 2026-09-06): the API needs a client token, the pages the admin login.
+    let mut app = match App::from_args_with_env(spec, args, env, assets()) {
         Ok(app) => app,
         Err(e) => {
             eprintln!("{e}");
@@ -68,6 +72,7 @@ async fn main() -> ExitCode {
         .loaded
         .as_ref()
         .expect("a start or --check loads configuration");
+    let state_dir = loaded.state_dir.clone();
 
     let config = match Config::from_kit(&loaded.state_dir, app.limits.max_body_bytes as u64) {
         Ok(config) => config,
@@ -102,12 +107,8 @@ async fn main() -> ExitCode {
         Arc::new(clock),
         config.defaults,
     ));
-    let protected = config.auth.is_protected();
     app.on_check(move || {
-        println!(
-            "store OK at {store_path}; door: {}",
-            if protected { "token" } else { "UNPROTECTED" }
-        );
+        println!("store OK at {store_path}");
         Ok(())
     });
 
@@ -117,22 +118,24 @@ async fn main() -> ExitCode {
         heartbeat.clone(),
         config.auth.clone(),
     );
-    app.subsystem(StoreSubsystem(engine.clone()));
-    app.subsystem(SweeperSubsystem {
-        engine: engine.clone(),
-        heartbeat: heartbeat.clone(),
-    });
-    app.metrics_source(KyuMetrics {
-        engine: engine.clone(),
-        heartbeat: heartbeat.clone(),
-    });
-    // A long poll waits up to Limits::MAX_WAIT_S (300 s) on purpose; the
-    // kit's request timeout (30 s) must not cut it short. The prefix also
-    // covers publish/ack/nack, which answer at once anyway.
-    app.exempt_from_timeout("/t/");
-    // Public as far as the kit is concerned: the hub's own door policy runs
-    // inside (require_token as a route layer; the login page is open).
-    app.api_routes(router(state.clone()));
+    mount(&mut app, state.clone(), engine.clone(), heartbeat.clone());
+    // K2-1 (2026-09-06): the kit owns the clients now. The app tokens 2.x
+    // issued keep working because they are copied, unchanged, into the kit's
+    // store the first time this version starts — kyu-runner and newsflash
+    // never notice. The 2.x `apps` table stays behind as history.
+    if let (Some(key), Some(hex)) = (config.auth.key(), secret_hex.as_deref()) {
+        match import_app_tokens(&state_dir, &engine, key, hex) {
+            Ok(0) => {}
+            Ok(count) => eprintln!(
+                "kyu: imported {count} app token(s) from 2.x into the kit's client store; \
+                 every existing token keeps working"
+            ),
+            Err(e) => {
+                eprintln!("kyu: {e:#}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
 
     {
         let notifiers = state.notifiers.clone();
@@ -146,19 +149,10 @@ async fn main() -> ExitCode {
                      KYU_STATE_DIR in the environment file — the alias goes away in 4.0"
                 );
             }
-            // W2 · say out loud which of the two modes this is. An unprotected
-            // hub is a legitimate choice; a hub you *think* is protected is
-            // not, and the only defence against that is saying so on every
-            // single startup.
-            if protected {
-                tracing::info!("this hub requires a token (KYU_TOKEN)");
-            } else {
-                tracing::warn!(
-                    "this hub has NO token: anyone who can reach it can read every \
-                     message, publish, and use the dashboard buttons. Set KYU_TOKEN \
-                     and KYU_SECRET_KEY to protect it."
-                );
-            }
+            // W2 (amended 2026-09-06): the kit refuses to start without
+            // KYU_TOKEN and KYU_SECRET_KEY, so by the time this runs the door
+            // is closed; say so once, the way 2.x did.
+            tracing::info!("this hub requires a token (KYU_TOKEN); the kit owns the door");
             // The sweeper is what makes delivery at-least-once rather than
             // at-most-once: without it an expired lease would never come back.
             // Started after the bind, so its first beat is never older than

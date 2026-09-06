@@ -15,6 +15,23 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
 
+/// The door (W2, amended 2026-09-06): the hub no longer starts without a
+/// token, and every `/t/…` call carries it.
+const DOOR_TOKEN: &str = "a-login-token-that-is-long-enough";
+const DOOR_KEY: &str = "abababababababababababababababababababababababababababababababab";
+
+fn client() -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {DOOR_TOKEN}").parse().expect("a header"),
+    );
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .expect("a client")
+}
+
 struct Hub {
     process: Child,
     port: u16,
@@ -83,6 +100,8 @@ fn free_port() -> u16 {
 
 async fn start(data_dir: &Path, port: u16) -> Hub {
     let process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_TOKEN", DOOR_TOKEN)
+        .env("KYU_SECRET_KEY", DOOR_KEY)
         .env("KYU_STATE_DIR", data_dir)
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG", "warn")
@@ -97,7 +116,7 @@ async fn start(data_dir: &Path, port: u16) -> Hub {
 
     for _ in 0..100 {
         tokio::time::sleep(Duration::from_millis(50)).await;
-        if let Ok(response) = reqwest::get(hub.url("/healthz")).await
+        if let Ok(response) = client().get(hub.url("/healthz")).send().await
             && response.status() == 200
         {
             return hub;
@@ -107,7 +126,7 @@ async fn start(data_dir: &Path, port: u16) -> Hub {
 }
 
 async fn publish(hub: &Hub, topic: &str, body: &str) {
-    let response = reqwest::Client::new()
+    let response = client()
         .post(hub.url(&format!("/t/{topic}")))
         .body(body.to_string())
         .send()
@@ -123,7 +142,10 @@ async fn w12_sigterm_exits_cleanly_and_leaves_the_files_standing_still() {
 
     // Create a subscription first, then publish, so there is genuinely
     // something in the write-ahead log to fold back.
-    let _ = reqwest::get(hub.url("/t/stop.drill/next?as=w12&wait=0")).await;
+    let _ = client()
+        .get(hub.url("/t/stop.drill/next?as=w12&wait=0"))
+        .send()
+        .await;
     for n in 0..20 {
         publish(&hub, "stop.drill", &format!("message {n}")).await;
     }
@@ -161,7 +183,9 @@ async fn w12_the_backlog_survives_a_graceful_stop() {
     // topic that does not exist yet is a 404 and creates nothing, and a
     // subscription only receives what is published after it exists.
     publish(&hub, "stop.survive", "before the subscription existed").await;
-    let created = reqwest::get(hub.url("/t/stop.survive/next?as=w12&wait=0"))
+    let created = client()
+        .get(hub.url("/t/stop.survive/next?as=w12&wait=0"))
+        .send()
         .await
         .expect("the first poll creates the subscription");
     assert_eq!(created.status(), 204, "a fresh subscription starts empty");
@@ -172,7 +196,9 @@ async fn w12_the_backlog_survives_a_graceful_stop() {
     drop(hub);
 
     let hub = start(dir.path(), port).await;
-    let response = reqwest::get(hub.url("/t/stop.survive/next?as=w12&wait=2"))
+    let response = client()
+        .get(hub.url("/t/stop.survive/next?as=w12&wait=2"))
+        .send()
         .await
         .expect("the restarted hub must answer");
     assert_eq!(response.status(), 200, "the message must still be there");
@@ -191,7 +217,10 @@ async fn w12_a_second_sigterm_during_shutdown_changes_nothing() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let mut hub = start(dir.path(), free_port()).await;
 
-    let _ = reqwest::get(hub.url("/t/stop.twice/next?as=w12&wait=0")).await;
+    let _ = client()
+        .get(hub.url("/t/stop.twice/next?as=w12&wait=0"))
+        .send()
+        .await;
     publish(&hub, "stop.twice", "one").await;
 
     hub.terminate();
@@ -214,13 +243,15 @@ async fn w12_an_in_flight_long_poll_is_answered_rather_than_cut_off() {
     let dir = tempfile::tempdir().expect("a temp dir");
     let mut hub = start(dir.path(), free_port()).await;
     publish(&hub, "stop.inflight", "creates the topic").await;
-    let created = reqwest::get(hub.url("/t/stop.inflight/next?as=w12&wait=0"))
+    let created = client()
+        .get(hub.url("/t/stop.inflight/next?as=w12&wait=0"))
+        .send()
         .await
         .expect("the first poll creates the subscription");
     assert_eq!(created.status(), 204, "a fresh subscription starts empty");
 
     let url = hub.url("/t/stop.inflight/next?as=w12&wait=3");
-    let poll = tokio::spawn(async move { reqwest::get(url).await });
+    let poll = tokio::spawn(async move { client().get(url).send().await });
 
     tokio::time::sleep(Duration::from_millis(300)).await;
     hub.terminate();

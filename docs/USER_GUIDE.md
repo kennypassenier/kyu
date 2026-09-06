@@ -294,17 +294,20 @@ See the README's "The door" section for setup. In daily use:
 
 - Scripts send `-H 'authorization: Bearer <token>'`.
 - You log in at `/login` with a remember-me box, and log out from the navbar.
-- `/apps` registers an app and generates a token for it; revoking one takes
-  effect on the very next request, with no cache to wait out.
+- **Apps** in the navigation (`/clients`; the old `/apps` address still
+  gets you there) registers an app and generates a token for it; revoking
+  one takes effect on the very next request, with no cache to wait out.
+  *Send test* publishes one message to `kyu-test` with that app's token.
 - Printed commands carry a **real, working** token, masked on screen. *Copy*
   puts the whole command on your clipboard without displaying it; *Reveal*
   shows it for ten seconds.
 
-A hub with no token configured still starts — that is a legitimate choice for
-a hub nothing else can reach — but says so on every startup and on every page,
-so it can never be a surprise.
+A hub with no token configured does not start (since 3.0.0): `--check`
+names `KYU_TOKEN` and `KYU_SECRET_KEY` and refuses, so a lost environment
+file is an error at the door, never an open hub.
 
-**Proven by:** the thirteen tests in `tests/p7_auth.rs`.
+**Proven by:** `tests/k2_dashboard.rs` (the hub's side) and the kit's own
+suite (login, sessions, cross-origin refusal).
 
 ---
 

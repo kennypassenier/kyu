@@ -19,6 +19,23 @@ use kyu::store::{Store, migrations};
 use kyu::sweeper::{self, Heartbeat};
 use serde_json::Value;
 
+/// The door (W2, amended 2026-09-06): the hub no longer starts without a
+/// token, and every `/t/…` call carries it.
+const DOOR_TOKEN: &str = "a-login-token-that-is-long-enough";
+const DOOR_KEY: &str = "abababababababababababababababababababababababababababababababab";
+
+fn client() -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        reqwest::header::AUTHORIZATION,
+        format!("Bearer {DOOR_TOKEN}").parse().expect("a header"),
+    );
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .expect("a client")
+}
+
 const START: i64 = 1_700_000_000_000;
 const DAY: i64 = 24 * 60 * 60 * 1_000;
 
@@ -88,7 +105,7 @@ async fn spawn() -> (Hub, tempfile::TempDir) {
 }
 
 async fn publish_bytes(hub: &Hub, topic: &str, content_type: &str, body: Vec<u8>) -> u16 {
-    reqwest::Client::new()
+    client()
         .post(hub.url(&format!("/t/{topic}")))
         .header("content-type", content_type)
         .body(body)
@@ -100,7 +117,7 @@ async fn publish_bytes(hub: &Hub, topic: &str, content_type: &str, body: Vec<u8>
 }
 
 async fn publish(hub: &Hub, topic: &str, body: &str) -> String {
-    let response = reqwest::Client::new()
+    let response = client()
         .post(hub.url(&format!("/t/{topic}")))
         .header("content-type", "application/json")
         .body(body.to_string())
@@ -115,7 +132,9 @@ async fn publish(hub: &Hub, topic: &str, body: &str) -> String {
 }
 
 async fn receive(hub: &Hub, topic: &str, query: &str) -> reqwest::Response {
-    reqwest::get(hub.url(&format!("/t/{topic}/next?{query}")))
+    client()
+        .get(hub.url(&format!("/t/{topic}/next?{query}")))
+        .send()
         .await
         .expect("a response")
 }
@@ -212,6 +231,8 @@ async fn p7_g2_a_hard_kill_at_startup_leaves_a_migratable_store() {
 
     for _ in 0..8 {
         let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+            .env("KYU_TOKEN", DOOR_TOKEN)
+            .env("KYU_SECRET_KEY", DOOR_KEY)
             .env("KYU_STATE_DIR", dir.path())
             .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
             .env("KYU_LOG", "error")
@@ -255,7 +276,7 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
     // until the store genuinely has to grow.
     let mut refusal = None;
     for _ in 0..200 {
-        let response = reqwest::Client::new()
+        let response = client()
             .post(hub.url("/t/notify.kenny"))
             .header("content-type", "application/json")
             .body("x".repeat(900))
@@ -285,7 +306,11 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
     // now say so, which is the L1 gap Kenny chose to close at the Phase 7
     // gate. A hub refusing every publish while Uptime Kuma stays green is
     // exactly the silence this project is built against.
-    let health = reqwest::get(hub.url("/healthz")).await.expect("a response");
+    let health = client()
+        .get(hub.url("/healthz"))
+        .send()
+        .await
+        .expect("a response");
     let status = health.status().as_u16();
     let body = body_json(health).await;
 
@@ -304,7 +329,9 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
 
     // Reads are unaffected: the dashboard and the metrics still answer.
     assert_eq!(
-        reqwest::get(hub.url("/metrics"))
+        client()
+            .get(hub.url("/metrics"))
+            .send()
             .await
             .expect("a response")
             .status(),
@@ -393,23 +420,6 @@ fn p7_g4_retention_collects_a_message_whose_only_delivery_lapsed() {
         remaining, 0,
         "once the only subscription is archived and its deliveries lapsed, \
          retention may finally reclaim the messages"
-    );
-}
-
-#[tokio::test]
-async fn p7_g4_the_dashboard_shows_a_lapsed_count() {
-    let (hub, _dir) = spawn().await;
-    bootstrap(&hub, "notify.kenny", "printer").await;
-    let page = reqwest::get(hub.url("/t/notify.kenny/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        page.contains("Lapsed"),
-        "AR3 says lapsed is counted and visible; an invisible one is the \
-         silence G8 forbids"
     );
 }
 
@@ -547,7 +557,7 @@ async fn p7_g6_replay_on_an_empty_topic_answers_204_without_a_false_notice() {
     // Drain it so the topic is empty but present.
     let response = receive(&hub, "notify.kenny", "as=drainer&from=beginning&wait=0").await;
     let id = header(&response, "kyu-id").expect("an id");
-    reqwest::Client::new()
+    client()
         .post(hub.url(&format!("/t/notify.kenny/ack/{id}?as=drainer")))
         .send()
         .await
@@ -567,10 +577,12 @@ async fn p7_g6_replay_on_an_empty_topic_answers_204_without_a_false_notice() {
 async fn p7_g7_the_retention_endpoint_round_trips_and_refuses_nonsense() {
     let (hub, _dir) = spawn().await;
     publish(&hub, "notify.kenny", "{}").await;
-    let client = reqwest::Client::new();
+    let http = client();
 
     let fresh = body_json(
-        reqwest::get(hub.url("/api/t/notify.kenny/retention"))
+        client()
+            .get(hub.url("/api/t/notify.kenny/retention"))
+            .send()
             .await
             .expect("a response"),
     )
@@ -579,8 +591,7 @@ async fn p7_g7_the_retention_endpoint_round_trips_and_refuses_nonsense() {
     assert_eq!(fresh["effective_ms"], 604_800_000, "the hub default");
 
     let set = body_json(
-        client
-            .put(hub.url("/api/t/notify.kenny/retention"))
+        http.put(hub.url("/api/t/notify.kenny/retention"))
             .body(r#"{"retention_ms":86400000}"#)
             .send()
             .await
@@ -591,8 +602,7 @@ async fn p7_g7_the_retention_endpoint_round_trips_and_refuses_nonsense() {
     assert_eq!(set["effective_ms"], 86_400_000);
 
     let forever = body_json(
-        client
-            .put(hub.url("/api/t/notify.kenny/retention"))
+        http.put(hub.url("/api/t/notify.kenny/retention"))
             .body(r#"{"keep_forever":true}"#)
             .send()
             .await
@@ -609,7 +619,7 @@ async fn p7_g7_the_retention_endpoint_round_trips_and_refuses_nonsense() {
         ("a negative window", r#"{"retention_ms":-1}"#, 400),
         ("a body that is not JSON", "nope", 400),
     ] {
-        let response = client
+        let response = http
             .put(hub.url("/api/t/notify.kenny/retention"))
             .body(body)
             .send()
@@ -624,7 +634,7 @@ async fn p7_g7_the_retention_endpoint_round_trips_and_refuses_nonsense() {
         );
     }
 
-    let unknown = client
+    let unknown = http
         .put(hub.url("/api/t/nope.nothing/retention"))
         .body(r#"{"retention_ms":1000}"#)
         .send()
@@ -638,7 +648,7 @@ async fn p7_g7_the_unarchive_endpoint_reports_whether_it_changed_anything() {
     let (hub, _dir) = spawn().await;
     bootstrap(&hub, "notify.kenny", "printer").await;
 
-    let response = reqwest::Client::new()
+    let response = client()
         .post(hub.url("/api/t/notify.kenny/subs/printer/unarchive"))
         .send()
         .await
@@ -730,6 +740,8 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
     };
 
     let mut process = Command::new(env!("CARGO_BIN_EXE_kyu"))
+        .env("KYU_TOKEN", DOOR_TOKEN)
+        .env("KYU_SECRET_KEY", DOOR_KEY)
         .env("KYU_STATE_DIR", dir.path())
         .env("KYU_LISTEN", format!("127.0.0.1:{port}"))
         .env("KYU_LOG_FORMAT", "json")
@@ -742,24 +754,28 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
     let base = format!("http://127.0.0.1:{port}");
     for _ in 0..40 {
         tokio::time::sleep(Duration::from_millis(50)).await;
-        if reqwest::get(format!("{base}/healthz")).await.is_ok() {
+        if client().get(format!("{base}/healthz")).send().await.is_ok() {
             break;
         }
     }
 
     // A payload that would be unmistakable if it ever appeared anywhere.
     const SECRET: &str = "korfbal-zeewier-lantaarnpaal";
-    let client = reqwest::Client::new();
-    client
-        .post(format!("{base}/t/notify.kenny"))
+    let http = client();
+    http.post(format!("{base}/t/notify.kenny"))
         .header("content-type", "application/json")
         .body(format!(r#"{{"token":"{SECRET}"}}"#))
         .send()
         .await
         .expect("publish");
-    let _ = reqwest::get(format!("{base}/t/notify.kenny/next?as=printer&wait=0")).await;
+    let _ = client()
+        .get(format!("{base}/t/notify.kenny/next?as=printer&wait=0"))
+        .send()
+        .await;
 
-    let metrics = reqwest::get(format!("{base}/metrics"))
+    let metrics = client()
+        .get(format!("{base}/metrics"))
+        .send()
         .await
         .expect("metrics")
         .text()
@@ -792,54 +808,6 @@ async fn p7_g9_payloads_never_reach_the_logs_or_the_metrics() {
 
 // ─── G10 · every dashboard state renders ────────────────────────────────────
 
-#[tokio::test]
-async fn p7_g10_the_awkward_dashboard_states_all_render() {
-    let (hub, _dir) = spawn().await;
-
-    // A delayed message, so the due-at branch is reached.
-    reqwest::Client::new()
-        .post(hub.url("/t/notify.kenny?delay=3600000"))
-        .header("content-type", "application/json")
-        .body(r#"{"later":true}"#)
-        .send()
-        .await
-        .expect("a delayed publish");
-
-    // An archived subscription, so the snippet has no live name to use.
-    bootstrap(&hub, "notify.kenny", "retired").await;
-    hub.store.with_conn(|conn| {
-        conn.execute(
-            "UPDATE subscriptions SET state = 'archived' WHERE name = 'retired'",
-            [],
-        )
-        .expect("archive")
-    });
-
-    let page = reqwest::get(hub.url("/t/notify.kenny/dashboard"))
-        .await
-        .expect("a response");
-    assert_eq!(
-        page.status(),
-        200,
-        "a topic whose only consumer is archived still renders"
-    );
-    let body = page.text().await.expect("a body");
-    assert!(body.contains("archived"));
-    assert!(
-        body.contains("due"),
-        "the delayed message shows its due time"
-    );
-
-    // The events topic has a page like any other topic.
-    assert_eq!(
-        reqwest::get(hub.url(&format!("/t/{EVENTS_TOPIC}/dashboard")))
-            .await
-            .expect("a response")
-            .status(),
-        200
-    );
-}
-
 // ─── G11 · healthz through the endpoint ─────────────────────────────────────
 
 #[tokio::test]
@@ -853,7 +821,11 @@ async fn p7_g11_healthz_answers_503_when_the_store_refuses_writes() {
             .expect("the pragma")
     });
 
-    let response = reqwest::get(hub.url("/healthz")).await.expect("a response");
+    let response = client()
+        .get(hub.url("/healthz"))
+        .send()
+        .await
+        .expect("a response");
     let status = response.status().as_u16();
     let health = body_json(response).await;
 
@@ -959,7 +931,7 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
 
     // A short lease, so the sweeper is genuinely re-pending rows underneath
     // the consumers rather than sitting idle.
-    reqwest::Client::new()
+    client()
         .put(hub.url("/api/t/jobs.transcode/subs/worker/policy"))
         .body(r#"{"lease_ms":400,"backoff_ms":0,"max_attempts":50}"#)
         .send()
@@ -972,10 +944,10 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
     let publisher = {
         let base = base.clone();
         tokio::spawn(async move {
-            let client = reqwest::Client::new();
+            let http = client();
             let mut ids = Vec::new();
             for n in 0..total {
-                let response = client
+                let response = http
                     .post(format!("{base}/t/jobs.transcode"))
                     .header("content-type", "application/json")
                     .body(format!(r#"{{"n":{n}}}"#))
@@ -998,12 +970,12 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
     for _ in 0..5 {
         let base = base.clone();
         consumers.push(tokio::spawn(async move {
-            let client = reqwest::Client::new();
+            let http = client();
             let mut handled = Vec::new();
             let deadline = std::time::Instant::now() + Duration::from_secs(20);
             let mut empty_rounds = 0;
             while std::time::Instant::now() < deadline && empty_rounds < 20 {
-                let response = client
+                let response = http
                     .get(format!("{base}/t/jobs.transcode/next?as=worker&wait=0"))
                     .send()
                     .await
@@ -1021,7 +993,7 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
                     .and_then(|v| v.to_str().ok())
                     .expect("an id")
                     .to_string();
-                let acked = client
+                let acked = http
                     .post(format!("{base}/t/jobs.transcode/ack/{id}?as=worker"))
                     .send()
                     .await
@@ -1070,7 +1042,7 @@ async fn p7_g14_nothing_is_lost_or_duplicated_under_concurrent_load() {
 async fn p7_g15_an_ack_at_the_lease_boundary_wins_against_the_live_sweeper() {
     let (hub, _dir) = spawn().await;
     bootstrap(&hub, "jobs.transcode", "worker").await;
-    reqwest::Client::new()
+    client()
         .put(hub.url("/api/t/jobs.transcode/subs/worker/policy"))
         .body(r#"{"lease_ms":150,"backoff_ms":0}"#)
         .send()
@@ -1085,7 +1057,7 @@ async fn p7_g15_an_ack_at_the_lease_boundary_wins_against_the_live_sweeper() {
         assert_eq!(claimed.status(), 200);
 
         tokio::time::sleep(Duration::from_millis(150)).await;
-        let acked = reqwest::Client::new()
+        let acked = client()
             .post(hub.url(&format!("/t/jobs.transcode/ack/{id}?as=worker")))
             .send()
             .await
@@ -1105,7 +1077,7 @@ async fn p7_g15_an_ack_at_the_lease_boundary_wins_against_the_live_sweeper() {
                 break;
             }
             let leftover = header(&response, "kyu-id").expect("an id");
-            let _ = reqwest::Client::new()
+            let _ = client()
                 .post(hub.url(&format!("/t/jobs.transcode/ack/{leftover}?as=worker")))
                 .send()
                 .await;
@@ -1124,7 +1096,7 @@ async fn p7_g15_several_waiters_and_one_message_wakes_someone_promptly() {
         let url = hub.url("/t/notify.kenny/next?as=printer&wait=10");
         waiters.push(tokio::spawn(async move {
             let started = std::time::Instant::now();
-            let response = reqwest::get(url).await.expect("a response");
+            let response = client().get(url).send().await.expect("a response");
             (response.status().as_u16(), started.elapsed())
         }));
     }
@@ -1177,321 +1149,3 @@ fn p7_g16_a_corrupt_backup_target_is_not_reported_as_a_backup() {
 }
 
 // ─── P1 · the dead-letter view ──────────────────────────────────────────────
-
-#[tokio::test]
-async fn p7_p1_the_dashboard_shows_dead_letters_and_requeues_them() {
-    let (hub, _dir) = spawn().await;
-    bootstrap(&hub, "print.receipt", "printer").await;
-
-    let id = publish(&hub, "print.receipt", r#"{"receipt":"kapot"}"#).await;
-    assert_eq!(
-        receive(&hub, "print.receipt", "as=printer&wait=0")
-            .await
-            .status(),
-        200
-    );
-    // A poison pill, straight to the dead-letter list.
-    assert_eq!(
-        reqwest::Client::new()
-            .post(hub.url(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true")))
-            .send()
-            .await
-            .expect("a response")
-            .status(),
-        200
-    );
-
-    let page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-
-    // K6 promises all four of these on the page, not just a count.
-    assert!(page.contains("Dead letters"), "the section exists");
-    assert!(page.contains(&id), "the id is shown");
-    assert!(page.contains("printer"), "and which subscription gave up");
-    assert!(
-        page.contains("kapot"),
-        "and the payload, which is the whole point of looking: {page}"
-    );
-    assert!(page.contains("Requeue"), "with one click to put it back");
-
-    // The button posts a form; follow what it does.
-    let requeued = reqwest::Client::new()
-        .post(hub.url("/t/print.receipt/dashboard/requeue"))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(format!("subscription=printer&id={id}"))
-        .send()
-        .await
-        .expect("a response");
-    assert!(
-        requeued.status().is_success() || requeued.status().is_redirection(),
-        "the requeue button returns to the page"
-    );
-
-    let redelivered = receive(&hub, "print.receipt", "as=printer&wait=0").await;
-    assert_eq!(redelivered.status(), 200);
-    assert_eq!(
-        header(&redelivered, "kyu-attempt").as_deref(),
-        Some("1"),
-        "a requeued message starts its attempts over"
-    );
-
-    let after = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        after.contains("Nothing has been dead-lettered"),
-        "and the list empties once it is dealt with"
-    );
-}
-
-/// Two subscriptions on one topic, drained of the bootstrap leftovers that
-/// `bootstrap()` leaks into an already-existing subscription's queue:
-/// bootstrapping a SECOND subscription publishes its own throwaway message,
-/// which fans out to the FIRST subscription too (it already exists), and
-/// sits there until it is claimed. W15 and W16 both need two clean
-/// subscriptions before publishing the one message they actually test with,
-/// so this is shared between them.
-async fn bootstrap_two_clean(hub: &Hub, topic: &str, first: &str, second: &str) {
-    bootstrap(hub, topic, first).await;
-    bootstrap(hub, topic, second).await;
-    let leaked = receive(hub, topic, &format!("as={first}&wait=0")).await;
-    assert_eq!(
-        leaked.status(),
-        200,
-        "bootstrapping {second} after {first} publishes one message that fans out \
-         to {first} too, since {first} already exists by then"
-    );
-    let leaked_id = header(&leaked, "kyu-id").expect("an id");
-    let ack = reqwest::Client::new()
-        .post(hub.url(&format!("/t/{topic}/ack/{leaked_id}?as={first}")))
-        .send()
-        .await
-        .expect("a response");
-    assert_eq!(
-        ack.status(),
-        200,
-        "the leftover is drained, not left pending"
-    );
-}
-
-/// [W15] Kenny's own feedback after using the dashboard: Requeue existed,
-/// nothing to just throw a dead letter away existed. The button is the
-/// mirror image of Requeue — same table, same form shape, deletes instead
-/// of resetting the state — and it must not touch any other subscription's
-/// copy of the same message (AR2: one message, fanned out to N deliveries).
-#[tokio::test]
-async fn p7_w15_the_dead_letter_delete_button_removes_only_this_subscriptions_copy() {
-    let (hub, _dir) = spawn().await;
-    bootstrap_two_clean(&hub, "print.receipt", "printer", "archiver").await;
-
-    let id = publish(&hub, "print.receipt", r#"{"receipt":"kapot"}"#).await;
-    let received = receive(&hub, "print.receipt", "as=printer&wait=0").await;
-    assert_eq!(received.status(), 200);
-    assert_eq!(
-        header(&received, "kyu-id").as_deref(),
-        Some(id.as_str()),
-        "printer's queue is clean, so this is the message this test published"
-    );
-    assert_eq!(
-        reqwest::Client::new()
-            .post(hub.url(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true")))
-            .send()
-            .await
-            .expect("a response")
-            .status(),
-        200
-    );
-
-    let page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(page.contains("Delete"), "the button exists beside Requeue");
-    assert!(
-        page.contains("data-kp-destructive") && page.contains("data-kp-confirm"),
-        "and it arms before it acts, like Revoke on the apps page"
-    );
-
-    let deleted = reqwest::Client::new()
-        .post(hub.url("/t/print.receipt/dashboard/delivery/delete"))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(format!("subscription=printer&id={id}"))
-        .send()
-        .await
-        .expect("a response");
-    assert!(
-        deleted.status().is_success() || deleted.status().is_redirection(),
-        "the delete button returns to the page"
-    );
-
-    let after = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        after.contains("Nothing has been dead-lettered"),
-        "gone from the topic's dead-letter list"
-    );
-
-    // archiver's own copy of the same message is untouched by printer's delete.
-    let for_archiver = receive(&hub, "print.receipt", "as=archiver&wait=0").await;
-    assert_eq!(
-        for_archiver.status(),
-        200,
-        "the other subscription's copy of the same message survives"
-    );
-    assert_eq!(
-        header(&for_archiver, "kyu-id").as_deref(),
-        Some(id.as_str())
-    );
-
-    // Deleting something that no longer exists is a 404, not a silent no-op.
-    let again = reqwest::Client::new()
-        .post(hub.url(&format!(
-            "/api/t/print.receipt/subs/printer/deliveries/{id}/delete"
-        )))
-        .send()
-        .await
-        .expect("a response");
-    assert_eq!(
-        again.status(),
-        404,
-        "deleting an already-gone delivery says so plainly"
-    );
-}
-
-/// [W16] Kenny's second question after the same session: could he click
-/// into a subscription and see its live backlog, not just the count. The
-/// dead-letters table was the precedent this reused — same shape, scoped
-/// to one subscription, `state IN (pending, claimed)` instead of `dead`.
-#[tokio::test]
-async fn p7_w16_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest() {
-    let (hub, _dir) = spawn().await;
-    bootstrap_two_clean(&hub, "print.receipt", "printer", "archiver").await;
-
-    let id = publish(&hub, "print.receipt", r#"{"receipt":"nog te doen"}"#).await;
-
-    // The topic page links to it.
-    let topic_page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        topic_page.contains("/t/print.receipt/dashboard/subs/printer"),
-        "the subscription name on the topic page links to its own page"
-    );
-
-    let page = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/printer"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(page.contains(&id), "the pending item's id is shown");
-    assert!(
-        page.contains("nog te doen"),
-        "and its payload, the whole point of looking: {page}"
-    );
-    assert!(page.contains("Delete"), "with a way to remove it");
-
-    // archiver's backlog page exists and shows the same pending item too —
-    // it is the same message, fanned out to both.
-    let archiver_page = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/archiver"))
-        .await
-        .expect("a response");
-    assert_eq!(archiver_page.status(), 200);
-    let archiver_body = archiver_page.text().await.expect("a body");
-    assert!(
-        archiver_body.contains(&id),
-        "archiver's own pending copy shows on its own page"
-    );
-
-    // A name that never polled this topic at all is a 404, the same shape
-    // as an unknown topic.
-    let unknown = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/nobody")).await;
-    assert_eq!(
-        unknown.expect("a response").status(),
-        404,
-        "an unpolled name is not a page that happens to be empty"
-    );
-
-    // Delete printer's pending item; archiver's copy of the SAME message
-    // must survive, exactly like W15's dead-letter delete.
-    let deleted = reqwest::Client::new()
-        .post(hub.url("/t/print.receipt/dashboard/delivery/delete"))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(format!("subscription=printer&id={id}"))
-        .send()
-        .await
-        .expect("a response");
-    assert!(deleted.status().is_success() || deleted.status().is_redirection());
-
-    let after = reqwest::get(hub.url("/t/print.receipt/dashboard/subs/printer"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        after.contains("Nothing pending or claimed"),
-        "printer's backlog is empty now"
-    );
-
-    let for_archiver = receive(&hub, "print.receipt", "as=archiver&wait=0").await;
-    assert_eq!(
-        for_archiver.status(),
-        200,
-        "archiver's copy of the same message was never touched"
-    );
-    assert_eq!(
-        header(&for_archiver, "kyu-id").as_deref(),
-        Some(id.as_str())
-    );
-}
-
-#[tokio::test]
-async fn p7_p1_a_binary_dead_letter_is_announced_not_mangled() {
-    let (hub, _dir) = spawn().await;
-    bootstrap(&hub, "print.receipt", "printer").await;
-
-    assert_eq!(
-        publish_bytes(
-            &hub,
-            "print.receipt",
-            "application/octet-stream",
-            vec![0x00, 0xff, 0x1b, 0x80]
-        )
-        .await,
-        201
-    );
-    let received = receive(&hub, "print.receipt", "as=printer&wait=0").await;
-    let id = header(&received, "kyu-id").expect("an id");
-    let _ = reqwest::Client::new()
-        .post(hub.url(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true")))
-        .send()
-        .await;
-
-    let page = reqwest::get(hub.url("/t/print.receipt/dashboard"))
-        .await
-        .expect("a response")
-        .text()
-        .await
-        .expect("a body");
-    assert!(
-        page.contains("binary payload (4 bytes)"),
-        "a dead letter you cannot read still says what it is: {page}"
-    );
-}

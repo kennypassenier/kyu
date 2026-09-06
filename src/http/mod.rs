@@ -1,8 +1,6 @@
 //! The HTTP surface (AR2). Routes translate HTTP into engine calls and
 //! back; business logic stays in [`crate::engine`].
 
-pub mod auth;
-pub mod csrf;
 pub mod error;
 pub mod handlers;
 pub mod notify;
@@ -81,39 +79,14 @@ impl AppState {
     }
 }
 
+/// The machine API (K1–K3, K6, K7): what kyu-runner, newsflash and scripts
+/// call with a client token. Since step 2 of the chassis migration the kit
+/// owns the door — this router is handed to `App::api_routes`, which puts
+/// every route behind `Authorization: Bearer <token>` (a client token from
+/// the kit's store, or the login token for scripts run by Kenny). No layer
+/// here: the in-process tests mount it open, the binary mounts it closed.
 pub fn router(state: AppState) -> Router {
-    // Open by design and by review: monitoring, the login page itself, and
-    // the two static assets the pages need. Everything else lives in the
-    // protected router below, so forgetting to think about a new route
-    // fails closed rather than open (W2).
-    // 3.0.0: /healthz and /metrics are the kit's (fed by `crate::kit`).
-    let open = Router::new()
-        .route("/static/{file}", get(handlers::static_asset))
-        .route("/login", get(handlers::login_form).post(handlers::login))
-        .route("/logout", post(handlers::logout));
-
-    let protected = Router::new()
-        .route("/", get(handlers::dashboard_index))
-        .route("/t/{topic}/dashboard", get(handlers::dashboard_topic))
-        .route(
-            "/t/{topic}/dashboard/subs/{subscription}",
-            get(handlers::dashboard_subscription),
-        )
-        .route(
-            "/t/{topic}/dashboard/publish",
-            post(handlers::dashboard_publish),
-        )
-        .route(
-            "/t/{topic}/dashboard/requeue",
-            post(handlers::dashboard_requeue),
-        )
-        .route(
-            "/t/{topic}/dashboard/delivery/delete",
-            post(handlers::dashboard_delete_delivery),
-        )
-        .route("/apps", get(handlers::apps_page))
-        .route("/apps/create", post(handlers::apps_create))
-        .route("/apps/revoke", post(handlers::apps_revoke))
+    Router::new()
         .route("/api/backup", post(handlers::backup))
         .route("/t/{topic}", post(handlers::publish))
         .route("/t/{topic}/next", get(handlers::receive))
@@ -143,14 +116,42 @@ pub fn router(state: AppState) -> Router {
             "/api/t/{topic}/retention",
             get(handlers::get_retention).put(handlers::put_retention),
         )
-        .route_layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            auth::require_token,
-        ));
-
-    open.merge(protected)
-        .layer(axum::middleware::from_fn(csrf::same_origin_only))
         .with_state(state)
+}
+
+/// The hub's own dashboard pages (K10, W9, W15, W16), handed to
+/// `App::dashboard_routes`: the kit renders them inside its layout behind
+/// the admin login and refuses cross-origin form posts. `/` is the kit's
+/// status page (a Topics section points here); `/apps` is what 2.x called
+/// the clients page and keeps working as a redirect (K2-3).
+pub fn pages(state: AppState) -> Router {
+    Router::new()
+        .route("/topics", get(handlers::topics_page))
+        .route("/apps", get(handlers::apps_redirect))
+        .route("/t/{topic}/dashboard", get(handlers::dashboard_topic))
+        .route(
+            "/t/{topic}/dashboard/subs/{subscription}",
+            get(handlers::dashboard_subscription),
+        )
+        .route(
+            "/t/{topic}/dashboard/publish",
+            post(handlers::dashboard_publish),
+        )
+        .route(
+            "/t/{topic}/dashboard/requeue",
+            post(handlers::dashboard_requeue),
+        )
+        .route(
+            "/t/{topic}/dashboard/delivery/delete",
+            post(handlers::dashboard_delete_delivery),
+        )
+        .with_state(state)
+}
+
+/// The two files the hub's pages need beyond the kit's assets (kyu.css and
+/// app.js), served open on `/assets/…` because the kit owns `/static/…`.
+pub fn assets() -> Router {
+    Router::new().route("/assets/{file}", get(handlers::kyu_asset))
 }
 
 /// [`router`] plus `/healthz` and `/metrics` as the kit serves them (3.0.0),

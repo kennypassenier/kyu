@@ -1,5 +1,9 @@
 {% extends "layout.html" %}
-{% block title %}kyu — {{ topic.name }}{% endblock %}
+{% block title %}{{ topic.name }} · {{ app_name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+{% endblock %}
 
 {% block content %}
 {% macro snippet(id, caption, item) %}
@@ -9,17 +13,15 @@
        data-masked="{{ item.shown }}" data-revealed="false">
 {{ item.shown }}</pre>
   <div style="display: flex; flex-direction: column; gap: 0.25rem; flex-shrink: 0">
-    {% if protected %}
     <button type="button" class="kp-button" data-reveal-target="{{ id }}" data-reveal-seconds="{{ reveal_seconds }}">Reveal</button>
-    {% endif %}
     <button type="button" class="kp-button" data-copy-target="{{ id }}">Copy</button>
   </div>
 </div>
 {% endmacro %}
 
 <h1 style="margin-bottom: 0.25rem">{{ topic.name }}</h1>
-<p class="text-secondary">
-  <a href="/">all topics</a> ·
+<p class="explain">
+  <a href="/topics">all topics</a> ·
   {{ topic.messages }} message(s) retained ·
   backlog {{ topic.backlog }}{% if topic.dead > 0 %} · <span class="kp-badge kp-badge--destructive">{{ topic.dead }} dead</span>{% endif %}
 </p>
@@ -29,21 +31,12 @@
 <div class="kp-alert kp-alert--warning" role="alert">{{ snippets.bootstrap_note }}</div>
 {% endif %}
 
-{% if protected %}
-<div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.5rem">
-  <span class="text-secondary" style="font-size: 0.875rem">Commands use the token of:</span>
-  <a class="kp-button{% if not snippets.app %} kp-button--primary{% endif %}"
-     href="/t/{{ topic.name }}/dashboard">this hub</a>
-  {% for name in app_names %}
-  <a class="kp-button{% if snippets.app == name %} kp-button--primary{% endif %}"
-     href="/t/{{ topic.name }}/dashboard?app={{ name }}">{{ name }}</a>
-  {% endfor %}
-</div>
 <p class="text-secondary" style="font-size: 0.875rem">
-  The token is masked here. <em>Copy</em> puts the whole working command on your
-  clipboard without showing it; <em>Reveal</em> shows it for {{ reveal_seconds }} seconds.
+  The commands carry this hub's login token, masked. <em>Copy</em> puts the whole
+  working command on your clipboard without showing it; <em>Reveal</em> shows it for
+  {{ reveal_seconds }} seconds. A command with an app's own token is on the
+  <a href="/clients">Apps</a> page (Copy command).
 </p>
-{% endif %}
 
 {{ snippet("snippet-publish", "Publish a message:", snippets.publish) }}
 {{ snippet("snippet-receive-raw", "Receive it — the payload is the body, the id comes back in a header:", snippets.receive_raw) }}

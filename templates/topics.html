@@ -1,8 +1,12 @@
 {% extends "layout.html" %}
-{% block title %}kyu — topics{% endblock %}
+{% block title %}Topics · {{ app_name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+{% endblock %}
 {% block content %}
 <h1>Topics</h1>
-<p class="text-secondary">Every topic on this hub. A topic exists once something publishes to it.</p>
+<p class="explain">Every topic on this hub. A topic exists once something publishes to it; open one for its subscriptions, dead letters and the commands that work against it.</p>
 
 {% if topics %}
 <div class="kp-table-wrap">
@@ -44,6 +48,6 @@
 <pre class="snippet">curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
 <p class="text-secondary" style="margin-top: 0.5rem">
   Then open the topic to see the receive and acknowledge commands, filled in
-  with its own data{% if protected %} and a working token{% endif %}.
+  with its own data and a working token.
 </p>
 {% endblock %}

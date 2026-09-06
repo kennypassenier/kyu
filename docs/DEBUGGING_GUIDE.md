@@ -65,7 +65,7 @@ Payloads and tokens are in none of them except the dashboard, on purpose.
 | Browser bounces to `/login` in a loop | Cookies are being dropped, or you are on a different host than the one you logged in on. | The login POST returns `303` with a `set-cookie`; if the next page still redirects, the cookie is not coming back. | Check you are using the same origin. The cookie is `HttpOnly; SameSite=Lax`, deliberately. |
 | Hub refuses to start, names `KYU_SECRET_KEY` | A token without a key. Half-configured is not allowed. | The error prints a freshly generated key to paste. | Paste it. Keep both values together. |
 | Apps page lists tokens as `unreadable` | `KYU_SECRET_KEY` changed. The old tokens cannot be decrypted. | The page says so in place. | Revoke each and generate replacements. See runbook §5. |
-| Warning banner on every page | No token configured at all. | `docker logs` has the same warning at startup. | Deliberate? Fine. Otherwise set both variables and restart. |
+| Hub refuses to start, names `KYU_TOKEN` and `KYU_SECRET_KEY` | No token configured at all (since 3.0.0 an open hub is not a valid configuration). | `--check` prints the two names and a remedy. | Set both variables and restart. |
 | Copy button says "Copy failed — use Reveal" | The browser refused clipboard access — no user gesture, or an unfocused window. | Reveal works and shows the same command. | Use Reveal and select the text. Not a hub fault; both clipboard paths need a real click in a focused window. |
 
 **Proven by:** the thirteen tests in `tests/p7_auth.rs`;

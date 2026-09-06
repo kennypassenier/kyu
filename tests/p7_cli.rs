@@ -25,6 +25,11 @@ fn run(args: &[&str]) -> (Option<i32>, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_kyu"))
         .args(args)
         .env("KYU_STATE_DIR", dir.path())
+        .env("KYU_TOKEN", "a-login-token-that-is-long-enough")
+        .env(
+            "KYU_SECRET_KEY",
+            "abababababababababababababababababababababababababababababababab",
+        )
         // Port 0 is not bindable as a listener address here, so pick
         // something out of the way: if the binary wrongly starts serving, it
         // must not collide with anything real.

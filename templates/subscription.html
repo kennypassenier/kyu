@@ -1,9 +1,13 @@
 {% extends "layout.html" %}
-{% block title %}kyu — {{ topic_name }} / {{ subscription.name }}{% endblock %}
+{% block title %}{{ topic_name }} / {{ subscription.name }} · {{ app_name }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+{% endblock %}
 
 {% block content %}
 <h1 style="margin-bottom: 0.25rem">{{ subscription.name }}</h1>
-<p class="text-secondary">
+<p class="explain">
   <a href="/t/{{ topic_name }}/dashboard">{{ topic_name }}</a> ·
   {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
   {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>

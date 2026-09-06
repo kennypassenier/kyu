@@ -6,12 +6,14 @@
 
 use std::time::Duration;
 
+use axum::Extension;
 use axum::body::{Body, to_bytes};
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use chassis::Dashboard;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
@@ -813,86 +815,89 @@ const RECENT_MESSAGES: usize = 20;
 /// use on the night you need it.
 const DEAD_LETTERS_SHOWN: usize = 50;
 
-/// K10 · `GET /` — every topic on the hub.
-pub async fn dashboard_index(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
+/// The hub's own page templates, rendered inside the kit's layout (K2-2,
+/// 2026-09-06): the kit brings nav, login, theme picker and CSP; these
+/// fill `content` and add the two hub assets in `head`.
+const TOPICS_HTML: &str = include_str!("../../templates/topics.html");
+const TOPIC_HTML: &str = include_str!("../../templates/topic.html");
+const SUBSCRIPTION_HTML: &str = include_str!("../../templates/subscription.html");
+
+fn page<C: serde::Serialize>(
+    dash: &Dashboard,
+    nav: &str,
+    source: &str,
+    ctx: C,
+) -> Result<Html<String>, ApiError> {
+    dash.render_project(nav, source, ctx)
+        .map_err(|error| internal(format!("cannot render the page: {error}")))
+}
+
+/// K10 · `GET /topics` — every topic on this hub. Until step 2 this was `/`;
+/// the kit's status page owns `/` now and carries a Topics section.
+pub async fn topics_page(
+    Extension(dash): Extension<Dashboard>,
+    State(state): State<AppState>,
+) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
-    let protected = state.auth.is_protected();
-    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<String> {
+    let topics = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<TopicView>> {
         let now = engine.now_ms();
-        let topics = engine
+        Ok(engine
             .store()
             .read(queries::topic_summaries)?
             .into_iter()
             .map(|summary| TopicView::at(summary, now))
-            .collect();
-        dashboard::render_topics(topics, now, protected)
+            .collect())
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
     .map_err(|error| internal(format!("{error:#}")))?;
-
-    Ok(Html(page))
+    page(
+        &dash,
+        "/topics",
+        TOPICS_HTML,
+        json!({ "topics": topics, "kyu_assets": ASSET_VERSION.as_str() }),
+    )
 }
 
-/// `?app=` on the topic page: whose token the printed commands carry (W2).
-#[derive(Debug, Deserialize, Default)]
-pub struct TopicPageQuery {
-    pub app: Option<String>,
+/// K2-3 · `GET /apps` — the 2.x name of the clients page; the kit's
+/// `/clients` (labelled "Apps") took over, and old links keep working.
+pub async fn apps_redirect() -> Redirect {
+    Redirect::to("/clients")
+}
+
+/// What the topic page renders: the topic, its subscriptions, recent
+/// messages, dead letters and the copy-paste commands.
+struct TopicPage {
+    topic: TopicView,
+    subscriptions: Vec<SubscriptionView>,
+    messages: Vec<MessageView>,
+    dead_letters: Vec<DeadLetterView>,
+    snippets: dashboard::Snippets,
 }
 
 /// K10 · `GET /t/{topic}/dashboard` — one topic in detail.
 pub async fn dashboard_topic(
+    Extension(dash): Extension<Dashboard>,
     State(state): State<AppState>,
     Path(topic): Path<String>,
-    Query(query): Query<TopicPageQuery>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
     let topic_name = topic.clone();
-    let protected = state.auth.is_protected();
-
-    // Which token the copy-paste commands carry. `?app=` picks a registered
-    // app; without it the commands use the bootstrap token, which always
-    // exists on a protected hub — so a pasted command works on the first try
-    // even before any app is registered.
-    let (token, app) = match (state.auth.key(), query.app.as_deref()) {
-        (Some(key), Some(name)) => {
-            let found = engine
-                .app_token(name, key)
-                .map_err(ApiError::from)?
-                .ok_or_else(|| {
-                    ApiError::from(EngineError::UnknownApp {
-                        name: name.to_string(),
-                    })
-                })?;
-            (Some(found), Some(name.to_string()))
-        }
-        _ => (state.auth.token().map(str::to_string), None),
-    };
-
-    let app_names = match state.auth.key() {
-        Some(key) => engine
-            .list_apps(key)
-            .map_err(ApiError::from)?
-            .into_iter()
-            .filter(|app| app.is_live())
-            .map(|app| app.name)
-            .collect(),
-        None => Vec::new(),
-    };
-
-    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<String>> {
+    // The copy-paste commands carry the login token, which always exists
+    // (the kit refuses to start without it); a command with a client's own
+    // token comes from the kit's clients page ("Copy command").
+    let token = state.auth.token().map(str::to_string);
+    let built = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<TopicPage>> {
         engine.store().read(|conn| {
             let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
                 return Ok(None);
             };
-
             let summary = queries::topic_summaries(conn)?
                 .into_iter()
                 .find(|summary| summary.name == topic_name);
             let Some(summary) = summary else {
                 return Ok(None);
             };
-
             let now = engine.now_ms();
             let subscriptions: Vec<SubscriptionView> =
                 queries::subscription_summaries(conn, topic_id)?
@@ -909,7 +914,6 @@ pub async fn dashboard_topic(
                     .into_iter()
                     .map(|dead| DeadLetterView::at(dead, now))
                     .collect();
-
             // The snippets carry this topic's own most recent payload and a
             // subscription that genuinely exists, so what you copy is what
             // your hub actually answers to (S1).
@@ -924,32 +928,40 @@ pub async fn dashboard_topic(
                 example.map(|message| &message.payload),
                 example.and_then(|message| message.content_type.as_deref()),
                 token.as_deref(),
-                app.as_deref(),
+                None,
             );
-
-            Ok(Some(dashboard::render_topic(
-                TopicView::at(summary, now),
+            Ok(Some(TopicPage {
+                topic: TopicView::at(summary, now),
                 subscriptions,
                 messages,
                 dead_letters,
                 snippets,
-                now,
-                protected,
-                app_names,
-            )?))
+            }))
         })
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
     .map_err(|error| internal(format!("{error:#}")))?;
-
-    match page {
-        Some(page) => Ok(Html(page)),
+    match built {
+        Some(built) => page(
+            &dash,
+            "/topics",
+            TOPIC_HTML,
+            json!({
+                "topic": built.topic,
+                "subscriptions": built.subscriptions,
+                "messages": built.messages,
+                "dead_letters": built.dead_letters,
+                "snippets": built.snippets,
+                "reveal_seconds": dash.reveal_seconds,
+                "kyu_assets": ASSET_VERSION.as_str(),
+            }),
+        ),
         None => Err(ApiError::new(
             StatusCode::NOT_FOUND,
             format!("topic {topic:?} does not exist"),
-            "a topic starts existing when something publishes to it. Open / to see \
-             which topics this hub has.",
+            "a topic starts existing when something publishes to it. Open /topics to \
+             see which topics this hub has.",
         )),
     }
 }
@@ -961,54 +973,56 @@ const BACKLOG_SHOWN: usize = 50;
 /// [W16] `GET /t/{topic}/dashboard/subs/{subscription}` — one subscription's
 /// live backlog, individually rather than as a count.
 pub async fn dashboard_subscription(
+    Extension(dash): Extension<Dashboard>,
     State(state): State<AppState>,
     Path((topic, subscription)): Path<(String, String)>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
     let topic_name = topic.clone();
     let subscription_name = subscription.clone();
-    let protected = state.auth.is_protected();
-
-    let page = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<String>> {
-        engine.store().read(|conn| {
-            let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
-                return Ok(None);
-            };
-            let Some(sub_id) =
-                queries::subscription_id_by_name_conn(conn, topic_id, &subscription_name)?
-            else {
-                return Ok(None);
-            };
-
-            let summary = queries::subscription_summaries(conn, topic_id)?
-                .into_iter()
-                .find(|summary| summary.name == subscription_name);
-            let Some(summary) = summary else {
-                return Ok(None);
-            };
-
-            let now = engine.now_ms();
-            let view = dashboard::SubscriptionView::at(summary, now);
-            let backlog: Vec<dashboard::BacklogItemView> =
-                queries::backlog_for_subscription(conn, sub_id, BACKLOG_SHOWN)?
+    let built = tokio::task::spawn_blocking(
+        move || -> anyhow::Result<Option<(SubscriptionView, Vec<dashboard::BacklogItemView>)>> {
+            engine.store().read(|conn| {
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
+                    return Ok(None);
+                };
+                let Some(sub_id) =
+                    queries::subscription_id_by_name_conn(conn, topic_id, &subscription_name)?
+                else {
+                    return Ok(None);
+                };
+                let summary = queries::subscription_summaries(conn, topic_id)?
                     .into_iter()
-                    .map(|item| dashboard::BacklogItemView::at(item, now))
-                    .collect();
-
-            Ok(Some(dashboard::render_subscription(
-                &topic_name,
-                view,
-                backlog,
-                protected,
-            )?))
-        })
-    })
+                    .find(|summary| summary.name == subscription_name);
+                let Some(summary) = summary else {
+                    return Ok(None);
+                };
+                let now = engine.now_ms();
+                let view = dashboard::SubscriptionView::at(summary, now);
+                let backlog: Vec<dashboard::BacklogItemView> =
+                    queries::backlog_for_subscription(conn, sub_id, BACKLOG_SHOWN)?
+                        .into_iter()
+                        .map(|item| dashboard::BacklogItemView::at(item, now))
+                        .collect();
+                Ok(Some((view, backlog)))
+            })
+        },
+    )
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
     .map_err(|error| internal(format!("{error:#}")))?;
-
-    match page {
-        Some(page) => Ok(Html(page)),
+    match built {
+        Some((view, backlog)) => page(
+            &dash,
+            "/topics",
+            SUBSCRIPTION_HTML,
+            json!({
+                "topic_name": topic,
+                "subscription": view,
+                "backlog": backlog,
+                "kyu_assets": ASSET_VERSION.as_str(),
+            }),
+        ),
         None => Err(ApiError::new(
             StatusCode::NOT_FOUND,
             format!("subscription {subscription:?} on topic {topic:?} does not exist"),
@@ -1225,45 +1239,13 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 // W2 · the door: static assets, login, logout and app management.
 // ---------------------------------------------------------------------------
 
-/// The files the pages need, compiled into the binary like the templates
-/// (T4 amendment) so the container stays one artifact and the distroless
-/// image needs no filesystem layout.
+/// The hub's own two assets, beyond what the kit serves under `/static`:
+/// the page styles and the copy/reveal behaviour of the command snippets.
+/// Embedded in the binary, so the image stays a single file (T9).
 const APP_JS: &str = include_str!("../../static/app.js");
-// ── @kp-soft/themes v3.0.0, vendored VERBATIM ──────────────────────────
-//
-// kyu has no npm and no build step, so the shared package cannot be a
-// dependency the way it is in JobTracker. These eight files are byte-for-
-// byte copies of the v3.0.0 tag, never edited here: `.claude/hooks/gates.sh`
-// compares each one against ~/Projects/kp-themes and refuses the commit when
-// they differ, which is what keeps a copy from going stale in silence.
-//
-// Bootstrap and its bridge are gone since 2.4.0: every component on this
-// dashboard now wears the package's own classes, natively themed, so the
-// 233 KB of Bootstrap and the 4 KB translation layer over it both left.
-const THEMES_CSS: &str = include_str!("../../static/themes.css");
-const COMPONENTS_CSS: &str = include_str!("../../static/components.css");
-const THEME_CORE_JS: &str = include_str!("../../static/theme-core.js");
-const THEME_PICKER_JS: &str = include_str!("../../static/theme-picker.js");
-const THEME_REGISTRY_JS: &str = include_str!("../../static/theme-registry.js");
-/// The DI10/DI4 contract enforcement, the confirm-arm pattern behind
-/// `data-kp-confirm`, and the skip link — kyu's own hand-rolled versions of
-/// the first two are gone as of 2.4.0.
-const COMPONENTS_JS: &str = include_str!("../../static/components.js");
-/// Both `theme-picker.js` and `components.js` import `getStrings` from this
-/// since the package's own 2.0.0 — not vendored for its own sake, but
-/// because neither loads without it.
-const STRINGS_JS: &str = include_str!("../../static/strings.js");
-
-/// kyu's OWN files, not vendored: `kyu.css` is layout glue and the handful
-/// of utilities the package deliberately does not ship; `kyu-init.js` calls
-/// only the four attach functions kyu's templates use, since every module
-/// import is pure since v3.0.0 and the package's own js/auto.js attaches
-/// sixteen behaviours this dashboard has no markup for.
 const KYU_CSS: &str = include_str!("../../static/kyu.css");
-const KYU_INIT_JS: &str = include_str!("../../static/kyu-init.js");
 
-/// A short fingerprint of the assets, appended to their URLs in the
-/// templates.
+/// The cache-busting fingerprint every page appends to its asset URLs.
 ///
 /// Without it the year-long cache header below would serve yesterday's
 /// JavaScript after an upgrade — which is exactly how a fixed bug appears
@@ -1273,71 +1255,27 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
     // FNV-1a: not cryptographic, and does not need to be — this answers
     // "did these bytes change", nothing more (T6: no crate for six lines).
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in APP_JS
-        .bytes()
-        .chain(THEMES_CSS.bytes())
-        .chain(COMPONENTS_CSS.bytes())
-        .chain(THEME_CORE_JS.bytes())
-        .chain(THEME_PICKER_JS.bytes())
-        .chain(THEME_REGISTRY_JS.bytes())
-        .chain(COMPONENTS_JS.bytes())
-        .chain(STRINGS_JS.bytes())
-        .chain(KYU_CSS.bytes())
-        .chain(KYU_INIT_JS.bytes())
-    {
+    for byte in APP_JS.bytes().chain(KYU_CSS.bytes()) {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     format!("{hash:016x}")
 });
 
-/// `GET /static/{file}` — served from memory, never from disk.
+/// `GET /assets/{file}` — served from memory, never from disk.
 ///
 /// An explicit match rather than a path join: a lookup that builds a path
 /// from user input is how a static handler turns into a file-disclosure
 /// bug, and there are exactly two files.
-pub async fn static_asset(Path(file): Path<String>) -> Response {
+pub async fn kyu_asset(Path(file): Path<String>) -> Response {
     let (body, content_type) = match file.as_str() {
         "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
-        "themes.css" => (THEMES_CSS, "text/css; charset=utf-8"),
-        "components.css" => (COMPONENTS_CSS, "text/css; charset=utf-8"),
         "kyu.css" => (KYU_CSS, "text/css; charset=utf-8"),
-        // The picker is an ES module importing ./theme-core.js, which
-        // imports ./theme-registry.js; kyu-init.js imports both the picker
-        // and ./components.js. Served flat under /static, those relative
-        // specifiers resolve here, so all four must be reachable or the
-        // dashboard fails to come alive with nothing on the page to say why.
-        "theme-core.js" => (THEME_CORE_JS, "text/javascript; charset=utf-8"),
-        "theme-picker.js" => (THEME_PICKER_JS, "text/javascript; charset=utf-8"),
-        "theme-registry.js" => (THEME_REGISTRY_JS, "text/javascript; charset=utf-8"),
-        "components.js" => (COMPONENTS_JS, "text/javascript; charset=utf-8"),
-        "strings.js" => (STRINGS_JS, "text/javascript; charset=utf-8"),
-        "kyu-init.js" => (KYU_INIT_JS, "text/javascript; charset=utf-8"),
-        other => {
-            // 3.0.0: the no-flash snippet (theme-boot.js) and the display
-            // faces (fonts.css, fonts/*.woff2) come from the kit's vendored
-            // set — the kit's CSP stops inline scripts and CDN fonts, and
-            // the hub works offline this way.
-            if let Some((_, content_type, bytes)) = chassis::shell::assets::ASSETS
-                .iter()
-                .find(|(name, _, _)| *name == other)
-            {
-                return (
-                    [
-                        (header::CONTENT_TYPE, *content_type),
-                        (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
-                    ],
-                    *bytes,
-                )
-                    .into_response();
-            }
+        _ => {
             return ApiError::new(
                 StatusCode::NOT_FOUND,
-                format!("kyu serves no asset named {file:?}"),
-                "the dashboard needs app.js, themes.css, components.css, \
-                 kyu.css, theme-core.js, theme-picker.js, theme-registry.js, \
-                 components.js, strings.js and kyu-init.js."
-                    .to_string(),
+                format!("no asset named {file:?}"),
+                "the hub serves app.js and kyu.css here; everything else is the kit's, under /static",
             )
             .into_response();
         }
@@ -1345,183 +1283,10 @@ pub async fn static_asset(Path(file): Path<String>) -> Response {
     (
         [
             (header::CONTENT_TYPE, content_type),
-            // Cached hard, because the URL carries a fingerprint of the
-            // contents (see ASSET_VERSION): a new binary means a new URL,
-            // so there is nothing stale to serve.
+            // Safe because every reference carries ?v=<ASSET_VERSION>.
             (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
         ],
         body,
     )
         .into_response()
-}
-
-/// `GET /login` — the form. Already-authenticated visitors are sent on
-/// rather than shown a login page they do not need.
-pub async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    if !state.auth.is_protected() {
-        return Redirect::to("/").into_response();
-    }
-    if let Some(candidate) = super::auth::session_cookie(&headers)
-        && super::auth::authenticate(&state, &candidate).is_some()
-    {
-        return Redirect::to("/").into_response();
-    }
-    match dashboard::render_login(None) {
-        Ok(page) => Html(page).into_response(),
-        Err(error) => ApiError::from(EngineError::Internal(error)).into_response(),
-    }
-}
-
-/// `POST /login` — check the token, set the cookie.
-///
-/// A wrong token re-renders the form with a message and **200**, not 401:
-/// the response is a page, and a browser handling a 401 by popping its own
-/// credential dialog on top of our form is a confusing mess.
-pub async fn login(State(state): State<AppState>, body: axum::body::Bytes) -> Response {
-    let form = FormFields::parse(&body);
-    let token = form.get("token").unwrap_or_default();
-    let remember = form.get("remember").is_some();
-
-    if super::auth::authenticate(&state, &token).is_none() {
-        // Deliberately vague, and deliberately slow to be worth guessing:
-        // the token is long enough that online guessing is hopeless, so no
-        // artificial delay is added — but nothing here says whether the
-        // token was wrong, expired or revoked.
-        tracing::warn!("a login attempt was refused");
-        return match dashboard::render_login(Some(
-            "That token was not accepted. Check the value of KYU_TOKEN in \
-             your compose file, or use a token from the apps page.",
-        )) {
-            Ok(page) => (StatusCode::OK, Html(page)).into_response(),
-            Err(error) => ApiError::from(EngineError::Internal(error)).into_response(),
-        };
-    }
-
-    tracing::info!(remember, "a dashboard session started");
-    (
-        [(
-            header::SET_COOKIE,
-            super::auth::set_cookie_value(&token, remember),
-        )],
-        Redirect::to("/"),
-    )
-        .into_response()
-}
-
-/// `POST /logout` — drop the cookie.
-pub async fn logout() -> Response {
-    (
-        [(header::SET_COOKIE, super::auth::clear_cookie_value())],
-        Redirect::to("/login"),
-    )
-        .into_response()
-}
-
-/// `GET /apps` — register, inspect and revoke the apps that may talk to the
-/// hub (W2). Tokens render masked; the reveal and copy controls live in
-/// `app.js`.
-///
-/// The page always exists, on a protected hub or not: AR11 still keeps
-/// actually *creating* an app token behind a bootstrap token (`apps_create`
-/// and `apps_revoke` below refuse exactly as before), but a visitor who has
-/// not set one up yet gets a page that says so and hands over a ready
-/// example, rather than a bare JSON error where a nav link used to lead
-/// nowhere at all.
-pub async fn apps_page(State(state): State<AppState>) -> Result<Html<String>, ApiError> {
-    let Some(key) = state.auth.key().cloned() else {
-        let page = dashboard::render_apps_setup(
-            &crate::crypto::generate_token(),
-            &crate::crypto::SecretKey::generate_hex(),
-        )
-        .map_err(|error| ApiError::from(EngineError::Internal(error)))?;
-        return Ok(Html(page));
-    };
-    let engine = state.engine.clone();
-    let now = engine.now_ms();
-    let apps = spawn_engine(move || engine.list_apps(&key)).await?;
-    let views: Vec<dashboard::AppView> = apps
-        .into_iter()
-        .map(|app| dashboard::AppView {
-            masked: dashboard::mask_token(&app.token),
-            live: app.is_live(),
-            created_at: dashboard::human_age(now, app.created_at),
-            revoked_at: app.revoked_at.map(|at| dashboard::human_age(now, at)),
-            name: app.name,
-            token: app.token,
-        })
-        .collect();
-    let page = dashboard::render_apps(&views, None)
-        .map_err(|error| ApiError::from(EngineError::Internal(error)))?;
-    Ok(Html(page))
-}
-
-/// `POST /apps/create` — register an app and generate its token.
-pub async fn apps_create(
-    State(state): State<AppState>,
-    body: axum::body::Bytes,
-) -> Result<Response, ApiError> {
-    let Some(key) = state.auth.key().cloned() else {
-        return Err(ApiError::from(EngineError::Unprotected));
-    };
-    let name = FormFields::parse(&body).get("name").unwrap_or_default();
-
-    let engine = state.engine.clone();
-    let name_for_engine = name.clone();
-    let created = spawn_engine(move || engine.register_app(&name_for_engine, &key)).await;
-
-    match created {
-        Ok(app) => {
-            tracing::info!(app = %app.name, "an app was registered");
-            // Anchor on the new row so a long list does not hide what just
-            // happened.
-            Ok(Redirect::to(&format!("/apps#app-{}", app.name)).into_response())
-        }
-        Err(error) => Err(error),
-    }
-}
-
-/// `POST /apps/revoke` — turn an app off, keeping the record that it existed.
-pub async fn apps_revoke(
-    State(state): State<AppState>,
-    body: axum::body::Bytes,
-) -> Result<Response, ApiError> {
-    if !state.auth.is_protected() {
-        return Err(ApiError::from(EngineError::Unprotected));
-    }
-    let name = FormFields::parse(&body).get("name").unwrap_or_default();
-
-    let engine = state.engine.clone();
-    let name_for_engine = name.clone();
-    spawn_engine(move || engine.revoke_app(&name_for_engine)).await?;
-    tracing::info!(app = %name, "an app was revoked");
-    Ok(Redirect::to("/apps").into_response())
-}
-
-/// A urlencoded form body, decoded once.
-///
-/// The existing handlers each picked their one field out of the raw string;
-/// three fields across two forms is where that stops being cheaper than
-/// parsing properly.
-struct FormFields(Vec<(String, String)>);
-
-impl FormFields {
-    fn parse(body: &[u8]) -> Self {
-        let raw = String::from_utf8_lossy(body);
-        Self(
-            raw.split('&')
-                .filter(|pair| !pair.is_empty())
-                .map(|pair| {
-                    let (name, value) = pair.split_once('=').unwrap_or((pair, ""));
-                    (urldecode(name), urldecode(value))
-                })
-                .collect(),
-        )
-    }
-
-    fn get(&self, name: &str) -> Option<String> {
-        self.0
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value.clone())
-    }
 }

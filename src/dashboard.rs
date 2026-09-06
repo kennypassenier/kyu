@@ -11,10 +11,6 @@
 //! Payloads are untrusted input (AR11): autoescape stays on, the display is
 //! capped, and the cap is always visible.
 
-use std::sync::LazyLock;
-
-use anyhow::{Context, Result};
-use minijinja::Environment;
 use serde::Serialize;
 
 use crate::engine::clock::Millis;
@@ -26,116 +22,6 @@ use crate::store::queries::{
 /// How much of a payload the dashboard shows. Enough to recognise a
 /// message; the rest is announced rather than dropped in silence (AR11).
 pub const PAYLOAD_DISPLAY_LIMIT: usize = 4096;
-
-/// The house themes, from `@kp-soft/themes` **v3.0.0** — the shared package
-/// JobTracker, almanac and kp-soft use.
-///
-/// Only the name and the label. v1.0.0 removed the colour copies on purpose
-/// (their TH24): a swatch now wears the theme it previews, reading the live
-/// custom properties instead of a duplicate that drifts when a palette is
-/// adjusted. The dark flag is gone from here for the same reason — the
-/// package derives it from each theme's own `color-scheme`, which is how
-/// kyu came to believe in four dark themes when there are three.
-///
-/// This list still exists because kyu renders its picker server-side: a
-/// menu built by JavaScript is an empty box until the script runs, and this
-/// dashboard is server-rendered HTML. It is kept honest by a gate that
-/// compares it against the package's generated `js/theme-registry.js` and
-/// refuses the commit when they disagree — the same guard as the vendored
-/// stylesheets.
-pub const THEMES: &[ThemeView] = &[
-    ThemeView {
-        name: "formal",
-        label: "Formal",
-    },
-    ThemeView {
-        name: "light",
-        label: "Light",
-    },
-    ThemeView {
-        name: "dark",
-        label: "Dark",
-    },
-    ThemeView {
-        name: "cyberpunk",
-        label: "Cyberpunk",
-    },
-    ThemeView {
-        name: "pastel",
-        label: "Pastel",
-    },
-    ThemeView {
-        name: "terminal",
-        label: "Terminal",
-    },
-    ThemeView {
-        name: "topo",
-        label: "Topographic",
-    },
-    ThemeView {
-        name: "high-contrast",
-        label: "High contrast",
-    },
-    ThemeView {
-        name: "sepia",
-        label: "Sepia",
-    },
-    ThemeView {
-        name: "blueprint",
-        label: "Blueprint",
-    },
-    ThemeView {
-        name: "solstice",
-        label: "Solstice",
-    },
-];
-
-/// One theme as the picker's markup needs it.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ThemeView {
-    pub name: &'static str,
-    /// Shown to the reader. English, matching the rest of this dashboard —
-    /// and, since the package's 2.0.0, its own default too. Before that
-    /// release the package's labels were Dutch and so was this list; kept
-    /// in step here rather than kept as a deliberate override, because
-    /// nothing else on this dashboard is Dutch.
-    pub label: &'static str,
-}
-
-/// Templates are embedded in the binary, so the image stays a single file
-/// with nothing to mount beside it (T9).
-static ENVIRONMENT: LazyLock<Environment<'static>> = LazyLock::new(|| {
-    let mut environment = Environment::new();
-    // Autoescape is the difference between a dashboard and a stored-XSS
-    // delivery system: every payload on these pages came from outside.
-    environment.set_auto_escape_callback(|_| minijinja::AutoEscape::Html);
-    // A global rather than a context key on all four render functions: the
-    // picker sits in the layout, so every page needs it and none of them
-    // should have to remember to pass it.
-    environment.add_global("themes", minijinja::Value::from_serialize(THEMES));
-    environment
-        .add_template("layout.html", include_str!("../templates/layout.html"))
-        .expect("the layout template must compile");
-    environment
-        .add_template("topics.html", include_str!("../templates/topics.html"))
-        .expect("the topics template must compile");
-    environment
-        .add_template("topic.html", include_str!("../templates/topic.html"))
-        .expect("the topic template must compile");
-    environment
-        .add_template("login.html", include_str!("../templates/login.html"))
-        .expect("the login template must compile");
-    environment
-        .add_template("apps.html", include_str!("../templates/apps.html"))
-        .expect("the apps template must compile");
-    environment
-        .add_template(
-            "subscription.html",
-            include_str!("../templates/subscription.html"),
-        )
-        .expect("the subscription template must compile");
-    environment
-});
 
 /// How a payload is shown: text as text, binary announced as binary, and
 /// anything oversized marked as truncated with its real size.
@@ -484,49 +370,6 @@ impl Snippets {
     }
 }
 
-/// The cache-busting fingerprint every page appends to its asset URLs.
-fn asset_version() -> &'static str {
-    crate::http::handlers::ASSET_VERSION.as_str()
-}
-
-pub fn render_topics(topics: Vec<TopicView>, now: Millis, protected: bool) -> Result<String> {
-    ENVIRONMENT
-        .get_template("topics.html")
-        .context("the topics template is missing")?
-        .render(minijinja::context! {
-            topics => topics,
-            now => now,
-            protected => protected,
-            active_nav => "topics",
-            assets => asset_version(),
-        })
-        .context("cannot render the topic list")
-}
-
-/// W2 · the login page. `error` is shown above the form after a refusal.
-pub fn render_login(error: Option<&str>) -> Result<String> {
-    ENVIRONMENT
-        .get_template("login.html")
-        .context("the login template is missing")?
-        .render(minijinja::context! { error => error, assets => asset_version() })
-        .context("cannot render the login page")
-}
-
-/// W2 · one registered app as the apps page shows it.
-///
-/// `token` is the value the copy button puts on the clipboard and `masked`
-/// is what the page displays until someone reveals it. Both are rendered
-/// into the HTML — which is exactly why this page is behind the door.
-#[derive(Debug, Clone, Serialize)]
-pub struct AppView {
-    pub name: String,
-    pub token: String,
-    pub masked: String,
-    pub live: bool,
-    pub created_at: String,
-    pub revoked_at: Option<String>,
-}
-
 /// Shows enough of a token to tell two of them apart, and no more.
 pub fn mask_token(token: &str) -> String {
     const SHOWN: usize = 4;
@@ -553,47 +396,6 @@ pub fn human_age(now: Millis, then: Millis) -> String {
         (1, _, _) => "yesterday".to_string(),
         (d, _, _) => format!("{d} days ago"),
     }
-}
-
-pub fn render_apps(apps: &[AppView], error: Option<&str>) -> Result<String> {
-    ENVIRONMENT
-        .get_template("apps.html")
-        .context("the apps template is missing")?
-        .render(minijinja::context! {
-            apps => apps,
-            error => error,
-            protected => true,
-            active_nav => "apps",
-            reveal_seconds => crate::config::REVEAL_SECONDS,
-            assets => asset_version(),
-        })
-        .context("cannot render the apps page")
-}
-
-/// W2 · the apps page on a hub with no door yet.
-///
-/// AR11 keeps app-token *creation* behind a bootstrap token on purpose — a
-/// per-app token only means something once something already decides who
-/// may in at all. But the page itself should exist regardless, so a visitor
-/// finds the ten-second fix (set two environment variables and restart)
-/// rather than a route that looks like it was never built. `example_token`
-/// and `example_key` are generated fresh per request, the same way the CLI
-/// prints one when refusing to start on a token without a key.
-pub fn render_apps_setup(example_token: &str, example_key: &str) -> Result<String> {
-    ENVIRONMENT
-        .get_template("apps.html")
-        .context("the apps template is missing")?
-        .render(minijinja::context! {
-            apps => Vec::<AppView>::new(),
-            error => Option::<&str>::None,
-            protected => false,
-            example_token => example_token,
-            example_key => example_key,
-            active_nav => "apps",
-            reveal_seconds => crate::config::REVEAL_SECONDS,
-            assets => asset_version(),
-        })
-        .context("cannot render the apps setup page")
 }
 
 /// [W16] One item on a subscription's live backlog, as the dashboard shows
@@ -625,60 +427,6 @@ impl BacklogItemView {
             note,
         }
     }
-}
-
-/// [W16] `GET /t/{topic}/dashboard/subs/{subscription}` — one subscription's
-/// live backlog, individually rather than as a count. The dead-letters
-/// table on the topic page is this page's older sibling; this is the same
-/// shape for messages that have not given up yet.
-pub fn render_subscription(
-    topic_name: &str,
-    subscription: SubscriptionView,
-    backlog: Vec<BacklogItemView>,
-    protected: bool,
-) -> Result<String> {
-    ENVIRONMENT
-        .get_template("subscription.html")
-        .context("the subscription template is missing")?
-        .render(minijinja::context! {
-            topic_name => topic_name,
-            subscription => subscription,
-            backlog => backlog,
-            protected => protected,
-            active_nav => "topics",
-            assets => asset_version(),
-        })
-        .context("cannot render the subscription page")
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn render_topic(
-    topic: TopicView,
-    subscriptions: Vec<SubscriptionView>,
-    messages: Vec<MessageView>,
-    dead_letters: Vec<DeadLetterView>,
-    snippets: Snippets,
-    now: Millis,
-    protected: bool,
-    app_names: Vec<String>,
-) -> Result<String> {
-    ENVIRONMENT
-        .get_template("topic.html")
-        .context("the topic template is missing")?
-        .render(minijinja::context! {
-            topic => topic,
-            subscriptions => subscriptions,
-            messages => messages,
-            dead_letters => dead_letters,
-            snippets => snippets,
-            now => now,
-            protected => protected,
-            app_names => app_names,
-            active_nav => "topics",
-            reveal_seconds => crate::config::REVEAL_SECONDS,
-            assets => asset_version(),
-        })
-        .context("cannot render the topic page")
 }
 
 #[cfg(test)]

@@ -15,13 +15,41 @@ Nothing since 2.5.0.
 
 ## [3.0.0] — 2026-09-05 (unreleased; branch `chassis-migration`)
 
-Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.2.0.
-The hub — topics, subscriptions, leases, the SQLite store, the door policy
-(W2: unprotected, or `KYU_TOKEN` plus sealed app tokens), the dashboard and
-its themes — is unchanged. The kit now owns the command line, the transport
-knobs, logging, `/healthz`, `/metrics`, readiness, the graceful stop and
-signed self-update. The public interface (HTTP shapes plus environment
-variables) changes in three places, hence 3.0.0.
+Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.4.1.
+The hub — topics, subscriptions, leases, the SQLite store — is unchanged.
+The kit now owns the command line, the transport knobs, logging,
+`/healthz`, `/metrics`, readiness, the graceful stop, signed self-update
+and, since step 2 (2026-09-06), the door and the dashboard shell: login,
+sessions, the clients page, the layout and themes, CSRF and CSP. The
+public interface (HTTP shapes plus environment variables) changes, hence
+3.0.0.
+
+### Step 2 · the dashboard on the kit (2026-09-06, form K2-1…K2-4)
+
+- **The door is the kit's.** `KYU_TOKEN` and `KYU_SECRET_KEY` are
+  required: without them `--check` and the start refuse with a remedy.
+  The unprotected mode, its banner and its startup warning are gone (W2
+  amended; the kit may grow an opt-in unprotected mode later, kyu will
+  not use it). Scripts keep sending `Authorization: Bearer <token>`; the
+  login token still works as a bearer.
+- **App tokens keep working.** The first start of 3.0.0 copies every live
+  2.x app token, unchanged, from the `apps` table into the kit's sealed
+  `clients.json.enc` (logged as `imported N app token(s)`); kyu-runner
+  and newsflash keep their environment files. The `apps` table stays as
+  history.
+- **Pages.** `/` is the kit's status page with a Topics section; the
+  topic list moved to `/topics`; `/apps` is the kit's `/clients` (labelled
+  Apps) and the old address redirects. Topic and subscription pages keep
+  their addresses and buttons. `kyu.css` and `app.js` are served on
+  `/assets/…`; the kit serves everything else under `/static/…`.
+- **Gone:** kyu's own login page, session cookie, CSRF layer, apps page,
+  the vendored `@kp-soft/themes` files and their checksum gate, and the
+  `?app=` selector on the topic page (a command with an app's token is
+  "Copy command" on the Apps page).
+- **Tests.** `tests/k2_dashboard.rs` runs the hub through the real
+  `chassis::App` (`kyu::kit::mount`, shared with the binary) and carries
+  the assertions of `p7_auth`, `l7_dashboard`, `w13_themes`, security
+  finding 1 and the hardening dashboard tests, which are removed.
 
 ### Migration
 

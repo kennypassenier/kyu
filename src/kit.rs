@@ -4,7 +4,9 @@
 
 use std::sync::Arc;
 
-use chassis::{ScrapeSource, Subsystem, SubsystemStatus};
+use crate::dashboard::TopicView;
+
+use chassis::{App, ScrapeSource, Subsystem, SubsystemStatus};
 
 use crate::engine::Engine;
 use crate::store::queries;
@@ -139,4 +141,131 @@ fn render(engine: &Engine, heartbeat: &Heartbeat) -> anyhow::Result<String> {
 /// to `[a-z0-9._-]` — this is the belt to that braces.
 fn escape_label(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// The Topics section on the kit's status page (K2-2): the counts at a
+/// glance, the full list one click away on /topics.
+pub struct TopicsSection(pub Arc<Engine>);
+
+impl chassis::StatusSection for TopicsSection {
+    fn render(&self) -> chassis::Section {
+        let now = self.0.now_ms();
+        let topics: Vec<TopicView> = self
+            .0
+            .store()
+            .read(crate::store::queries::topic_summaries)
+            .map(|summaries| {
+                summaries
+                    .into_iter()
+                    .map(|summary| TopicView::at(summary, now))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let backlog: i64 = topics.iter().map(|topic| topic.backlog).sum();
+        let dead: i64 = topics.iter().map(|topic| topic.dead).sum();
+        chassis::Section {
+            title: "Topics".into(),
+            explain: "What this hub is holding right now: every topic's unacknowledged \
+                      messages add up to the backlog; dead letters gave up and wait for you."
+                .into(),
+            rows: vec![
+                ("Topics".into(), topics.len().to_string()),
+                ("Backlog".into(), backlog.to_string()),
+                ("Dead letters".into(), dead.to_string()),
+            ],
+            html: Some("<p><a class=\"kp-button\" href=\"/topics\">Open the topics</a></p>".into()),
+        }
+    }
+}
+
+/// K2-1 · one-time import of the 2.x app tokens into the kit's client store.
+///
+/// Runs before the kit opens the store; does nothing once
+/// `clients.json.enc` exists, so it is idempotent across restarts. The
+/// tokens are copied unchanged: an app that could publish yesterday can
+/// publish today with the same line in its environment file.
+pub fn import_app_tokens(
+    state_dir: &std::path::Path,
+    engine: &Engine,
+    key: &crate::crypto::SecretKey,
+    key_hex: &str,
+) -> anyhow::Result<usize> {
+    use chassis::core::clients::{Client, ClientsFile};
+    use chassis::shell::store::{ClientStore, EncryptedFile, FileClientStore};
+
+    let file = state_dir.join("clients.json.enc");
+    if file.exists() {
+        return Ok(0);
+    }
+    let apps: Vec<_> = engine
+        .list_apps(key)?
+        .into_iter()
+        .filter(|app| app.is_live() && !app.token.is_empty())
+        .collect();
+    if apps.is_empty() {
+        return Ok(0);
+    }
+    let kit_key = chassis::core::crypto::Key::parse_hex("KYU_SECRET_KEY", key_hex, key_hex)
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let store = FileClientStore::open(EncryptedFile::new(file, kit_key, "clients"))
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    let now = chassis::shell::time::now_rfc3339();
+    let count = apps.len();
+    store
+        .update(&mut |clients: &mut ClientsFile| {
+            for app in &apps {
+                clients.clients.push(Client {
+                    id: format!("app-{}", app.name),
+                    name: app.name.clone(),
+                    token: Some(app.token.clone()),
+                    issued_at: now.clone(),
+                    revoked_at: None,
+                    last_used_at: None,
+                    uses: 0,
+                });
+            }
+            Ok(clients.clients.last().cloned().expect("at least one app"))
+        })
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok(count)
+}
+
+/// Everything the hub hangs on the kit, in one place, so the binary and the
+/// in-process test harness assemble the same service (K2, 2026-09-06).
+pub fn mount(
+    app: &mut App,
+    state: crate::http::AppState,
+    engine: Arc<Engine>,
+    heartbeat: Heartbeat,
+) {
+    app.subsystem(StoreSubsystem(engine.clone()));
+    app.subsystem(SweeperSubsystem {
+        engine: engine.clone(),
+        heartbeat: heartbeat.clone(),
+    });
+    app.metrics_source(KyuMetrics {
+        engine: engine.clone(),
+        heartbeat,
+    });
+    // A long poll waits up to Limits::MAX_WAIT_S (300 s) on purpose; the
+    // kit's request timeout (30 s) must not cut it short. The prefix also
+    // covers publish/ack/nack, which answer at once anyway.
+    app.exempt_from_timeout("/t/");
+    // The machine API behind client tokens, the pages behind the admin
+    // login (K2-2): `/` is the kit's status page with a Topics section, the
+    // full list lives on /topics, and the apps page is the kit's /clients
+    // under its old label (K2-3: /apps redirects there).
+    app.api_routes(crate::http::router(state.clone()));
+    app.dashboard_routes(crate::http::pages(state));
+    app.nav_entry("Topics", "/topics");
+    app.clients_label("Apps");
+    app.status_section(TopicsSection(engine));
+    // "Send test" on the Apps page publishes one message with that app's
+    // token, so "does my token work?" has a button.
+    app.test_route(
+        "POST",
+        "/t/kyu-test",
+        "application/json",
+        r#"{"hello":"from the dashboard"}"#,
+    );
 }

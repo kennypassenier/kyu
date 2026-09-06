@@ -91,6 +91,10 @@ letters, and per-topic copy-paste curl examples rendered with a real
 recent payload. English UI, no login (W2 is Later).
 **Proven by:** route/render auto-tests with seeded data; S1 re-entry
 walkthrough as scripted manual test (Phase 8).
+*Amended 2026-09-06 (K2-2):* the pages live inside the kit's dashboard.
+`/` is the kit's status page with a Topics section (counts and a button);
+the full list is `/topics`; topic and subscription pages keep their
+`/t/{topic}/dashboard…` addresses. Proven by `tests/k2_dashboard.rs`.
 
 ### K11 · Idle-subscription lifecycle
 Unpolled for X days → ⚠ flag on dashboard; after Y days → archived
@@ -187,6 +191,32 @@ Phase 7 hardening gate and specified the shape across three rounds:
 rating): no token may appear in logs, metric labels or any rendered
 page except behind the reveal control.
 
+**Amended 2026-09-06 (step 2 of the chassis migration, decided in the
+kyu step-2 form, K2-1/K2-4).** The door is the kit's now, and two of the
+bullets above change:
+
+- **No token configured → the hub does not start.** `--check` and the
+  start refuse with "the dashboard is compiled in but KYU_TOKEN and
+  KYU_SECRET_KEY are not set" and a remedy, so a lost environment file
+  fails the unit's `ExecStartPre` instead of serving an open hub. The
+  banner, the startup warning and `Auth::Unprotected` are gone. Kenny's
+  ruling: the kit keeps an *opt-in* unprotected dashboard mode for
+  projects that want it (a kit feature, not yet built); kyu does not opt
+  in — "voor kyu vragen we toch een token". Proven by
+  `k2_check_refuses_to_start_without_a_token`.
+- **App management is the kit's clients page** (`/clients`, labelled
+  "Apps"; `/apps` redirects there, K2-3): issue, reveal, copy, re-issue,
+  revoke, delete, last-used and a "Send test" button. The tokens 2.x
+  issued are copied unchanged into the kit's sealed `clients.json.enc`
+  the first time 3.0.0 starts, so kyu-runner and newsflash keep their
+  environment files; the `apps` table stays behind as history. Proven by
+  `k2_app_tokens_issued_by_2x_keep_working_after_the_import`.
+
+The login page, the session cookie (`kyu_session` is now the kit's
+sealed session) and the plaintext-scan rule are unchanged in intent; the
+kit proves them in its own suite, and `tests/k2_dashboard.rs` proves the
+hub's side.
+
 **The apps page always exists now** *(fixed 2026-09-05, found live by Kenny
 in the 2.4.0 preview)*. Until this fix the nav link was gated on
 `protected` and `GET /apps` on an unprotected hub answered a bare
@@ -267,9 +297,17 @@ backup-under-load → restore → invariants-hold E2E test.
 
 ### W9 · Dashboard test-publish
 Per-topic form, payload prefilled with last real payload, send button.
-**Proven by:** UI route test → message lands on topic.
+**Proven by:** UI route test → message lands on topic
+(`k2_the_test_publish_form_puts_a_real_message_on_the_topic` since
+2026-09-06; the kit refuses the same form from a foreign origin).
 
-### W13 · The house themes *(added 2026-09-02, moved to the package's own picker 2026-09-04, Bootstrap replaced 2026-09-05)*
+### W13 · The house themes *(added 2026-09-02, moved to the package's own picker 2026-09-04, Bootstrap replaced 2026-09-05, vendored copy retired 2026-09-06)*
+
+*Amended 2026-09-06:* the kit's dashboard ships `@kp-soft/themes` (3.1.0)
+and its picker in its layout; kyu no longer vendors the eight files, the
+checksum gate and `tests/w13_themes.rs` are gone with them, and the
+picker contract is the kit's to prove. kyu keeps `static/kyu.css` and
+`static/app.js` (the snippet copy/reveal behaviour), served on `/assets`.
 
 Kenny asked for the themes from `@kp-soft/themes` with *the same picker and
 the same way of storing the choice in the browser*. Not a lookalike: the
