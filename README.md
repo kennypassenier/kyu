@@ -5,17 +5,20 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 2.1.0.** Every frozen feature is built and under test (207 tests,
-> CI green on every push). The version is a promise about the HTTP contract —
-> the three verbs, their parameters and response shapes, and the environment
-> variables. The dashboard's HTML and the on-disk schema are not part of it.
+> **Status: 3.0.0.** Every frozen feature is built and under test (181
+> tests, CI green on every push). The version is a promise about the HTTP
+> contract — the three verbs, their parameters and response shapes, and the
+> environment variables. The dashboard's HTML and the on-disk schema are not
+> part of it.
 >
-> 2.0.0 is a **rename**, not new behaviour: this project was called `mailbox`
-> through 1.0.1, which said email about something that is a queue. Everything
-> moved — `MAILBOX_*` → `KYU_*`, `mailbox-*` headers → `kyu-*`, the
-> `mailbox.events` topic → `kyu.events`. See CHANGELOG.md for the upgrade
-> steps. Runs on LXC 109 as a native binary under systemd, backed up nightly
-> and watched by Uptime Kuma.
+> 3.0.0 moved the hub onto
+> [chassis-rs](https://github.com/kennypassenier/chassis-rs): the kit now
+> owns the command line, transport knobs, logging, health, metrics, graceful
+> shutdown, signed self-update, the door and the dashboard shell. The hub
+> itself — topics, subscriptions, leases, the SQLite store — is unchanged.
+> See CHANGELOG.md for the full migration notes, including the 1.0.1→2.0.0
+> rename from `mailbox`. Runs on LXC 109 as a native binary under systemd,
+> backed up nightly and watched by Uptime Kuma.
 
 ## The idea
 
@@ -43,10 +46,19 @@ curl -sX POST "http://hub.lan/t/notify.kenny/ack/<id>?as=printer"
 
 ## Running it
 
+Kenny runs kyu as a **native binary under systemd**, on its own Proxmox LXC
+(CT 109) — no Docker on that box at all. A container image is published on
+every release too (`ghcr.io/kennypassenier/kyu`), for anyone who wants
+Docker instead:
+
 ```bash
 docker compose up -d
 curl localhost:8080/healthz
 ```
+
+Full install and upgrade steps for both routes — plus the homelab preset,
+the supported route for anyone else running kyu — are in
+[OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) §1.
 
 ## The door
 
@@ -96,25 +108,37 @@ integration down with it.
 
 ## Releases and updates
 
-Pushing a version tag publishes a Docker image to GHCR:
+Pushing a version tag builds the release:
 
 ```bash
-git tag v0.1.0 && git push origin v0.1.0
+git tag v3.0.1 && git push origin v3.0.1
 ```
 
-`.github/workflows/release-image.yml` then builds and pushes
-`ghcr.io/kennypassenier/kyu:0.1.0` and `:latest`. The workflow is taken
-from the homelab's `templates/rust-service/`, so every one of these Rust
-repos ships the same way — one shape to remember instead of four.
+`.github/workflows/release.yml` — the kit's own, which replaced the
+earlier `release-image.yml` at 3.0.0 — builds the glibc release binary,
+writes `SHA256SUMS`, pushes the Docker image to GHCR
+(`ghcr.io/kennypassenier/kyu:3.0.1` and `:latest`), and drafts the GitHub
+release. The signature is deliberately not made there: the signing key
+stays on Kenny's machine, and `chassis release <version>` uploads
+`SHA256SUMS.minisig` and `VERSION` once that run is green. The
+self-updater refuses a release until all four assets exist, so an
+unsigned release is inert.
 
-Two things that are deliberately *not* automatic:
+From there, the image and the native binary update independently:
 
-- **The GitHub Release itself.** The workflow publishes the image, not a
-  release. Writing release notes is a human act; `gh release create` at the
-  moment you mean it.
-- **Deployment.** The LXC pulls `:latest` through compose. Deployed via the
-  homelab preset it also carries `com.homelab.update.policy=auto`, so the
-  nightly run updates it and rolls back on a failed health check.
+- **The Docker image** rolls out however the deployment pulls it — the
+  homelab's nightly `com.homelab.update.policy=auto`, or a manual
+  `docker compose pull`.
+- **The native binary** — what actually runs on CT 109 — carries the
+  kit's own signed self-update: `kyu update` verifies the minisign
+  signature before installing, keeps the previous binary as `kyu.prev`,
+  and never runs on its own unless `KYU_UPDATE_MODE` is set to
+  `supervised` or `autonomous` (`off` by default). The homelab's nightly
+  calls it.
+
+See CHANGELOG.md's 3.0.0 entry and
+[OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) §1 and §2b for the
+exact commands.
 
 The published package is linked to this repository and takes its visibility,
 so a public repo yields a package the homelab host can pull anonymously —
