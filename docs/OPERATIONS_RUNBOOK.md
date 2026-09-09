@@ -77,50 +77,59 @@ directory. That refusal was reproduced on 2026-08-28, not theorised.
 
 ## 2 · Cut a release (how a new image comes into existence)
 
-Kenny asked for this written down rather than remembered, and it is short on
-purpose: **tagging is the whole trigger.** There is no button to press on
-GitHub and no image to build by hand.
+Kenny asked for this written down rather than remembered. Since the 3.0.0
+chassis-rs migration, one command does the whole thing — from a clean,
+checked-out `main` — but it is worth knowing what it does under the hood
+before you run it unattended.
 
 1. **Decide the version.** Semver over the HTTP contract — the three verbs,
    their parameters, their response shapes, and the environment variables.
    Breaking any of those is a major. Adding an endpoint or a parameter is a
    minor. Fixing behaviour without changing the contract is a patch. The
    dashboard's HTML and the on-disk schema are explicitly *not* part of it.
-2. **Bump it in two places, in one commit:** `Cargo.toml`'s `version`, and a
-   new section at the top of `CHANGELOG.md`. They drift the moment you do
-   them separately.
-3. **Push, and wait for CI to go green.** Tagging a red commit produces a
-   release you then have to withdraw.
-4. **Tag and push the tag:**
+2. **Run `chassis release <version>`.** It:
+   - bumps `Cargo.toml`'s `version` and writes a dated `<version>` section
+     at the top of `CHANGELOG.md`, in one commit
+     (`chore(release): <version> [meta]`);
+   - pushes that commit to a throwaway `release-<version>` branch and waits
+     for its checks, so a red commit never reaches main (standing rule 6) —
+     tagging a red commit is what used to produce a release you then had to
+     withdraw;
+   - fast-forwards `main` to that commit and deletes the work branch;
+   - tags the result `v<version>` and pushes the tag, which is what
+     `.github/workflows/release.yml` triggers on (`tags: ["v*"]`) — nothing
+     else starts it, not a push to main, not a release created by hand;
+   - waits for that workflow run, which builds the glibc binary for Debian
+     trixie, writes `SHA256SUMS`, pushes the Docker image to GHCR as
+     `ghcr.io/kennypassenier/kyu:<version>` and `:latest`, and drafts the
+     GitHub Release with `kyu` + `SHA256SUMS` attached (no notes yet);
+   - then calls `scripts/sign-release.sh <tag>` from this machine: it
+     downloads that `SHA256SUMS`, signs it with the ecosystem's minisign
+     key (one password prompt, the key never leaves the machine), writes
+     `VERSION`, and uploads `SHA256SUMS.minisig` before `VERSION` (critic
+     #15: an updater that saw `VERSION` first would count a missing
+     signature as a failure).
+
+   The self-updater refuses a release until all four assets — `kyu`,
+   `SHA256SUMS`, `SHA256SUMS.minisig`, `VERSION` — exist, so an unsigned
+   release is inert (J2). `chassis release --dry-run <version>` prints the
+   steps above without touching anything, if you want to see them first.
+3. **Write the GitHub Release notes.** The workflow drafts the release with
+   the built assets but no notes; add them by hand:
    ```bash
-   git tag v1.2.3
-   git push origin v1.2.3
+   gh release edit v1.2.3 --notes-file <(sed -n '/## \[1.2.3\]/,/## \[/p' CHANGELOG.md)
    ```
-   The `v` prefix is what `.github/workflows/release-image.yml` triggers on
-   (`tags: ["v*"]`). Nothing else starts it — not a push to main, not a
-   release created by hand.
-5. **Watch it:** `gh run list --workflow=release-image` — it takes a few
-   minutes. It publishes two tags of the same image:
-   `ghcr.io/kennypassenier/kyu:1.2.3` and `:latest`.
-6. **Write the GitHub Release yourself:**
-   ```bash
-   gh release create v1.2.3 --title "v1.2.3" --notes-file <(sed -n '/## \[1.2.3\]/,/## \[/p' CHANGELOG.md)
-   ```
-   The workflow deliberately does not do this. Release notes are the one part
-   a human adds something to, and automating them from commit subjects
-   produces a list nobody reads.
-7. **Verify the image exists and is pullable:**
+   Release notes are the one part a human adds something to; automating
+   them from commit subjects produces a list nobody reads.
+4. **Verify the image and the signed assets:**
    ```bash
    docker pull ghcr.io/kennypassenier/kyu:1.2.3
+   gh release view v1.2.3 --repo kennypassenier/kyu
    ```
    The package is linked to this repository and takes its visibility, so a
-   public repo yields a package the homelab host can pull anonymously.
-
-**Deviation from the procedure, recorded rather than forgotten:** Phase 9 of
-the dev procedure asks for tag → build → *checksum manifest* → GitHub Release.
-kyu ships no self-updating binary — updates arrive as a new image, whose
-integrity Docker already verifies by digest — so a checksum manifest would be
-a file with no reader. See AR12.
+   public repo yields a package the homelab host can pull anonymously. The
+   release should list all four assets before any host's `kyu update` picks
+   it up.
 
 ## 2b · Upgrade a running hub
 
