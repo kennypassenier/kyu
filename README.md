@@ -5,7 +5,7 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 3.0.0.** Every frozen feature is built and under test (181
+> **Status: 3.1.0.** Every frozen feature is built and under test (183
 > tests, CI green on every push). The version is a promise about the HTTP
 > contract — the three verbs, their parameters and response shapes, and the
 > environment variables. The dashboard's HTML and the on-disk schema are not
@@ -16,7 +16,8 @@ documentation.
 > owns the command line, transport knobs, logging, health, metrics, graceful
 > shutdown, signed self-update, the door and the dashboard shell. The hub
 > itself — topics, subscriptions, leases, the SQLite store — is unchanged.
-> See CHANGELOG.md for the full migration notes, including the 1.0.1→2.0.0
+> 3.1.0 followed with chassis-rs 1.8.0 and kp-themes 5.0.0. See
+> CHANGELOG.md for the full migration notes, including the 1.0.1→2.0.0
 > rename from `mailbox`. Runs on LXC 109 as a native binary under systemd,
 > backed up nightly and watched by Uptime Kuma.
 
@@ -111,7 +112,7 @@ integration down with it.
 Since the 3.0.0 chassis-rs migration, one command cuts a release:
 
 ```bash
-chassis release 3.0.1   # bump, tag, wait for CI, sign, upload
+chassis release 3.1.1   # bump, tag, wait for CI, sign, upload
 ```
 
 It bumps `Cargo.toml`'s version and `CHANGELOG.md` in one commit, pushes it
@@ -120,7 +121,7 @@ to a throwaway branch and waits for CI so a red commit never reaches
 `.github/workflows/release.yml` (the kit's own, which replaced the earlier
 `release-image.yml` at 3.0.0) to build the glibc binary, write
 `SHA256SUMS` and push the Docker image to GHCR
-(`ghcr.io/kennypassenier/kyu:3.0.1` and `:latest`), then signs it from
+(`ghcr.io/kennypassenier/kyu:3.1.1` and `:latest`), then signs it from
 Kenny's own machine — the signing key never leaves it — and uploads
 `SHA256SUMS.minisig` and `VERSION`. The self-updater refuses a release
 until all four assets exist, so an unsigned release is inert.
