@@ -104,6 +104,19 @@ image has no shell. Rejected: scratch (hand-rolled certs/nonroot for
 2 MB), alpine (a shell and package manager the container doesn't
 need).
 
+*Amended 2026-09-09 (G1, restored):* the chassis-rs 3.0.0 migration's
+scaffold Dockerfile silently replaced this with `debian:trixie-slim` and a
+hand-rolled uid 10001 user — a dynamically-linked glibc binary, not the
+static musl one this decision (and AR12's M2 reasoning, and README.md, and
+compose.yml) had assumed the whole time. Nobody checked the adopted
+scaffold against kyu's own frozen T9 before merging it. Found when kyu
+3.1.0's attempted deploy to CT 109 (Debian 12, glibc 2.36) failed outright
+against a binary linked for trixie's glibc 2.39. Restored exactly as
+specified here: `gcr.io/distroless/static:nonroot`, uid 65532. The release
+workflow's own `dist/kyu` (the binary actually deployed to CT 109 — native,
+not containerized) gets the same static-musl treatment and a CI check that
+fails the build if it ever links dynamically again.
+
 ---
 
 # Architecture (AR1–AR11) — frozen 2026-08-12

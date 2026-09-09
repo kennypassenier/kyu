@@ -11,6 +11,32 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-09-09
+
+**v3.1.0's release binary does not run on CT 109.** Homelab Rust's attempted
+deploy failed outright: `GLIBC_2.39' not found`, rolled back within ninety
+seconds, no damage (CT 109 is back on 2.4.1, `/healthz` confirmed). The
+release workflow built against Debian trixie's glibc 2.39; CT 109 runs
+Debian 12, glibc 2.36. The same mismatch hit kyu-runner, http-switchboard
+and almanac, so it was the shared chassis-rs scaffold template, not
+anything kyu-specific.
+
+Fixed by restoring T9 (frozen at Phase 3, never actually amended — it just
+stopped being what shipped): the release binary and the container image are
+static musl again, no glibc dependency at all. `.github/workflows/
+release.yml` now fails the build if `dist/kyu` ever links dynamically
+(`ldd` check, red-then-green proven against the old glibc build before this
+shipped). The container image is back on `gcr.io/distroless/static:nonroot`
+(uid 65532), matching what T9, AR12, README.md and compose.yml had said the
+image was the whole time.
+
+One toolchain wrinkle worth naming for the next person: `rustup target add`
+run before `rust-toolchain.toml` is in view (i.e. before `COPY . .` in the
+Dockerfile, or before the repo is mounted) resolves against a different
+toolchain instance than the one `cargo build` later uses, and the target
+silently isn't there. Fixed by declaring `targets = [...]` directly in
+`rust-toolchain.toml`, which every context now inherits automatically.
+
 ## [3.1.0] - 2026-09-09
 
 Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.8.0

@@ -1,9 +1,18 @@
 name: Release
 
-# On a `v*` tag: build the glibc binary in the same Debian the services run
-# on (T8), write SHA256SUMS, push the container image to GHCR, and create
-# the GitHub release with the binary and the manifest. Everything here
-# runs with the workflow's own GITHUB_TOKEN — no personal token anywhere.
+# On a `v*` tag: build a static musl binary (G1, 2026-09-09 — see below),
+# write SHA256SUMS, push the container image to GHCR, and create the
+# GitHub release with the binary and the manifest. Everything here runs
+# with the workflow's own GITHUB_TOKEN — no personal token anywhere.
+#
+# G1: the binary used to link against the build image's own glibc ("the
+# same Debian the services run on" — a promise this repo never checked
+# against reality). kyu 3.1.0's attempted deploy to CT 109 (Debian 12,
+# glibc 2.36) failed outright: the release was built against Debian
+# trixie's glibc 2.39, which CT 109 does not have. musl removes the
+# dependency entirely — the binary carries its own libc and runs on any
+# Linux kernel, matching or not. `dist/kyu`'s own build below verifies
+# this with `ldd` before it is ever uploaded.
 #
 # The signature (`SHA256SUMS.minisig`) and `VERSION` are NOT made here: the
 # signing key stays on Kenny's machine, and `chassis release <version>`
@@ -33,13 +42,30 @@ jobs:
           if [ "$tag" != "$cargo_version" ]; then
             echo "tag v$tag but Cargo.toml says $cargo_version. What now: bump Cargo.toml (chassis release does this) and re-tag."; exit 1
           fi
-      - name: Build the release binary for Debian trixie (glibc)
+      - name: Build the static release binary (musl, glibc-independent)
+        # No explicit `rustup target add`: rust-toolchain.toml's own
+        # `targets` list installs it the moment rustup resolves the pin
+        # against the mounted repo — adding it by hand here, before that
+        # file is in view, silently lands on a different toolchain
+        # resolution than the one cargo build then uses (found the hard
+        # way: identical symptom in the Dockerfile, see its own comment).
         run: |
-          docker run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/w/target-trixie -e CARGO_HOME=/w/target-trixie/cargo-home rust:1.97-slim-trixie \
-            sh -c 'apt-get update -qq >/dev/null && apt-get install -y -qq pkg-config libssl-dev >/dev/null && cargo build --release --locked'
+          docker run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/w/target-musl -e CARGO_HOME=/w/target-musl/cargo-home rust:1.97-slim-trixie \
+            sh -c 'apt-get update -qq >/dev/null && apt-get install -y -qq musl-tools >/dev/null && CC_x86_64_unknown_linux_musl=musl-gcc cargo build --release --locked --target x86_64-unknown-linux-musl'
           mkdir -p dist
-          cp target-trixie/release/kyu dist/kyu
+          cp target-musl/x86_64-unknown-linux-musl/release/kyu dist/kyu
           (cd dist && sha256sum kyu > SHA256SUMS && cat SHA256SUMS)
+      - name: The binary must not depend on the build image's own glibc (G1)
+        run: |
+          # A dynamically linked binary's ldd output lists each shared
+          # library with "=>"; a static one prints one line with neither
+          # (glibc's ldd says "statically linked" for a static-pie binary,
+          # "not a dynamic executable" for a plain static one — the "=>"
+          # absence is what actually matters, not the exact wording).
+          if ldd dist/kyu 2>&1 | grep -q '=>'; then
+            echo "dist/kyu is dynamically linked. What now: the musl build step above did not produce a static binary — check CC_x86_64_unknown_linux_musl and the --target flag."; exit 1
+          fi
+          file dist/kyu
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:

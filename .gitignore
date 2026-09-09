@@ -1,6 +1,8 @@
 # Build output
 /target/
 /target-trixie/
+/target-musl/
+/target-musl-test/
 
 # Local secrets and scratch — never committed (standing rule 10)
 .env

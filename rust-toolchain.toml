@@ -5,3 +5,9 @@
 [toolchain]
 channel = "1.97"
 components = ["rustfmt", "clippy"]
+# musl (G1, 2026-09-09): the release binary is static, so this target must
+# be installed wherever the pin resolves — including inside the release
+# Dockerfile's build stage, which is exactly where `rustup target add` run
+# before this file existed stopped taking effect once rustup re-resolved
+# against the pin.
+targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"]
