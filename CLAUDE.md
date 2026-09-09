@@ -14,9 +14,9 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **3.1.0 on `chassis-1.8.0`, gates green, awaiting Kenny's release-go** (2026-09-09): chassis-rs 1.7.1 → 1.8.0, kp-themes 3.1.0 → 5.0.0 (25 themes, native `<dialog>` confirmations, one bundle under `/static/kp/…`), `chassis sync` writes the new generated `docs/KIT.md`. Five additive kit capabilities adopted the same round — K-vocabulary, K-harness, K-cli, K-kitdocs, K-actions ("Prune every dead letter") — see the queue row below. 183 tests green, browser-drilled locally (login, issue an app token, the confirm dialog, a theme switch, console clean). CT 109 was still on 2.4.1 as of the last recorded status (2026-09-06) — not independently re-checked this round |
-| Last completed gate | Mini-round (2026-09-09): chassis-rs 1.8.0 upgrade + the five additive adoptions above (3.1.0) |
-| Next gate | Kenny reviews the local preview and signs v3.1.0 for release; the still-open v3.0.0 deploy to CT 109 (and now v3.1.0 alongside it) stays the Homelab Rust session's (V6: binary to `/opt/kyu/bin`, the kit unit, `KYU_DATA_DIR` → `KYU_STATE_DIR` in `kyu.env`) |
+| Current phase | **v3.1.0 released to GitHub 2026-09-09** (tag `v3.1.0` = `cada455`, chassis-rs 1.8.0): kp-themes 3.1.0 → 5.0.0 (25 themes, native `<dialog>` confirmations, one bundle under `/static/kp/…`), `chassis sync` writes the new generated `docs/KIT.md`. Five additive kit capabilities adopted the same round — K-vocabulary, K-harness, K-cli, K-kitdocs, K-actions ("Prune every dead letter") — see the queue row below. 183 tests green, CI green (`gh run 34356615954`), browser-drilled locally. The GitHub release carries `kyu` + `SHA256SUMS`, unsigned and inert for the self-updater until Kenny signs. CT 109 was still on 2.4.1 as of the last recorded status (2026-09-06) — not independently re-checked this round |
+| Last completed gate | Mini-round (2026-09-09): chassis-rs 1.8.0 upgrade + the five additive adoptions above, released as 3.1.0 |
+| Next gate | Kenny signs v3.1.0 (`scripts/sign-release.sh v3.1.0`); the deploy to CT 109 (still on 2.4.1, with the v3.0.0 deploy already open too) is the Homelab Rust session's (V6: binary to `/opt/kyu/bin`, the kit unit, `KYU_DATA_DIR` → `KYU_STATE_DIR` in `kyu.env`) |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
