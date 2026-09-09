@@ -108,21 +108,22 @@ integration down with it.
 
 ## Releases and updates
 
-Pushing a version tag builds the release:
+Since the 3.0.0 chassis-rs migration, one command cuts a release:
 
 ```bash
-git tag v3.0.1 && git push origin v3.0.1
+chassis release 3.0.1   # bump, tag, wait for CI, sign, upload
 ```
 
-`.github/workflows/release.yml` — the kit's own, which replaced the
-earlier `release-image.yml` at 3.0.0 — builds the glibc release binary,
-writes `SHA256SUMS`, pushes the Docker image to GHCR
-(`ghcr.io/kennypassenier/kyu:3.0.1` and `:latest`), and drafts the GitHub
-release. The signature is deliberately not made there: the signing key
-stays on Kenny's machine, and `chassis release <version>` uploads
-`SHA256SUMS.minisig` and `VERSION` once that run is green. The
-self-updater refuses a release until all four assets exist, so an
-unsigned release is inert.
+It bumps `Cargo.toml`'s version and `CHANGELOG.md` in one commit, pushes it
+to a throwaway branch and waits for CI so a red commit never reaches
+`main`, fast-forwards `main` and tags it, waits for
+`.github/workflows/release.yml` (the kit's own, which replaced the earlier
+`release-image.yml` at 3.0.0) to build the glibc binary, write
+`SHA256SUMS` and push the Docker image to GHCR
+(`ghcr.io/kennypassenier/kyu:3.0.1` and `:latest`), then signs it from
+Kenny's own machine — the signing key never leaves it — and uploads
+`SHA256SUMS.minisig` and `VERSION`. The self-updater refuses a release
+until all four assets exist, so an unsigned release is inert.
 
 From there, the image and the native binary update independently:
 
@@ -136,9 +137,8 @@ From there, the image and the native binary update independently:
   `supervised` or `autonomous` (`off` by default). The homelab's nightly
   calls it.
 
-See CHANGELOG.md's 3.0.0 entry and
-[OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) §1 and §2b for the
-exact commands.
+See [OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md) §2 and §2b for the
+exact commands and what to do by hand if a step needs redoing.
 
 The published package is linked to this repository and takes its visibility,
 so a public repo yields a package the homelab host can pull anonymously —
