@@ -176,6 +176,26 @@ impl chassis::StatusSection for TopicsSection {
             html: Some("<p><a class=\"kp-button\" href=\"/topics\">Open the topics</a></p>".into()),
         }
     }
+
+    /// [K-actions, chassis-rs 1.8.0] "Prune every dead letter" — every dead
+    /// letter across every topic and subscription, in one confirmed sweep,
+    /// once the storm that produced them is diagnosed. The one-at-a-time
+    /// Delete on a topic page (W15) does not scale to a storm; this is that
+    /// button's hub-wide sibling, not a replacement for it.
+    fn actions(&self) -> Vec<chassis::SectionAction> {
+        vec![chassis::SectionAction {
+            label: "Prune every dead letter".into(),
+            route: "/dashboard/dead-letters/prune".into(),
+            method: "POST".into(),
+            destructive: true,
+            confirm: Some(
+                "Delete every dead letter across every topic and subscription? \
+                 This cannot be undone."
+                    .into(),
+            ),
+            busy_label: Some("Pruning…".into()),
+        }]
+    }
 }
 
 /// K2-1 · one-time import of the 2.x app tokens into the kit's client store.
@@ -258,7 +278,11 @@ pub fn mount(
     app.api_routes(crate::http::router(state.clone()));
     app.dashboard_routes(crate::http::pages(state));
     app.nav_entry("Topics", "/topics");
-    app.clients_label("Apps");
+    // Every kit sentence about "clients" reads "app" here (K-vocabulary,
+    // chassis-rs 1.8.0): the heading and nav label derive from the plural,
+    // capitalised ("Apps"), so this also replaces the narrower
+    // clients_label("Apps") that only relabelled the heading.
+    app.vocabulary("app", "apps");
     app.status_section(TopicsSection(engine));
     // "Send test" on the Apps page publishes one message with that app's
     // token, so "does my token work?" has a button.

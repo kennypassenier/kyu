@@ -675,6 +675,18 @@ pub enum DeleteOutcome {
     NoSuchDelivery,
 }
 
+/// [K-actions] Removes every dead letter on the hub, across every topic and
+/// subscription, in one statement. The status-page counterpart to
+/// `delete_delivery`'s one-at-a-time removal (W15): after a storm of
+/// failures whose cause is fixed, clearing the backlog of them one topic
+/// page at a time does not scale.
+pub fn prune_dead_letters(tx: &Transaction) -> Result<usize> {
+    let deleted = tx
+        .execute("DELETE FROM deliveries WHERE state = 'dead'", [])
+        .context("cannot prune the dead letters")?;
+    Ok(deleted)
+}
+
 // ─── L6 · history and lifecycle (K8, K9, K11, W11) ─────────────────────────
 
 #[derive(Debug, Clone)]

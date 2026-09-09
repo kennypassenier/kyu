@@ -11,6 +11,58 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-09-09
+
+Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.8.0
+(up from v1.7.1), which brings kp-themes 5.0.0 (25 themes — `topo` is now
+`forest`, `tazhib` is `lapis`, `nishiki` is `woodblock`; `cyberpunk` is
+rebuilt under the same name; the new `synthwave` theme; confirmations are a
+native `<dialog>`) served under `/static/kp/…` in one bundle,
+`chassis sync` now writing a generated `docs/KIT.md` describing the kit at
+whatever version is vendored, and a fix to `chassis new`'s worktree-hook
+interference that also reached `.claude/hooks/gates.sh` here. No change to
+the HTTP contract (AR2) or the environment variables — the version bump is
+for the dashboard's dependency, not the hub.
+
+Five additive kit capabilities adopted in the same round, all "Onmisbaar"
+at the mini-round gate (2026-09-09):
+
+- **K-vocabulary.** `App::vocabulary("app", "apps")` replaces the narrower
+  `clients_label("Apps")`: every kit sentence and every clients-API refusal
+  now says "app", not only the page heading. URLs, JSON fields and log
+  lines still say `client` (E1) — a project word changes what a person
+  reads, not the interface.
+- **K-harness.** `tests/common`'s generic HTTP harness is rebuilt on the
+  kit's own `chassis::testing::TestApp` (feature `testing`, dev-only):
+  spawning, the admin login and bearer requests are the kit's code now,
+  mixed in the ONE test that needs a fixed, externally-known secret key
+  (the 2.x app-token import) that `TestApp`'s own generated-secrets
+  bookkeeping cannot track once overridden — kept as kyu's own manual
+  login there, unchanged in behaviour. The three verbs
+  (`publish`/`receive`/`bootstrap`) stay kyu's own; the kit does not know
+  them.
+- **K-cli.** README's "Per-app tokens" section now names
+  `chassis clients issue <name> --url … --token-env KYU_TOKEN` as a
+  headless alternative to the Apps page — no code change, kyu always had a
+  dashboard.
+- **K-kitdocs.** README's "The door" section and its License-section
+  kp-themes paragraph now point at the generated `docs/KIT.md` instead of
+  re-explaining kit-owned behaviour (KYU_TOKEN/KYU_SECRET_KEY, `/healthz`,
+  self-update, the vendored theme package) — the two documents drifting
+  apart is exactly the failure `docs/KIT.md` exists to prevent. Corrected
+  in passing: "The door" claimed kyu still ran unprotected by default,
+  which stopped being true at 3.0.0 step 2.
+- **K-actions.** `StatusSection::actions` puts "Prune every dead letter"
+  under the Topics section on the status page: one confirmed sweep that
+  deletes every dead-lettered delivery across every topic and
+  subscription (`Engine::prune_dead_letters`, one `DELETE` statement),
+  for after a storm of failures whose cause is fixed — the alternative is
+  visiting every topic page and clicking Delete on each row (W15). Kenny
+  named it a follow-up round after picking Onmisbaar with no concrete
+  action attached; no other candidate action fit kyu's shape (an app
+  token is not scoped to one topic or subscription, so a per-app row
+  action had nothing natural to act on).
+
 ## [3.0.0] - 2026-09-06
 
 Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v1.7.0

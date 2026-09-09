@@ -145,6 +145,10 @@ pub fn pages(state: AppState) -> Router {
             "/t/{topic}/dashboard/delivery/delete",
             post(handlers::dashboard_delete_delivery),
         )
+        .route(
+            "/dashboard/dead-letters/prune",
+            post(handlers::dashboard_prune_dead_letters),
+        )
         .with_state(state)
 }
 

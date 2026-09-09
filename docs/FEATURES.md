@@ -268,7 +268,7 @@ real binary): a clean exit code, a truncated log, the backlog intact
 across the stop, three SIGTERMs in a row still exiting 0, and an
 in-flight long poll answered rather than dropped.
 
-## Desired (10)
+## Desired (11)
 
 ### W1 · Prometheus metrics
 `/metrics`: per-subscription backlog, delivery/ack rates, DLQ counts,
@@ -308,6 +308,18 @@ and its picker in its layout; kyu no longer vendors the eight files, the
 checksum gate and `tests/w13_themes.rs` are gone with them, and the
 picker contract is the kit's to prove. kyu keeps `static/kyu.css` and
 `static/app.js` (the snippet copy/reveal behaviour), served on `/assets`.
+
+*Amended 2026-09-09 (chassis-rs 1.8.0):* the package moves to 5.0.0 — 25
+themes now (`topo` renamed `forest`, `tazhib` renamed `lapis`, `nishiki`
+renamed `woodblock`; `cyberpunk` rebuilt under the same name; the new
+`synthwave` theme), served as one bundle under `/static/kp/dist/…`
+instead of separate `themes.css`/`components.css`, and destructive
+confirmations (the app-revoke button this entry already describes) are
+now a native `<dialog>` rather than the kit's own hand-rolled markup —
+still arms before it acts, same contract, different element. Verified
+live: `k2_the_hub_assets_are_served_open_and_fingerprinted` fetches the
+new bundle path, and a browser drill confirmed the Synthwave theme
+applies and the revoke dialog is a real `<dialog open>` element.
 
 Kenny asked for the themes from `@kp-soft/themes` with *the same picker and
 the same way of storing the choice in the browser*. Not a lookalike: the
@@ -495,6 +507,32 @@ the topic page links to the subscription page, the pending item's id and
 payload show, an unpolled subscription name answers 404 rather than an
 empty page, and deleting one subscription's pending copy leaves the
 other subscription's copy of the same message deliverable.
+
+### W17 · Prune every dead letter *(added at the 2026-09-09 mini-round)*
+
+chassis-rs 1.8.0 added `StatusSection::actions`: a project button under a
+status-page section, with the kit's own confirm-and-busy-state mechanism
+for free (`App::client_action`/`StatusSection::actions`, K29 in the kit's
+own numbering). Kenny picked it up sight unseen ("Onmisbaar") at the
+adoption gate; the concrete button was a same-round follow-up question,
+since nothing in the item itself said what to build.
+
+The one candidate that fit kyu's own shape: "Prune every dead letter" on
+the status page's Topics section, deleting every dead-lettered delivery
+across every topic and subscription in one confirmed sweep
+(`Engine::prune_dead_letters`, one `DELETE FROM deliveries WHERE state =
+'dead'`). W15's per-row Delete button does not scale to a storm of
+failures once the cause is fixed — this is that button's hub-wide
+sibling, not a replacement for it. A per-app-token row action (the other
+shape K29 offers) had no natural candidate: an app token in kyu is not
+scoped to one topic or subscription, so there is no "this token's own
+data" to act on.
+
+Proven by `tests/k2_dashboard.rs`'s
+`k2_prune_every_dead_letter_clears_every_topic_in_one_confirmed_sweep`:
+dead-letters two messages on two different topics, posts to the button's
+route with the admin session, and confirms both topics report "Nothing
+has been dead-lettered" afterward.
 
 ### Considered and set aside at the same mini-round
 

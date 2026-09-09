@@ -725,6 +725,13 @@ impl Engine {
         })
     }
 
+    /// [K-actions] Removes every dead letter across every topic and
+    /// subscription in one confirmed action, for the status page's "Prune
+    /// every dead letter" button. Returns how many were removed.
+    pub fn prune_dead_letters(&self) -> Result<usize> {
+        self.write(|tx| -> Result<usize> { Ok(queries::prune_dead_letters(tx)?) })
+    }
+
     /// K5, K6, K7. One pass of the background work: expired leases return
     /// to the queue, exhausted deliveries are dead-lettered, and messages
     /// past their TTL are settled.

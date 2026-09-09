@@ -128,8 +128,10 @@ done
 # exists inside the binary — this is the check that would have caught the
 # templates/ omission in the Dockerfile the first time round.
 # Since 3.0.0 the kit serves its assets under /static and the hub its two
-# under /assets; both must be inside the image.
-for ASSET in /static/themes.css /static/components.css /static/chassis.css /assets/kyu.css /assets/app.js; do
+# under /assets; both must be inside the image. kp-themes 5.0.0 (chassis-rs
+# 1.8.0) ships one CSS bundle plus a fonts stylesheet instead of
+# themes.css/components.css separately.
+for ASSET in /static/kp/dist/kp-themes.css /static/kp/css/fonts.css /static/chassis.css /assets/kyu.css /assets/app.js; do
     STATUS=$(curl -s -o /dev/null -w '%{http_code}' "${DOOR_HUB}${ASSET}")
     [ "$STATUS" = "200" ] || { echo "the image is missing ${ASSET} (status $STATUS)"; exit 1; }
 done

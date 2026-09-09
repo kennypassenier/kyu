@@ -13,7 +13,7 @@ mod common;
 
 use std::process::Command;
 
-use common::{KEY, KitHub, TOKEN, body_json, header, spawn_kit, spawn_kit_in, unescape};
+use common::{KEY, KitHub, body_json, header, spawn_kit, spawn_kit_in, unescape};
 use kyu::events::EVENTS_TOPIC;
 
 /// The visible text of one command snippet on a topic page, as a reader
@@ -113,6 +113,46 @@ async fn k2_the_kit_owns_the_door() {
 }
 
 #[tokio::test]
+async fn k2_the_kit_says_app_not_client_everywhere_not_only_the_heading() {
+    // K-vocabulary (chassis-rs 1.8.0): App::vocabulary replaces every kit
+    // sentence and every clients-API refusal, not only the page heading
+    // clients_label used to relabel.
+    let hub = spawn_kit().await;
+    let clients = hub.page("/clients").await;
+    assert!(
+        clients.contains("Every app listed here"),
+        "the page's own prose says app, not client: {clients}"
+    );
+    assert!(
+        clients.contains("No apps yet"),
+        "the empty state says app, not client: {clients}"
+    );
+    // The URL and the nav link stay "/clients" on purpose (E1: code and URL
+    // are stable, only what a person reads changes) — checked against the
+    // page's prose with that one href stripped out, not the raw HTML.
+    let prose = unescape(&clients).replace("href=\"/clients\"", "");
+    assert!(
+        !prose.to_lowercase().contains("client"),
+        "no leftover \"client\" wording outside the /clients URL: {prose}"
+    );
+    let refused = reqwest::Client::new()
+        .post(hub.url("/api/clients"))
+        .header("cookie", hub.session_cookie())
+        .header("content-type", "application/json")
+        .body(r#"{"name":"not a valid name!!"}"#)
+        .send()
+        .await
+        .expect("a response");
+    let json = body_json(refused).await;
+    let error = json["error"].as_str().unwrap_or_default();
+    assert!(
+        error.contains("app name"),
+        "a rejected name is refused in the project's vocabulary: {error}"
+    );
+    hub.shutdown().await;
+}
+
+#[tokio::test]
 async fn k2_check_refuses_to_start_without_a_token() {
     // W2, amended 2026-09-06: the hub no longer starts open. The kit refuses
     // at --check with the two variables by name, so a systemd unit that lost
@@ -203,10 +243,10 @@ async fn k2_no_login_token_leaks_into_metrics_or_the_topic_list() {
     let hub = spawn_kit().await;
     hub.publish("notify.kenny", "{}").await;
     let metrics = hub.get_anon("/metrics").await.text().await.unwrap();
-    assert!(!metrics.contains(TOKEN));
+    assert!(!metrics.contains(hub.token()));
     let topics = hub.page("/topics").await;
     assert!(
-        !topics.contains(TOKEN),
+        !topics.contains(hub.token()),
         "the list page prints no command with a token"
     );
     hub.shutdown().await;
@@ -265,7 +305,7 @@ async fn k2_the_topic_page_shows_subscriptions_backlogs_and_policy() {
     hub.bearer(
         reqwest::Method::PUT,
         "/api/t/notify.kenny/subs/ha-forwarder/policy",
-        TOKEN,
+        hub.token(),
     )
     .body(r#"{"ttl_ms":600000}"#)
     .send()
@@ -401,7 +441,7 @@ async fn k2_the_test_publish_form_puts_a_real_message_on_the_topic() {
     // The same form from a foreign origin is refused by the kit (SEC2).
     let hostile = reqwest::Client::new()
         .post(hub.url("/t/notify.kenny/dashboard/publish"))
-        .header("cookie", &hub.cookie)
+        .header("cookie", hub.session_cookie())
         .header("origin", "http://evil.example")
         .header("content-type", "application/x-www-form-urlencoded")
         .body("payload=%7B%7D")
@@ -440,7 +480,7 @@ async fn k2_the_snippets_the_dashboard_prints_actually_work() {
         .nth(1)
         .expect("the snippet quotes its URL");
     let response = hub
-        .bearer(reqwest::Method::GET, path, TOKEN)
+        .bearer(reqwest::Method::GET, path, hub.token())
         .send()
         .await
         .expect("the snippet must run");
@@ -485,7 +525,7 @@ async fn k2_the_awkward_dashboard_states_all_render() {
         .bearer(
             reqwest::Method::POST,
             "/t/notify.kenny?delay=3600000",
-            TOKEN,
+            hub.token(),
         )
         .header("content-type", "application/json")
         .body(r#"{"later":true}"#)
@@ -623,6 +663,52 @@ async fn k2_the_dead_letter_delete_button_removes_only_this_subscriptions_copy()
 }
 
 #[tokio::test]
+async fn k2_prune_every_dead_letter_clears_every_topic_in_one_confirmed_sweep() {
+    // K-actions (chassis-rs 1.8.0): the status page's "Prune every dead
+    // letter" button, one sweep across every topic and subscription, not
+    // one topic page at a time.
+    let hub = spawn_kit().await;
+    hub.bootstrap("print.receipt", "printer").await;
+    hub.bootstrap("notify.kenny", "ha").await;
+    let a = hub.publish("print.receipt", r#"{"a":true}"#).await;
+    let b = hub.publish("notify.kenny", r#"{"b":true}"#).await;
+    for (topic, sub, id) in [("print.receipt", "printer", &a), ("notify.kenny", "ha", &b)] {
+        assert_eq!(
+            hub.receive(topic, &format!("as={sub}&wait=0"))
+                .await
+                .status(),
+            200
+        );
+        assert_eq!(
+            hub.post_api(&format!("/t/{topic}/nack/{id}?as={sub}&dead=true"))
+                .await
+                .status(),
+            200
+        );
+    }
+    let status = hub.page("/").await;
+    assert!(
+        status.contains("Prune every dead letter"),
+        "the button is on the status page: {status}"
+    );
+    let response = reqwest::Client::new()
+        .post(hub.url("/dashboard/dead-letters/prune"))
+        .header("cookie", hub.session_cookie())
+        .header("accept", "application/json")
+        .send()
+        .await
+        .expect("a response");
+    assert!(response.status().is_success());
+    let json = body_json(response).await;
+    assert_eq!(json["pruned"], 2, "{json}");
+    let receipt = topic_page(&hub, "print.receipt").await;
+    assert!(receipt.contains("Nothing has been dead-lettered"));
+    let notify = topic_page(&hub, "notify.kenny").await;
+    assert!(notify.contains("Nothing has been dead-lettered"));
+    hub.shutdown().await;
+}
+
+#[tokio::test]
 async fn k2_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest() {
     let hub = spawn_kit().await;
     hub.bootstrap_two_clean("print.receipt", "printer", "archiver")
@@ -716,6 +802,11 @@ async fn k2_the_hub_assets_are_served_open_and_fingerprinted() {
     let page = hub.page("/topics").await;
     assert!(page.contains("/assets/app.js?v=") && page.contains("/assets/kyu.css?v="));
     // The kit's own assets are there too: the pages depend on them.
-    assert_eq!(hub.get_anon("/static/themes.css").await.status(), 200);
+    // kp-themes 5.0.0 ships one bundle rather than themes.css/components.css
+    // separately (chassis-rs 1.8.0).
+    assert_eq!(
+        hub.get_anon("/static/kp/dist/kp-themes.css").await.status(),
+        200
+    );
     hub.shutdown().await;
 }

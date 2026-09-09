@@ -1146,6 +1146,21 @@ pub async fn dashboard_delete_delivery(
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }
 
+/// [K-actions] `POST /dashboard/dead-letters/prune` — the status page's
+/// "Prune every dead letter" button (`kit::TopicsSection::actions`): every
+/// topic and subscription in one confirmed sweep, after the storm that
+/// caused them is fixed, instead of one topic page at a time.
+///
+/// Reached through the kit's `[data-post]` mechanism, not a classic form:
+/// it wants JSON, not a redirect, and reloads the page itself on 2xx.
+pub async fn dashboard_prune_dead_letters(
+    State(state): State<AppState>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let count = spawn_engine(move || engine.prune_dead_letters()).await?;
+    Ok(axum::Json(json!({ "pruned": count })).into_response())
+}
+
 fn urldecode(input: &str) -> String {
     let bytes = input.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());

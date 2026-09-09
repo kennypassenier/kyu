@@ -1,16 +1,22 @@
-//! The in-process kit harness (K2, 2026-09-06): the hub assembled exactly as
-//! the binary assembles it — `kyu::kit::mount` on a real `chassis::App` —
-//! started on a free port with the kit's door in front. Tests that need the
-//! dashboard or the token door go through here; tests about the engine and
-//! the open API keep `router_with_probes`.
+//! The in-process kit harness (K2, 2026-09-06; rebuilt on the kit's own
+//! `chassis::testing::TestApp` for K-harness, chassis-rs 1.8.0): the hub
+//! assembled exactly as the binary assembles it — `kyu::kit::mount` on a
+//! real `chassis::App` — started on a free port with the kit's door in
+//! front. Tests that need the dashboard or the token door go through here;
+//! tests about the engine and the open API keep `router_with_probes`.
+//!
+//! `TestApp` owns the generic half (spawn, admin login, the session cookie,
+//! bearer requests, `issue_client`) — kyu no longer hand-rolls it. What
+//! stays kyu's own: assembling the engine/store/config the way `main.rs`
+//! does, and the three verbs (`publish`/`receive`/`bootstrap`), which the
+//! kit does not know about.
 #![allow(dead_code)]
 
-use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
-use chassis::{App, AppSpec, Running};
+use chassis::testing::TestApp;
+use chassis::{App, AppSpec};
 use kyu::config::{Auth, Config};
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
@@ -19,23 +25,33 @@ use kyu::kit::{import_app_tokens, mount};
 use kyu::store::Store;
 use kyu::sweeper::{self, Heartbeat};
 
-pub const TOKEN: &str = "a-login-token-that-is-long-enough";
-pub const KEY: &str = "abababababababababababababababababababababababababababababababab";
-
 pub struct KitHub {
+    app: TestApp,
     pub addr: SocketAddr,
     pub store: Arc<Store>,
     pub engine: Arc<Engine>,
-    /// The admin session cookie, `name=value`, from one login.
-    pub cookie: String,
-    running: Option<Running>,
     sweeper: tokio::task::JoinHandle<()>,
-    _dir: tempfile::TempDir,
+    /// The admin token actually in force. `TestApp::token`/`::login` track
+    /// the secret THEY generated at launch, which `spawn_kit_in` overrides
+    /// through `extra_env` for a known-key restart — so the harness keeps
+    /// its own copy of what is really running, rather than trusting a
+    /// `TestApp` field that goes stale the moment a secret is overridden.
+    token: String,
+    /// The admin session cookie (`name=value`) from kyu's own login POST,
+    /// for the same reason `token` is kept here rather than read back from
+    /// `TestApp`.
+    cookie: String,
+    /// `spawn_kit_in`'s caller-supplied state directory, kept alive as long
+    /// as the app runs (`KYU_STATE_DIR` points into it). `TestApp` owns and
+    /// cleans up its own separate tempdir regardless — this one is `None`
+    /// for the common `spawn_kit` case, which never overrides the state
+    /// directory.
+    _dir: Option<tempfile::TempDir>,
 }
 
 impl KitHub {
     pub fn url(&self, path: &str) -> String {
-        format!("http://{}{path}", self.addr)
+        self.app.url(path)
     }
 
     fn http() -> reqwest::Client {
@@ -90,9 +106,19 @@ impl KitHub {
         path: &str,
         token: &str,
     ) -> reqwest::RequestBuilder {
-        Self::http()
-            .request(method, self.url(path))
-            .header("authorization", format!("Bearer {token}"))
+        self.app.bearer(method, path, token)
+    }
+
+    /// The admin's own token, for scripts that send it as a bearer (it
+    /// doubles as the hub's own login token — K2 step 2).
+    pub fn token(&self) -> &str {
+        &self.token
+    }
+
+    /// The admin session cookie (`name=value`), for a request built by hand
+    /// instead of through `get`/`form` (a cross-origin CSRF probe, say).
+    pub fn session_cookie(&self) -> &str {
+        &self.cookie
     }
 
     pub async fn publish_as(
@@ -112,8 +138,9 @@ impl KitHub {
 
     /// Publish with the login token; returns the message id.
     pub async fn publish(&self, topic: &str, body: &str) -> String {
+        let token = self.token().to_string();
         let response = self
-            .publish_as(TOKEN, topic, "application/json", body.as_bytes().to_vec())
+            .publish_as(&token, topic, "application/json", body.as_bytes().to_vec())
             .await;
         assert_eq!(response.status(), 201, "publish to {topic}");
         body_json(response).await["id"]
@@ -123,17 +150,19 @@ impl KitHub {
     }
 
     pub async fn publish_bytes(&self, topic: &str, content_type: &str, body: Vec<u8>) -> u16 {
-        self.publish_as(TOKEN, topic, content_type, body)
+        let token = self.token().to_string();
+        self.publish_as(&token, topic, content_type, body)
             .await
             .status()
             .as_u16()
     }
 
     pub async fn receive(&self, topic: &str, query: &str) -> reqwest::Response {
+        let token = self.token().to_string();
         self.bearer(
             reqwest::Method::GET,
             &format!("/t/{topic}/next?{query}"),
-            TOKEN,
+            &token,
         )
         .send()
         .await
@@ -141,7 +170,8 @@ impl KitHub {
     }
 
     pub async fn post_api(&self, path: &str) -> reqwest::Response {
-        self.bearer(reqwest::Method::POST, path, TOKEN)
+        let token = self.token().to_string();
+        self.bearer(reqwest::Method::POST, path, &token)
             .send()
             .await
             .expect("a response")
@@ -180,9 +210,7 @@ impl KitHub {
     pub async fn shutdown(mut self) {
         self.sweeper.abort();
         let _ = (&mut self.sweeper).await;
-        if let Some(running) = self.running.take() {
-            running.stop().await;
-        }
+        self.app.shutdown().await;
     }
 }
 
@@ -209,38 +237,67 @@ pub fn unescape(html: &str) -> String {
         .replace("&amp;", "&")
 }
 
-pub async fn spawn_kit() -> KitHub {
-    spawn_kit_in(tempfile::tempdir().expect("a temp dir")).await
+/// Logs in with `token` and returns the session cookie. Not
+/// `TestApp::login`: that call trusts the secret `TestApp` itself
+/// generated at launch, which `spawn_kit_in` overrides through
+/// `extra_env` — `TestApp::token()` would then report the generated
+/// value that is no longer what the running kit actually checks against.
+async fn login(app: &TestApp, token: &str) -> String {
+    let response = KitHub::http()
+        .post(app.url("/login"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .body(format!("token={token}"))
+        .send()
+        .await
+        .expect("a login response");
+    assert_eq!(response.status(), 303, "the right token logs in");
+    header(&response, "set-cookie")
+        .expect("a session cookie")
+        .split(';')
+        .next()
+        .expect("name=value")
+        .to_string()
 }
 
-/// The hub on an existing state directory (for the import and restart cases).
-pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
-    let mut env: BTreeMap<String, String> = BTreeMap::new();
-    env.insert("KYU_STATE_DIR".into(), dir.path().display().to_string());
-    env.insert("KYU_TOKEN".into(), TOKEN.into());
-    env.insert("KYU_SECRET_KEY".into(), KEY.into());
-    env.insert("KYU_LISTEN".into(), "127.0.0.1:0".into());
-    env.insert("KYU_LOG".into(), "warn".into());
-    let spec = AppSpec {
+fn spec() -> AppSpec {
+    AppSpec {
         name: "kyu",
         version: env!("CARGO_PKG_VERSION"),
         repository: Some("kennypassenier/kyu"),
         ..Default::default()
-    };
-    let mut app = App::from_args_with_env(spec, vec!["kyu".into()], env, assets())
-        .expect("the kit accepts the test configuration");
-    let state_dir = app
-        .loaded
-        .as_ref()
-        .expect("a start loads configuration")
-        .state_dir
-        .clone();
+    }
+}
+
+/// What `configure_hub` builds, smuggled out of an `FnOnce(&mut App)` that
+/// cannot return a value directly.
+type Configured = (Arc<Store>, Arc<Engine>, tokio::task::JoinHandle<()>);
+
+/// Everything `spawn_kit`/`spawn_kit_in` share: build the engine/store the
+/// way `main.rs` does, from the token and secret key the kit itself just
+/// resolved (`TestApp` generates them; a restart passes them back in
+/// through `extra_env` so the state directory is opened with the same
+/// key it was written with), then `mount` onto the kit's `App`. Runs
+/// inside `TestApp`'s `configure` closure, before the kit starts — the
+/// `Mutex` is only ever touched once, synchronously, from this one
+/// closure; it exists to smuggle the store/engine/sweeper out of that
+/// closure.
+fn configure_hub(app: &mut App, out: Arc<Mutex<Option<Configured>>>) {
+    let loaded = app.loaded.as_ref().expect("a start loads configuration");
+    let state_dir = loaded.state_dir.clone();
+    let token = loaded
+        .get("token")
+        .expect("the kit resolves an admin token")
+        .to_string();
+    let secret_key = loaded
+        .get("secret_key")
+        .expect("the kit resolves a secret key")
+        .to_string();
     // `Config::from_kit` reads the hub's own variables from the process
-    // environment; the harness keeps them in the kit's map instead, so the
-    // door is set here explicitly.
+    // environment; the harness keeps them in the kit's own map instead, so
+    // the door is set here explicitly, from what the kit itself resolved.
     let mut config =
         Config::from_kit(&state_dir, app.limits.max_body_bytes as u64).expect("a config");
-    config.auth = Auth::parse(Some(TOKEN), Some(KEY)).expect("a protected hub");
+    config.auth = Auth::parse(Some(&token), Some(&secret_key)).expect("a protected hub");
     let store = Arc::new(Store::open(&config.data_dir).expect("a store"));
     let heartbeat = Heartbeat::starting_at(SystemClock.now_ms());
     let engine = Arc::new(Engine::with_defaults(
@@ -254,44 +311,87 @@ pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
             max_body_bytes: 65_536,
             default_wait_s: 1,
             max_wait_s: 300,
-            recheck_interval: Duration::from_millis(100),
+            recheck_interval: std::time::Duration::from_millis(100),
         },
         heartbeat.clone(),
         config.auth.clone(),
     );
     let key = config.auth.key().expect("a protected hub").clone();
-    import_app_tokens(&state_dir, &engine, &key, KEY).expect("the import runs");
-    mount(&mut app, state.clone(), engine.clone(), heartbeat.clone());
+    import_app_tokens(&state_dir, &engine, &key, &secret_key).expect("the import runs");
+    mount(app, state.clone(), engine.clone(), heartbeat.clone());
     let notifiers = state.notifiers.clone();
     let sweeper = sweeper::spawn(engine.clone(), heartbeat, move |woken| {
         for (topic, subscription) in woken {
             notifiers.wake(topic, std::slice::from_ref(subscription));
         }
     });
-    let running = app.start().await.expect("the kit starts");
-    let addr = running.addr;
-    // Log in once; every admin request reuses the session cookie.
-    let login = KitHub::http()
-        .post(format!("http://{addr}/login"))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(format!("token={TOKEN}"))
-        .send()
-        .await
-        .expect("a login response");
-    assert_eq!(login.status(), 303, "the right token logs in");
-    let cookie = header(&login, "set-cookie")
-        .expect("a session cookie")
-        .split(';')
-        .next()
-        .expect("name=value")
-        .to_string();
+    *out.lock().expect("configure runs once, uncontended") = Some((store, engine, sweeper));
+}
+
+pub async fn spawn_kit() -> KitHub {
+    let out = Arc::new(Mutex::new(None));
+    let out_for_closure = out.clone();
+    let app = TestApp::start_with(spec(), assets(), move |app| {
+        configure_hub(app, out_for_closure);
+    })
+    .await;
+    let addr = app.addr();
+    let token = app.token().to_string();
+    let cookie = login(&app, &token).await;
+    let (store, engine, sweeper) = out
+        .lock()
+        .expect("configure ran synchronously before start")
+        .take()
+        .expect("configure_hub always fills the slot");
     KitHub {
+        app,
         addr,
         store,
         engine,
-        cookie,
-        running: Some(running),
         sweeper,
-        _dir: dir,
+        token,
+        cookie,
+        _dir: None,
+    }
+}
+
+/// The hub on an existing state directory (for the import and restart
+/// cases): the token and secret key are fixed rather than generated, so a
+/// file pre-written into `dir` under a known key opens cleanly once the
+/// kit starts.
+pub const TOKEN: &str = "a-login-token-that-is-long-enough";
+pub const KEY: &str = "abababababababababababababababababababababababababababababababab";
+
+pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
+    let out = Arc::new(Mutex::new(None));
+    let out_for_closure = out.clone();
+    let state_dir = dir.path().display().to_string();
+    let app = TestApp::start_with_env(
+        spec(),
+        assets(),
+        &[
+            ("KYU_STATE_DIR", state_dir.as_str()),
+            ("KYU_TOKEN", TOKEN),
+            ("KYU_SECRET_KEY", KEY),
+        ],
+        move |app| configure_hub(app, out_for_closure),
+    )
+    .await;
+    let addr = app.addr();
+    let cookie = login(&app, TOKEN).await;
+    let (store, engine, sweeper) = out
+        .lock()
+        .expect("configure ran synchronously before start")
+        .take()
+        .expect("configure_hub always fills the slot");
+    KitHub {
+        app,
+        addr,
+        store,
+        engine,
+        sweeper,
+        token: TOKEN.to_string(),
+        cookie,
+        _dir: Some(dir),
     }
 }
