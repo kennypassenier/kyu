@@ -2,12 +2,13 @@
 # a gate that does not predict the build is not a gate. Raising it is a
 # deliberate act: bump the channel here and `rust-version` in Cargo.toml
 # together, run the gates, fix what the newer clippy has learned.
+#
+# feat-build-1: releases are static musl builds, so the target is part of
+# the pin. It belongs here and not in a `rustup target add` line: run
+# before this file is in scope, that command installs the target against
+# another toolchain instance and the build fails later without saying why
+# (kyu, 2026-09-09).
 [toolchain]
 channel = "1.97"
 components = ["rustfmt", "clippy"]
-# musl (G1, 2026-09-09): the release binary is static, so this target must
-# be installed wherever the pin resolves — including inside the release
-# Dockerfile's build stage, which is exactly where `rustup target add` run
-# before this file existed stopped taking effect once rustup re-resolved
-# against the pin.
-targets = ["x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl"]
+targets = ["x86_64-unknown-linux-musl"]

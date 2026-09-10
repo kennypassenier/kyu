@@ -1,9 +1,17 @@
 # The homelab's stack file for a native service (AR18; `homelab adopt`).
 # vmid and hostname are filled in at adoption: the hostname MUST be
 # <vmid>-app-<stack>, the homelab validates it. update_cmd reproduces the
-# unit line for line — same user, working directory and EnvironmentFile —
-# and waits for the result (critic #7), so "already current" is exit 0
-# without a restart and a failure carries its stderr.
+# environment the unit gives the service — same user and group, the same
+# EnvironmentFile, the same working directory, and one --property=Environment=
+# per Environment= line the unit declares — and waits for the result
+# (critic #7), so "already current" is exit 0 without a restart and a failure
+# carries its stderr.
+#
+# The Environment= lines are not decoration (fix-3, Almanac on CT 112,
+# 2026-09-09): without them a supervised `update --check` looks for state at
+# the binary's compiled-in default instead of this machine's directory, and
+# fails with a message that blames a missing secret. Add a line here for
+# every Environment= line added to the unit.
 stack_name: kyu
 vmid: 109
 hostname: 109-app-kyu
@@ -16,6 +24,8 @@ update_cmd: >-
   systemd-run --wait --pipe --collect --uid=kyu --gid=kyu
   --property=EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
   --property=WorkingDirectory=/appdata/kyu/kyu-config
+  --property=Environment=KYU_STATE_DIR=/appdata/kyu/kyu-config
+  --property=Environment=KYU_TIMEOUT_STOP_SECS=60
   /opt/kyu/bin/kyu update
 release_repo: kennypassenier/kyu
 release_asset: kyu

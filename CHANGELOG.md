@@ -11,6 +11,55 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-09-10
+
+Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v2.0.0
+(up from v1.8.0, kp-themes 5.0.0 → 5.1.0). No change to the HTTP contract or
+the environment variables. Two things worth naming:
+
+- **`Client` is now `#[non_exhaustive]`.** `src/kit.rs`'s one-time 2.x
+  app-token import builds it through `Client::adopted(id, name, token,
+  issued_at)` instead of a field-by-field literal, so a field the kit adds
+  later defaults instead of refusing to compile here. Reading a `Client`,
+  and the on-disk client-store format, are unchanged.
+- **`chassis sync --write` picked up the musl release pipeline this project
+  proposed after 3.1.1's CT 109 rollback.** `Dockerfile`,
+  `.github/workflows/release.yml` and `rust-toolchain.toml` are fully
+  scaffold-owned again — kyu no longer carries its own copy of the fix.
+  `deploy/service.yml`'s `update_cmd` gained two `--property=Environment=`
+  lines mirroring `deploy/kyu.service`'s own (fix-3): without them a
+  supervised `update --check` looked for state at the binary's compiled-in
+  default instead of `/appdata/kyu/kyu-config`, which this project's own
+  unit had set correctly the whole time — the update command just never
+  matched it.
+
+**`tests/common`'s harness lost its manual login workaround** (CF-12): the
+one place it existed, `spawn_kit_in`'s 2.x-import test, now uses
+`TestApp::login()` directly — chassis 2.0.0 fixed `TestApp::token()` and
+`::login()` to read the secret actually in force after an `extra_env`
+override, rather than the one `TestApp` generated before that override was
+applied. Reported back to chassis-rs as promised when the fix shipped;
+closes that correction loop.
+
+Also picked up, unchanged in behaviour: `.github/workflows/ci.yml` reverted
+to triggering on every branch push (not only `main` and pull requests) — a
+narrower trigger had been tried the previous evening and immediately cost a
+pull request this project doesn't otherwise need, for the exact reason the
+scaffold's own comment on that trigger warns about.
+
+`tests/kit_smoke.rs` is new: a generic scaffold-owned smoke test (login,
+issue a client token, one API call, the dashboard) that every chassis-rs
+project now starts with. Redundant with kyu's own, much more thorough
+`tests/k2_dashboard.rs`, but scaffold-owned and cheap to keep rather than
+fight.
+
+**Known, ongoing:** `.githooks/commit-msg` and `.claude/hooks/check-commit.sh`
+carry dev-procedure's newer ID-gate logic (2026-09-09), which `chassis sync`
+does not know about and will keep proposing to overwrite with its own older
+template on every future `--write` — restored by hand this round. Neither
+tool is aware of the other's ownership of these two files; there is no fix
+on kyu's side, only vigilance before the next `--write`.
+
 ## [3.1.1] - 2026-09-09
 
 **v3.1.0's release binary does not run on CT 109.** Homelab Rust's attempted

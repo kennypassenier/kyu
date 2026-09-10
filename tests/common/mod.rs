@@ -1,15 +1,18 @@
 //! The in-process kit harness (K2, 2026-09-06; rebuilt on the kit's own
-//! `chassis::testing::TestApp` for K-harness, chassis-rs 1.8.0): the hub
-//! assembled exactly as the binary assembles it — `kyu::kit::mount` on a
-//! real `chassis::App` — started on a free port with the kit's door in
-//! front. Tests that need the dashboard or the token door go through here;
-//! tests about the engine and the open API keep `router_with_probes`.
+//! `chassis::testing::TestApp` for K-harness, chassis-rs 1.8.0; simplified
+//! again on chassis-rs 2.0.0 once CF-12 made `TestApp::token()`/`::login()`
+//! track an `extra_env`-overridden secret instead of the one generated at
+//! launch — kyu's own manual login workaround is gone): the hub assembled
+//! exactly as the binary assembles it — `kyu::kit::mount` on a real
+//! `chassis::App` — started on a free port with the kit's door in front.
+//! Tests that need the dashboard or the token door go through here; tests
+//! about the engine and the open API keep `router_with_probes`.
 //!
 //! `TestApp` owns the generic half (spawn, admin login, the session cookie,
-//! bearer requests, `issue_client`) — kyu no longer hand-rolls it. What
-//! stays kyu's own: assembling the engine/store/config the way `main.rs`
-//! does, and the three verbs (`publish`/`receive`/`bootstrap`), which the
-//! kit does not know about.
+//! bearer requests, `issue_client`) — kyu no longer hand-rolls any of it.
+//! What stays kyu's own: assembling the engine/store/config the way
+//! `main.rs` does, and the three verbs (`publish`/`receive`/`bootstrap`),
+//! which the kit does not know about.
 #![allow(dead_code)]
 
 use std::net::SocketAddr;
@@ -31,16 +34,6 @@ pub struct KitHub {
     pub store: Arc<Store>,
     pub engine: Arc<Engine>,
     sweeper: tokio::task::JoinHandle<()>,
-    /// The admin token actually in force. `TestApp::token`/`::login` track
-    /// the secret THEY generated at launch, which `spawn_kit_in` overrides
-    /// through `extra_env` for a known-key restart — so the harness keeps
-    /// its own copy of what is really running, rather than trusting a
-    /// `TestApp` field that goes stale the moment a secret is overridden.
-    token: String,
-    /// The admin session cookie (`name=value`) from kyu's own login POST,
-    /// for the same reason `token` is kept here rather than read back from
-    /// `TestApp`.
-    cookie: String,
     /// `spawn_kit_in`'s caller-supplied state directory, kept alive as long
     /// as the app runs (`KYU_STATE_DIR` points into it). `TestApp` owns and
     /// cleans up its own separate tempdir regardless — this one is `None`
@@ -54,18 +47,10 @@ impl KitHub {
         self.app.url(path)
     }
 
-    fn http() -> reqwest::Client {
-        reqwest::Client::builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .expect("a client")
-    }
-
     /// A browser with the admin session.
     pub async fn get(&self, path: &str) -> reqwest::Response {
-        Self::http()
-            .get(self.url(path))
-            .header("cookie", &self.cookie)
+        self.app
+            .request(reqwest::Method::GET, path)
             .send()
             .await
             .expect("a response")
@@ -73,7 +58,10 @@ impl KitHub {
 
     /// A browser without a session.
     pub async fn get_anon(&self, path: &str) -> reqwest::Response {
-        Self::http()
+        reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("a client")
             .get(self.url(path))
             .send()
             .await
@@ -89,9 +77,8 @@ impl KitHub {
 
     /// One of the dashboard's own forms, posted by the admin's browser.
     pub async fn form(&self, path: &str, body: &str) -> reqwest::Response {
-        Self::http()
-            .post(self.url(path))
-            .header("cookie", &self.cookie)
+        self.app
+            .request(reqwest::Method::POST, path)
             .header("content-type", "application/x-www-form-urlencoded")
             .body(body.to_string())
             .send()
@@ -112,13 +99,13 @@ impl KitHub {
     /// The admin's own token, for scripts that send it as a bearer (it
     /// doubles as the hub's own login token — K2 step 2).
     pub fn token(&self) -> &str {
-        &self.token
+        self.app.token()
     }
 
     /// The admin session cookie (`name=value`), for a request built by hand
     /// instead of through `get`/`form` (a cross-origin CSRF probe, say).
     pub fn session_cookie(&self) -> &str {
-        &self.cookie
+        self.app.session_cookie().expect("login ran at spawn")
     }
 
     pub async fn publish_as(
@@ -237,28 +224,6 @@ pub fn unescape(html: &str) -> String {
         .replace("&amp;", "&")
 }
 
-/// Logs in with `token` and returns the session cookie. Not
-/// `TestApp::login`: that call trusts the secret `TestApp` itself
-/// generated at launch, which `spawn_kit_in` overrides through
-/// `extra_env` — `TestApp::token()` would then report the generated
-/// value that is no longer what the running kit actually checks against.
-async fn login(app: &TestApp, token: &str) -> String {
-    let response = KitHub::http()
-        .post(app.url("/login"))
-        .header("content-type", "application/x-www-form-urlencoded")
-        .body(format!("token={token}"))
-        .send()
-        .await
-        .expect("a login response");
-    assert_eq!(response.status(), 303, "the right token logs in");
-    header(&response, "set-cookie")
-        .expect("a session cookie")
-        .split(';')
-        .next()
-        .expect("name=value")
-        .to_string()
-}
-
 fn spec() -> AppSpec {
     AppSpec {
         name: "kyu",
@@ -331,13 +296,12 @@ fn configure_hub(app: &mut App, out: Arc<Mutex<Option<Configured>>>) {
 pub async fn spawn_kit() -> KitHub {
     let out = Arc::new(Mutex::new(None));
     let out_for_closure = out.clone();
-    let app = TestApp::start_with(spec(), assets(), move |app| {
+    let mut app = TestApp::start_with(spec(), assets(), move |app| {
         configure_hub(app, out_for_closure);
     })
     .await;
     let addr = app.addr();
-    let token = app.token().to_string();
-    let cookie = login(&app, &token).await;
+    app.login().await;
     let (store, engine, sweeper) = out
         .lock()
         .expect("configure ran synchronously before start")
@@ -349,8 +313,6 @@ pub async fn spawn_kit() -> KitHub {
         store,
         engine,
         sweeper,
-        token,
-        cookie,
         _dir: None,
     }
 }
@@ -358,7 +320,9 @@ pub async fn spawn_kit() -> KitHub {
 /// The hub on an existing state directory (for the import and restart
 /// cases): the token and secret key are fixed rather than generated, so a
 /// file pre-written into `dir` under a known key opens cleanly once the
-/// kit starts.
+/// kit starts. `TestApp::login()` works against this overridden token since
+/// chassis-rs 2.0.0 (CF-12) — before that fix it read the value `TestApp`
+/// itself generated at launch, which `extra_env` had already made stale.
 pub const TOKEN: &str = "a-login-token-that-is-long-enough";
 pub const KEY: &str = "abababababababababababababababababababababababababababababababab";
 
@@ -366,7 +330,7 @@ pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
     let out = Arc::new(Mutex::new(None));
     let out_for_closure = out.clone();
     let state_dir = dir.path().display().to_string();
-    let app = TestApp::start_with_env(
+    let mut app = TestApp::start_with_env(
         spec(),
         assets(),
         &[
@@ -378,7 +342,7 @@ pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
     )
     .await;
     let addr = app.addr();
-    let cookie = login(&app, TOKEN).await;
+    app.login().await;
     let (store, engine, sweeper) = out
         .lock()
         .expect("configure ran synchronously before start")
@@ -390,8 +354,6 @@ pub async fn spawn_kit_in(dir: tempfile::TempDir) -> KitHub {
         store,
         engine,
         sweeper,
-        token: TOKEN.to_string(),
-        cookie,
         _dir: Some(dir),
     }
 }

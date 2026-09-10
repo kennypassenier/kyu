@@ -8,7 +8,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
-    env_file: /etc/kyu/kyu.env   # KYU_TOKEN, KYU_SECRET_KEY, KYU_PUBLIC_URL
+    # KYU_PUBLIC_URL is not in this list: it is a passkeys knob, and
+    # the scaffold builds without that feature (feat-build-1).
+    env_file: /etc/kyu/kyu.env   # KYU_TOKEN, KYU_SECRET_KEY
     volumes:
       - kyu-state:/var/lib/kyu    # a named volume inherits the image's owner
     logging:

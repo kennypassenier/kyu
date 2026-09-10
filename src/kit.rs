@@ -234,15 +234,16 @@ pub fn import_app_tokens(
     store
         .update(&mut |clients: &mut ClientsFile| {
             for app in &apps {
-                clients.clients.push(Client {
-                    id: format!("app-{}", app.name),
-                    name: app.name.clone(),
-                    token: Some(app.token.clone()),
-                    issued_at: now.clone(),
-                    revoked_at: None,
-                    last_used_at: None,
-                    uses: 0,
-                });
+                // Client is #[non_exhaustive] since chassis-rs 2.0.0: built
+                // through Client::adopted rather than field by field, so a
+                // field the kit adds later defaults instead of refusing to
+                // compile here.
+                clients.clients.push(Client::adopted(
+                    format!("app-{}", app.name),
+                    app.name.clone(),
+                    app.token.clone(),
+                    now.clone(),
+                ));
             }
             Ok(clients.clients.last().cloned().expect("at least one app"))
         })

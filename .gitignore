@@ -1,8 +1,6 @@
 # Build output
 /target/
-/target-trixie/
 /target-musl/
-/target-musl-test/
 
 # Local secrets and scratch — never committed (standing rule 10)
 .env
@@ -22,3 +20,7 @@
 *.db-wal
 *.db-shm
 kyu.pre-v*.db
+
+# Scratch build dirs from local musl test builds (not the release-workflow
+# path, which is /target-musl/ above).
+/target-musl-test/
