@@ -11,6 +11,27 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-09-10
+
+chassis-rs 2.0.0 → 2.0.2, both minor: 2.0.1 added the deprecation
+transition window and stopped `chassis sync` from overwriting the three
+hooks dev-procedure also distributes; 2.0.2 turned off `enforce_admins` in
+`chassis sync --protect` and fixed a bug where the consumer check rewrote a
+consumer's own `Cargo.lock`. Neither touches the public API (app.rs is
+byte-identical across the range); `docs/KIT.md` regenerated for the new
+version string.
+
+Also fixed: `tests/p7_cli.rs`'s `run()` helper read a spawned child's
+stdout/stderr only after waiting for it to exit. `--help`'s own output
+(8.4 KB — every kit knob plus kyu's own) is larger than this sandbox's pipe
+buffer, so the unread pipe filled, the child's `write()` blocked, and the
+test reported exactly the "became a server" symptom it exists to catch, on
+a binary that had answered correctly. Two reader threads now drain both
+pipes concurrently with the wait loop, the same way the standard library's
+own `Command::output` does. Not a chassis-rs regression — found while
+upgrading, on a test that only needed the output to grow past the buffer
+once to trip.
+
 ## [3.2.0] - 2026-09-10
 
 Built on [chassis-rs](https://github.com/kennypassenier/chassis-rs) v2.0.0

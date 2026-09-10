@@ -20,6 +20,15 @@ use std::time::{Duration, Instant};
 /// The timeout is the whole point: the bug this suite exists for turns a
 /// question into a running process, so a test that simply waited would hang
 /// rather than fail.
+///
+/// [meta, 2026-09-10] `--help`'s own output (8.4 KB, every kit knob plus
+/// kyu's own) exceeds this sandbox's pipe buffer. Reading stdout/stderr only
+/// AFTER the child exits — the original shape here — let a full pipe block
+/// the child's write() forever: `try_wait` then spins to the deadline and
+/// reports precisely the symptom this suite watches for, on a binary that
+/// answered correctly. Two reader threads now drain both pipes as they
+/// fill, concurrently with the wait loop, which is what the standard
+/// library's own `Command::output` does internally for the same reason.
 fn run(args: &[&str]) -> (Option<i32>, String) {
     let dir = tempfile::tempdir().expect("a temp dir");
     let mut child = Command::new(env!("CARGO_BIN_EXE_kyu"))
@@ -39,6 +48,19 @@ fn run(args: &[&str]) -> (Option<i32>, String) {
         .spawn()
         .expect("the binary must start");
 
+    let mut stdout = child.stdout.take().expect("stdout was piped");
+    let mut stderr = child.stderr.take().expect("stderr was piped");
+    let stdout_reader = std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stdout.read_to_string(&mut buf);
+        buf
+    });
+    let stderr_reader = std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stderr.read_to_string(&mut buf);
+        buf
+    });
+
     let deadline = Instant::now() + Duration::from_secs(10);
     let status = loop {
         match child.try_wait().expect("waiting on the child must work") {
@@ -52,13 +74,8 @@ fn run(args: &[&str]) -> (Option<i32>, String) {
         }
     };
 
-    let mut output = String::new();
-    if let Some(mut out) = child.stdout.take() {
-        let _ = out.read_to_string(&mut output);
-    }
-    if let Some(mut err) = child.stderr.take() {
-        let _ = err.read_to_string(&mut output);
-    }
+    let mut output = stdout_reader.join().unwrap_or_default();
+    output.push_str(&stderr_reader.join().unwrap_or_default());
     // `None` for the code means it never exited — it became a server.
     (status.and_then(|s| s.code()), output)
 }

@@ -4,7 +4,7 @@ name = "kyu"
 description = "A self-documenting durable message hub for a homelab"
 repo = "kennypassenier/kyu"
 toolchain = "1.97"
-chassis_tag = "v2.0.0"
+chassis_tag = "v2.0.2"
 chassis_repo = "https://github.com/kennypassenier/chassis-rs"
 kp_themes = "5.1.0"
 # Measured on CT 109 (2026-09-06, CF-6 d): state root and env file live in the
