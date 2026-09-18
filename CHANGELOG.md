@@ -37,6 +37,10 @@ and the hub ran on an empty store from 2026-09-10 until this was found on
 2026-09-18 — every topic and every client token left behind one directory
 down. The refusal names both directories and the three files to move.
 
+rustls 0.23.43 → 0.23.45 (RUSTSEC-2026-0285, TLS 1.3 handshake messages
+accepted across encryption-level boundaries) — found by the cargo-deny job on
+the 3.3.0 push, a lockfile-only bump.
+
 ## [3.2.1] - 2026-09-10
 
 chassis-rs 2.0.0 → 2.0.2, both minor: 2.0.1 added the deprecation
