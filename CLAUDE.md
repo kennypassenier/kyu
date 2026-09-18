@@ -15,9 +15,9 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | **Mini-round W11 (2026-09-18) built, 3.3.0 unreleased** — `message.expired` once per subscription per `KYU_EXPIRED_EVENT_WINDOW_MS` (a day) with the count since the last one (migration 5), and a startup refusal when `KYU_STATE_DIR` and `KYU_DATA_DIR` disagree (fix-state-1). Found from the HA side: the 2026-09-04→10 flood of 27,991 events looping through Home Assistant, and the empty store the 3.x unit opened on CT 109 on 2026-09-10 (old store untouched at `/appdata/kyu/kyu-config/data/`, tokens gone, handed to Homelab Rust). Both fixes drove red first; gates green |
-| Last completed gate | Mini-round decision form (2026-09-18): hub window 24 h counted · HA throttle 24 h per topic · client tokens → Homelab Rust session. Before that: chassis-rs 2.0.2 bump, released (3.2.1, 2026-09-10) |
-| Next gate | The mini-round report + two correction forms + the release-go for 3.3.0, all in one form (2026-09-18). After the go: `scripts/sign-release.sh v3.3.0` is Kenny's, the CT 109 deploy is Homelab Rust's — and fix-state-1's guard WILL refuse to start there until `kyu.env` drops `KYU_DATA_DIR` (or the store question is settled), which is the measurement. Still open from 3.2.1: v3.2.1 was never signed/deployed (3.2.0 is live); chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk |
-| Next action | waiting on Kenny: the 3.3.0 report/correction/release form of 2026-09-18 |
+| Last completed gate | Mini-round W11 report (2026-09-18): report-hub Akkoord · report-ha Akkoord · fix-events-1 Klopt · fix-state-1 Klopt · release **Later** (3.3.0 stays untagged on main at `927cf1d`) |
+| Next gate | Open form (2026-09-18): `door-import` — the restored SQLite `apps` table is not the door; `clients.json.enc` holds 2 of the 8 live apps because `import_app_tokens` runs only when that file is absent (Kenny chooses: merge-import at every start in 3.3.0 · manual import on CT 109 · six re-issues) — and `kyu-env` — who removes `KYU_DATA_DIR` from CT 109's `kyu.env` before 3.3.0 can start there. Release of 3.3.0 waits for a later go. Still open from 3.2.1: never signed/deployed; chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk |
+| Next action | waiting on Kenny: the door-import / kyu-env form of 2026-09-18, and a later release go for 3.3.0 |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
