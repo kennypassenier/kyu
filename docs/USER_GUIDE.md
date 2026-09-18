@@ -277,6 +277,14 @@ curl "http://hub.lan:8080/t/kyu.events/next?as=ha&envelope=json"
 Events: `message.dead_lettered`, `message.expired`, `subscription.flagged`,
 `subscription.archived`, `subscription.unarchived`.
 
+`message.expired` is rate-limited per subscription (3.3.0): the first expiry
+after a quiet spell is announced immediately, everything that expires inside
+the next `KYU_EXPIRED_EVENT_WINDOW_MS` (a day by default) is only counted,
+and the next event carries that `count`. So `{"count": 6592}` once a day is
+what a subscription nobody polls looks like — not 6,592 events. A consumer
+that turns these into notifications should still keep its own throttle: the
+window is the hub's promise, not the consumer's.
+
 One rule is load-bearing: an event *about* a `kyu.*` topic is logged, never
 republished. Without it, a broken consumer of `kyu.events` dead-letters,
 which emits an event onto the same topic, which dead-letters — a self-sustaining

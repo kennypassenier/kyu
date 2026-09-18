@@ -325,6 +325,15 @@ its knobs. The hub itself still has no config file, and nothing about it
 requires one — "environment only" holds for everything an operator must
 set.
 
+**Amendment (3.3.0, mini-round 2026-09-18):** `KYU_EXPIRED_EVENT_WINDOW_MS`
+joins the hub-wide defaults (W11's announcement window, a day). It is a
+default and not per-subscription policy on purpose: the window guards the
+*consumer* of `kyu.events` against a flood, and that consumer is the same
+for every subscription. Also: `KYU_STATE_DIR` and `KYU_DATA_DIR` naming two
+different directories is now refused at startup (fix-state-1) — the alias
+exists so an old environment file keeps working, not so two files can
+disagree about where the store is.
+
 ## AR7 · Time and identifiers
 
 - Public message id: ULID, generated monotonic-clamped (never behind

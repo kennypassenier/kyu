@@ -79,6 +79,31 @@ impl Fixture {
             .expect("the subscription must exist")
     }
 
+    /// Drains `message.expired` events for `subscription`, returning each
+    /// event's `count` in order; other event kinds are acked and skipped.
+    fn expired_events(&self, subscription: &str) -> Vec<u64> {
+        let mut counts = Vec::new();
+        while let Some(id) = self.claim(EVENTS_TOPIC, subscription) {
+            let payload: Vec<u8> = self
+                .store
+                .with_conn(|conn| {
+                    conn.query_row("SELECT payload FROM messages WHERE id = ?1", [&id], |row| {
+                        row.get(0)
+                    })
+                })
+                .expect("the event payload");
+            let value: serde_json::Value =
+                serde_json::from_slice(&payload).expect("an event is JSON");
+            if value["event"] == "message.expired" {
+                counts.push(value["count"].as_u64().expect("a count"));
+            }
+            self.engine
+                .ack(EVENTS_TOPIC, subscription, &id)
+                .expect("the ack");
+        }
+        counts
+    }
+
     /// Drains the hub's own event topic through a subscription created for
     /// the purpose, returning the event names in order.
     fn event_kinds(&self, subscription: &str) -> Vec<String> {
@@ -417,6 +442,57 @@ fn l6_the_hub_publishes_its_own_events() {
 }
 
 #[test]
+fn l6_w11_expiries_are_announced_once_per_window_with_their_count() {
+    // The 2026-09-04 flood: a subscription with a TTL that nobody polls
+    // saw one `message.expired` per message, because the per-sweep bundle
+    // only merges what expires within the same second. 27,969 of 27,991
+    // events carried count 1 (measured in the CT 109 store, 2026-09-18).
+    let f = fixture();
+    f.bootstrap("notify.kenny", "desktop");
+    f.engine
+        .set_policy(
+            "notify.kenny",
+            "desktop",
+            StoredPolicy {
+                ttl_ms: Some(600_000),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("the policy");
+    f.engine
+        .claim_next(EVENTS_TOPIC, "ha-forwarder", false)
+        .expect("subscribe to the events topic");
+
+    // The first expiry after a quiet spell is announced at once.
+    f.publish("notify.kenny", r#"{"n":1}"#);
+    f.clock.advance(600_000);
+    assert_eq!(f.engine.sweep(100).expect("a sweep").expired, 1);
+    let first = f.expired_events("ha-forwarder");
+    assert_eq!(first, vec![1], "the first expiry is announced immediately");
+
+    // Two more expire inside the window, one sweep apart, like the flood.
+    for n in 2..=3 {
+        f.publish("notify.kenny", &format!(r#"{{"n":{n}}}"#));
+        f.clock.advance(600_000);
+        assert_eq!(f.engine.sweep(100).expect("a sweep").expired, 1);
+    }
+    assert_eq!(
+        f.expired_events("ha-forwarder"),
+        Vec::<u64>::new(),
+        "inside the window the hub counts and stays quiet"
+    );
+
+    // Once the window has passed, one event carries everything since.
+    f.clock.advance(DAY);
+    f.engine.sweep(100).expect("a sweep");
+    assert_eq!(
+        f.expired_events("ha-forwarder"),
+        vec![2],
+        "one event per window, with the count of what expired meanwhile"
+    );
+}
+
+#[test]
 fn l6_events_about_the_events_topic_are_logged_not_republished() {
     let f = fixture();
     // A consumer of the hub's own events that keeps failing.
@@ -486,6 +562,7 @@ fn l6_defaults_are_hub_wide_and_configurable() {
         retention_ms: None,
         idle_flag_ms: 60 * 60 * 1_000,
         idle_archive_ms: 2 * 60 * 60 * 1_000,
+        expired_event_window_ms: Defaults::default().expired_event_window_ms,
     });
     f.bootstrap("notify.kenny", "quick");
 

@@ -157,6 +157,27 @@ Rated Essential by Kenny (above Claude's Desired recommendation) — K6
 and K11 announcements are built on it from the start.
 **Proven by:** event-emitted assertions inside the K6/K11 suites.
 
+**Amendment (mini-round, 2026-09-18) — `message.expired` is announced once
+per subscription per window, not once per sweep.** The original "TTL batch
+expired" bundled what one sweep settled, and a sweep runs every second: a
+subscription nobody polls expires its messages one sweep apart, so each got
+its own event. Measured in the CT 109 store: 27,991 `message.expired`
+events between 2026-09-04 16:18 and 2026-09-10 18:45, 27,969 of them with
+`count` 1, all for `notify.kenny`/`desktop` — and each one became a Home
+Assistant notification that was published back onto `notify.kenny`, a loop
+that only stopped when the store was replaced. Now the subscription keeps
+`expired_announced_at` and `expired_unannounced` (migration 5): the first
+expiry after a quiet spell is announced at once, everything inside the
+window is counted, and the next event carries that count once the window
+(`KYU_EXPIRED_EVENT_WINDOW_MS`, default a day) has passed. Kenny chose the
+day over an hour and over silencing unpolled subscriptions. The event's
+shape is unchanged. Expiries settled from a claimed delivery (the
+re-pend rule) are announced the same way; before this they were counted
+but never announced.
+**Proven by:** `l6_w11_expiries_are_announced_once_per_window_with_their_count`
+(three expiries one sweep apart → one event, then one more with `count` 2
+after the window), `w11_the_expiry_window_takes_a_count_and_refuses_never`.
+
 ### W2 · Shared-token auth *(promoted at the 2026-08-28 mini-round)*
 
 Rated **Later** at the Phase 2 freeze on the reasoning that a LAN-only

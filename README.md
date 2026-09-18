@@ -205,6 +205,7 @@ consumer is an environment variable.
 | `KYU_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
 | `KYU_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
 | `KYU_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
+| `KYU_EXPIRED_EVENT_WINDOW_MS` | `86400000` (1 day) | One `message.expired` event per subscription per window, carrying the count since the previous one; the first after a quiet spell goes out at once. `never` is refused. |
 
 The two idle thresholds are **defaults, not laws** — see below.
 

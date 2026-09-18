@@ -11,6 +11,32 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-09-18
+
+**`message.expired` is announced once per subscription per window** (W11,
+amended by the 2026-09-18 mini-round). It used to be once per sweep, and a
+sweep runs every second: a subscription with a TTL that nobody polls expired
+its messages one sweep apart and got one event each. Measured in the CT 109
+store: 27,991 events between 2026-09-04 and 2026-09-10, 27,969 of them with
+`count` 1, all for one subscription — and each one became a Home Assistant
+notification that was published straight back onto the same topic, which is
+how 15,690 items ended up in a to-do list. The subscription now remembers
+when it last announced and how many expired since (schema migration 5); the
+first expiry after a quiet spell goes out at once, the rest of the window is
+counted, and the next event carries the count. New environment variable
+`KYU_EXPIRED_EVENT_WINDOW_MS`, default `86400000` (a day); `never` is
+refused. The event's shape is unchanged. Expiries settled from a *claimed*
+delivery — the re-pend rule — are announced the same way; before this they
+were counted on the dashboard and never announced at all.
+
+**`KYU_STATE_DIR` and `KYU_DATA_DIR` naming two different directories is
+refused at startup** (fix-state-1). The 3.x unit on CT 109 set
+`KYU_STATE_DIR=/appdata/kyu/kyu-config` while the 2.x environment file still
+said `KYU_DATA_DIR=/appdata/kyu/kyu-config/data`; the new name won silently
+and the hub ran on an empty store from 2026-09-10 until this was found on
+2026-09-18 — every topic and every client token left behind one directory
+down. The refusal names both directories and the three files to move.
+
 ## [3.2.1] - 2026-09-10
 
 chassis-rs 2.0.0 → 2.0.2, both minor: 2.0.1 added the deprecation

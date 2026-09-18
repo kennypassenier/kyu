@@ -244,6 +244,11 @@ pub struct Defaults {
     pub idle_flag_ms: Millis,
     /// Idle time before it is archived and stops accumulating (K11).
     pub idle_archive_ms: Millis,
+    /// How long one `message.expired` announcement stands for a
+    /// subscription before the next one may go out (W11, amended
+    /// 2026-09-18). A day: one line with a count says what a subscriber
+    /// needs to know, and a subscription nobody polls expires everything.
+    pub expired_event_window_ms: Millis,
 }
 
 impl Default for Defaults {
@@ -252,6 +257,7 @@ impl Default for Defaults {
             retention_ms: Some(7 * 24 * 60 * 60 * 1_000),
             idle_flag_ms: 7 * 24 * 60 * 60 * 1_000,
             idle_archive_ms: 30 * 24 * 60 * 60 * 1_000,
+            expired_event_window_ms: 24 * 60 * 60 * 1_000,
         }
     }
 }
@@ -778,41 +784,45 @@ impl Engine {
                         )?;
                         report.wake_events(woken);
                     }
-                    Settled::Expired => report.expired += 1,
+                    Settled::Expired => {
+                        report.expired += 1;
+                        queries::note_expiry(tx, delivery.sub_id, 1)?;
+                    }
                     Settled::Unchanged => {}
                 }
             }
 
             // A pending message past its TTL never had a chance to fail, so
             // its attempt count stays as it is.
-            let mut expired_by_subscription: Vec<(String, String)> = Vec::new();
             for delivery in stale {
                 if queries::mark_expired(tx, delivery.msg_seq, delivery.sub_id, now)? {
                     report.expired += 1;
-                    expired_by_subscription
-                        .push((delivery.topic.clone(), delivery.subscription.clone()));
+                    queries::note_expiry(tx, delivery.sub_id, 1)?;
                 }
             }
-            // One event per subscription rather than per message: a TTL sweep
-            // can settle hundreds at once, and a flood of events is its own
-            // kind of silence.
-            expired_by_subscription.sort();
-            let mut counted: Vec<(String, String, usize)> = Vec::new();
-            for pair in expired_by_subscription {
-                match counted.last_mut() {
-                    Some(last) if last.0 == pair.0 && last.1 == pair.1 => last.2 += 1,
-                    _ => counted.push((pair.0, pair.1, 1)),
-                }
-            }
-            for (topic, subscription, count) in counted {
+            // One event per subscription per WINDOW, carrying the count since
+            // the last one (W11, amended 2026-09-18). It used to be one per
+            // subscription per sweep, which was the right idea on the wrong
+            // time scale: a subscription nobody polls expires its messages
+            // one sweep apart, so the CT 109 store held 27,991 events of
+            // which 27,969 carried count 1 — each one a Home Assistant
+            // notification, each of those a new message on the same topic.
+            // The first expiry after a quiet spell still goes out at once.
+            for due in queries::expiry_announcements_due(
+                tx,
+                now,
+                self.defaults.expired_event_window_ms,
+                batch_limit,
+            )? {
+                queries::mark_expiries_announced(tx, due.sub_id, now)?;
                 let woken = events::emit(
                     tx,
                     &mut ids,
                     now,
                     &Event::Expired {
-                        topic,
-                        subscription,
-                        count,
+                        topic: due.topic,
+                        subscription: due.subscription,
+                        count: due.count,
                     },
                 )?;
                 report.wake_events(woken);

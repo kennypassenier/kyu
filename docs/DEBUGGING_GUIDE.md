@@ -26,7 +26,8 @@ Payloads and tokens are in none of them except the dashboard, on purpose.
 | `404` on receive, `topic … does not exist` | Nothing has ever published there. Topics are created by publishing, not by polling. | `curl -s $HUB/ ` — the topic is absent from the index. | Publish once. Check the spelling against the index. |
 | `404` on ack, `subscription … does not exist` | Typo in `as=`, or you acked under a different name than you received with. | The dashboard lists the subscriptions that do exist. | Use the exact name from the dashboard. |
 | Consumer sees nothing, siblings do | This subscription is **archived** (30 quiet days). | Dashboard shows state `archived`. `kyu.events` has a `subscription.archived` for it. | `POST …/unarchive`, then raise its idle thresholds so it does not recur. The old backlog is gone — it lapsed, by design. |
-| Messages appear then vanish | Retention collected them (7 days default) — but only ones no active or flagged subscription still needed. | `kyu.events` has `message.expired`; `kyu_messages` dropped. | Raise `retention_ms` for that topic, or `"never"`. |
+| Messages appear then vanish | Retention collected them (7 days default) — but only ones no active or flagged subscription still needed. | The log says `retention collected messages` (retention is logged, never published on `kyu.events`); `kyu_messages` dropped. | Raise `retention_ms` for that topic, or `"never"`. |
+| One `message.expired` a day with a large `count` | A subscription with a TTL that nobody polls: every message expires. Since 3.3.0 the hub announces this once per `KYU_EXPIRED_EVENT_WINDOW_MS`, with the count. | Dashboard: that subscription's `last_poll_at` is old and its backlog is 0 while `expired` climbs. | Start the consumer, raise its `ttl_ms`, or archive the subscription. |
 
 ## The same message keeps coming back
 

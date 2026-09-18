@@ -28,6 +28,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_2_EVENTS_TOPIC,
     MIGRATION_3_PER_SUBSCRIPTION_IDLE,
     MIGRATION_4_APPS,
+    MIGRATION_5_EXPIRY_ANNOUNCEMENTS,
 ];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
@@ -132,6 +133,17 @@ CREATE TABLE apps (
 ) STRICT;
 
 CREATE UNIQUE INDEX apps_live_name ON apps (name) WHERE revoked_at IS NULL;
+"#;
+
+/// W11, amended 2026-09-18: `message.expired` is announced once per
+/// subscription per window rather than once per sweep, so the subscription
+/// remembers when it last announced and how many expired since. Kept in the
+/// store rather than in memory so a restart cannot lose a count or repeat an
+/// announcement — events are written in the transaction that caused them,
+/// and this state belongs to the same transaction.
+const MIGRATION_5_EXPIRY_ANNOUNCEMENTS: &str = r#"
+ALTER TABLE subscriptions ADD COLUMN expired_announced_at INTEGER;
+ALTER TABLE subscriptions ADD COLUMN expired_unannounced INTEGER NOT NULL DEFAULT 0;
 "#;
 
 /// Brings `conn` up to the current schema version, returning it.

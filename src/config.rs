@@ -153,6 +153,10 @@ impl Config {
                 Some(defaults.idle_archive_ms),
             )?
             .unwrap_or(defaults.idle_archive_ms),
+            expired_event_window_ms: expired_event_window(
+                std::env::var("KYU_EXPIRED_EVENT_WINDOW_MS").ok().as_deref(),
+                defaults.expired_event_window_ms,
+            )?,
         };
         Ok(Self {
             data_dir: state_dir.to_path_buf(),
@@ -163,11 +167,36 @@ impl Config {
     }
 }
 
+/// `KYU_EXPIRED_EVENT_WINDOW_MS` (W11, amended 2026-09-18): how long one
+/// `message.expired` announcement stands for a subscription. `never` is
+/// refused here, unlike the other durations: a window that never closes
+/// would announce the first expiry and then nothing, for ever.
+fn expired_event_window(raw: Option<&str>, fallback: i64) -> Result<i64> {
+    match duration_from_value("KYU_EXPIRED_EVENT_WINDOW_MS", raw, Some(fallback))? {
+        Some(window) => Ok(window),
+        None => bail!(
+            "KYU_EXPIRED_EVENT_WINDOW_MS is \"never\", which would announce the \
+             first expired message and then never another. Set a millisecond \
+             count (86400000 is a day); 1 announces every sweep."
+        ),
+    }
+}
+
 /// Reads a millisecond duration from the environment. The literal `never`
 /// means "no limit" — spelled out rather than encoded as 0, which would read
 /// like "immediately" to anyone skimming the compose file.
 fn duration_from_env(name: &str, fallback: Option<i64>) -> Result<Option<i64>> {
-    let Some(raw) = std::env::var(name).ok() else {
+    duration_from_value(name, std::env::var(name).ok().as_deref(), fallback)
+}
+
+/// [`duration_from_env`] with the raw value passed in, so tests never
+/// mutate the process environment.
+fn duration_from_value(
+    name: &str,
+    raw: Option<&str>,
+    fallback: Option<i64>,
+) -> Result<Option<i64>> {
+    let Some(raw) = raw else {
         return Ok(fallback);
     };
     if raw.eq_ignore_ascii_case("never") {
@@ -240,6 +269,27 @@ mod tests {
             format!("{error:#}").contains("door open"),
             "says what is actually wrong"
         );
+    }
+
+    #[test]
+    fn w11_the_expiry_window_takes_a_count_and_refuses_never() {
+        let day = 24 * 60 * 60 * 1_000;
+        assert_eq!(
+            expired_event_window(None, day).expect("absent means the default"),
+            day
+        );
+        assert_eq!(
+            expired_event_window(Some("3600000"), day).expect("an hour"),
+            3_600_000
+        );
+        let error = expired_event_window(Some("never"), day)
+            .expect_err("a window that never closes announces once and then nothing");
+        assert!(
+            format!("{error:#}").contains("86400000"),
+            "carries a remedy with a usable value: {error:#}"
+        );
+        let error = expired_event_window(Some("0"), day).expect_err("zero is not a duration");
+        assert!(format!("{error:#}").contains("positive"), "{error:#}");
     }
 
     #[test]
