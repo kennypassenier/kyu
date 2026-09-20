@@ -37,8 +37,16 @@ call.
    gh release download v3.0.0 -R kennypassenier/kyu -p kyu -p SHA256SUMS -p SHA256SUMS.minisig
    minisign -Vm SHA256SUMS -P "$(cat RELEASE_PUBKEY)" && sha256sum -c SHA256SUMS
    scp kyu root@<proxmox>:/tmp/kyu
-   ssh root@<proxmox> 'pct exec 109 -- install -d /opt/kyu/bin && pct push 109 /tmp/kyu /opt/kyu/bin/kyu --perms 755'
+   ssh root@<proxmox> 'pct exec 109 -- install -d -o kyu -g kyu /opt/kyu/bin && pct push 109 /tmp/kyu /opt/kyu/bin/kyu --perms 755 --user kyu --group kyu'
    ```
+   The `kyu` user from step 2 must exist before this push. Ownership is set
+   in the same command on purpose: a push without `--user kyu --group kyu`
+   leaves the binary `root:root` in a kyu-owned directory, and that does not
+   fail here — it fails weeks later, at the next `kyu update`, with `cannot
+   keep the previous binary … Operation not permitted` and a kit message
+   that blames directory permissions (CT 109, 2026-09-19/20; the homelab
+   register's fix-21). Verify: `pct exec 109 -- stat -c '%U:%G %n' /opt/kyu/bin/kyu`
+   must say `kyu:kyu`.
    The homelab does the same with `homelab install-native kyu` once the stack
    file (`deploy/service.yml`) is adopted; from then on updates go through
    `kyu update` (see §4).

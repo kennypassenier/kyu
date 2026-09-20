@@ -8,10 +8,13 @@
 # the binary's directory too, or self-update verifies, downloads and then
 # fails at the swap.
 #
-# Install: install -D -m755 kyu /opt/kyu/bin/kyu (the
-# service owns that directory: chown -R kyu: /opt/kyu), copy
-# this file to /etc/systemd/system/kyu.service, create the user
-# (kyu), the state dir (/appdata/kyu/kyu-config) and the env file
+# Install: create the user (kyu) first, then
+# install -D -m755 -o kyu -g kyu kyu /opt/kyu/bin/kyu — owner set in the
+# same command, never as a second line: a root-owned binary in the
+# service's directory breaks the next update's rollback copy, not this
+# install (2026-09-20). Copy this file to
+# /etc/systemd/system/kyu.service, create the state dir
+# (/appdata/kyu/kyu-config) and the env file
 # (/appdata/kyu/kyu-config/kyu.env, 0640 root:kyu), then
 # systemctl enable --now kyu.
 
