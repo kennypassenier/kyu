@@ -196,3 +196,18 @@ the live-store run as the weaker confirmation ("store OK … (schema 5,
 current)", exit 0, mtime unchanged). Homelab Rust runs all three at the
 3.5.0 deploy.
 
+**Measurement DONE 2026-09-20 ~20:40 UTC (Homelab Rust at the 3.5.0 deploy;
+verified from this session at 20:50).** Step 1, on a copy of the schema-4
+`data/kyu.db` as the `kyu` user: `user_version` 4 before, output "store at
+/tmp/s4/kyu.db is readable and intact: schema 4, this binary knows 5 — the
+migration runs at start, after a snapshot; --check applies nothing", exit 0,
+`user_version` 4 after, mtime 2026-09-10T18:52:18Z unchanged, no
+`kyu.pre-v*.db` created — the run that migrated under 3.4.0 did not. Step 2:
+the fix-state-1 guard still refuses with `KYU_DATA_DIR` set. Step 3, live
+store: "store OK … (schema 5, current)", `user_version` 5 before and after,
+mtime identical to the nanosecond. After the swap: kyu 3.5.0 ok since
+20:41:46 UTC, no degraded window on runner or switchboard this time, zero
+401. From here: `data/kyu.db` still reads `user_version` 4 (the copy source
+is intact) and the only `kyu.pre-v*.db` in the state dir is the one the
+3.3.0 drill left at 19:21. Loop closed.
+
