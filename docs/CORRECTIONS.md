@@ -44,6 +44,9 @@ form Kenny answers is the summary, this is the record.
    after 2026-09-21 19:30 UTC. One `message.expired` was published at the
    restart itself (the backlog of the `desktop` subscription), which is the
    first-after-a-quiet-spell case, not a count against the window.
+   Live so far (verified 2026-09-20 20:00 UTC): exactly one announcement at
+   19:32:20 UTC, `expired_announced_at` set on `notify.kenny`/`desktop`,
+   `expired_unannounced` 2 — the hub is counting, not announcing.
 8. **Fallback if the measurement fails.** `KYU_EXPIRED_EVENT_WINDOW_MS` is
    read at start; the HA-side throttle (24 h per topic in
    `automation.hub_kyu_events_webhook`) holds the to-do list regardless.
