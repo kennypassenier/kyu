@@ -14,10 +14,10 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **v3.3.0 released to GitHub 2026-09-20** (tag `v3.3.0` = `8af266b`): `message.expired` once per subscription per `KYU_EXPIRED_EVENT_WINDOW_MS` (a day) with the count since the last one (migration 5), a startup refusal when `KYU_STATE_DIR` and `KYU_DATA_DIR` disagree (fix-state-1), rustls 0.23.45. Asset verified (`SHA256SUMS`, `--version`, `ldd`). NOT yet signed, NOT yet on CT 109 (3.2.1 runs there with the restored store and a full door since 2026-09-20) |
+| Current phase | **3.4.0 built, tagging after green CI** (Kenny's go of 2026-09-20): the 2.x `apps` table merged into `clients.json.enc` at every start, by name (K2-1 amended; `tests/door_import.rs` red first). On top of **v3.3.0** (released 2026-09-20, tag `8af266b`): the W11 expiry window, the fix-state-1 guard, rustls 0.23.45. Neither is signed or on CT 109 yet (3.2.1 runs there with the restored store and a full door) |
 | Last completed gate | Release go for 3.3.0 (2026-09-20, report form re-answered): tagged and published. Before that: mini-round W11 report (2026-09-18), both reports Akkoord, both corrections Klopt |
-| Next gate | Open form item (2026-09-20): `merge-import` — does kyu gain an idempotent, name-based import of the 2.x `apps` table into `clients.json.enc` at every start (would be 3.4.0 now that 3.3.0 is tagged), later as a mini-round, or not at all. Then Kenny-only: `scripts/sign-release.sh v3.3.0`; Homelab Rust: the CT 109 deploy with the fix-state-1 drill (`kyu --check` with `KYU_DATA_DIR=…/data` added must refuse, the plain one must pass), after which fix-events-1's measurement (≤ 1 `event=message.expired` per subscription per day in the journal) can run. Still open from before: chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk |
-| Next action | waiting on Kenny: the merge-import answer (form of 2026-09-20) and `scripts/sign-release.sh v3.3.0` |
+| Next gate | Kenny-only: `scripts/sign-release.sh v3.4.0` (3.3.0 needs no separate signature if 3.4.0 supersedes it). Homelab Rust: the CT 109 deploy with the fix-state-1 drill (`kyu --check` with `KYU_DATA_DIR=…/data` added must refuse, the plain one must pass); the merge-import then proves itself by importing nothing (all 8 already in the door — the journal line says 0) and fix-events-1's measurement runs over the first day. Still open from before: chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk |
+| Next action | waiting on Kenny: `scripts/sign-release.sh v3.4.0` once the tag is out |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)

@@ -102,5 +102,7 @@ UUIDs, and an id-based dedup offered to re-add the two working services;
 `clients.json.enc` about once a minute (`last_used_at`/`uses`), so an
 outside write is clobbered; (3) a write as root leaves the file root-owned
 and kyu refuses to start with `cannot read clients store … Permission
-denied` until `chown kyu:kyu`. Whether kyu itself gains an idempotent
-merge-import is Kenny's open choice.
+denied` until `chown kyu:kyu`. Decided by Kenny on 2026-09-20 ("ja,
+merge-import"): kyu 3.4.0 imports the table at every start, by name,
+skipping names that already hold a live token — `src/kit.rs`, proven by
+`tests/door_import.rs` (red first).

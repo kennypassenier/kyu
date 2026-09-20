@@ -253,6 +253,16 @@ already prints one when refusing to start on a token without a key — ready
 to paste into the compose file. Proven in `tests/p7_auth.rs`, shown red
 against the pre-fix code before being trusted.
 
+
+**Amendment (3.4.0, mini-round 2026-09-20) — the 2.x `apps` table is merged
+into the kit's client store at every start, by name.** K2-1's one-time
+import ran only while `clients.json.enc` was absent; a restored store with
+apps the door had never seen (CT 109, 2026-09-18) therefore stayed locked
+out. Now every live app whose name has no live client in the door is added,
+nothing present is touched, and a revoked row does not block re-adoption.
+**Proven by:** `door_import_adds_the_apps_missing_by_name_to_an_existing_client_store`,
+`door_import_ignores_a_revoked_row_with_the_same_name` (both drove red with
+`left: 0, right: 1` before the fix).
 ### W12 · Graceful shutdown on SIGTERM *(added at the 2026-09-02 mini-round)*
 
 Did not exist at the Phase 2 freeze and was never missed, because

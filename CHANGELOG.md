@@ -11,6 +11,21 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-09-20
+
+**The 2.x `apps` table is imported into the kit's client store at every
+start, by name** (K2-1 amended; Kenny's mini-round answer of 2026-09-20). It
+used to run once, and only while `clients.json.enc` did not exist. On CT 109
+the restored store (2026-09-18) brought eight apps back while the door —
+created a week earlier by the first `chassis clients issue` against an empty
+store — held two, so the import skipped and six services stayed at 401 until
+a hand-run tool adopted them. Now every live app whose name has no client
+with a token in the door is added; everything already there is left as it
+is; a revoked row (same name, no token) does not block re-adoption; a start
+that finds nothing missing writes nothing. Matching is on the NAME because
+clients the kit issues carry UUID ids, not `app-<name>`. No change to the
+HTTP contract or the environment variables.
+
 ## [3.3.0] - 2026-09-20
 
 **`message.expired` is announced once per subscription per window** (W11,

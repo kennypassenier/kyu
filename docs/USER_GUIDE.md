@@ -301,6 +301,10 @@ message generator.
 See the README's "The door" section for setup. In daily use:
 
 - Scripts send `-H 'authorization: Bearer <token>'`.
+- Tokens issued by a 2.x hub (the `apps` table) keep working: at every
+  start the hub copies every live app whose name is not yet in the kit's
+  client store into it, unchanged (3.4.0; before that only once, on the
+  first 3.x start). A restored 2.x store therefore needs no re-issuing.
 - You log in at `/login` with a remember-me box, and log out from the navbar.
 - **Apps** in the navigation (`/clients`; the old `/apps` address still
   gets you there) registers an app and generates a token for it; revoking

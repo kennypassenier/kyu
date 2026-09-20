@@ -151,16 +151,18 @@ async fn main() -> ExitCode {
         config.auth.clone(),
     );
     mount(&mut app, state.clone(), engine.clone(), heartbeat.clone());
-    // K2-1 (2026-09-06): the kit owns the clients now. The app tokens 2.x
-    // issued keep working because they are copied, unchanged, into the kit's
-    // store the first time this version starts — kyu-runner and newsflash
-    // never notice. The 2.x `apps` table stays behind as history.
+    // K2-1 (2026-09-06, amended 2026-09-20): the kit owns the clients now.
+    // The app tokens 2.x issued keep working because every start copies the
+    // ones whose name is not in the kit's store yet, unchanged — kyu-runner
+    // and newsflash never notice. The 2.x `apps` table stays behind as
+    // history; a restored store with apps the door has never seen is the
+    // case this exists for (fix-state-1 follow-up).
     if let (Some(key), Some(hex)) = (config.auth.key(), secret_hex.as_deref()) {
         match import_app_tokens(&state_dir, &engine, key, hex) {
             Ok(0) => {}
             Ok(count) => eprintln!(
-                "kyu: imported {count} app token(s) from 2.x into the kit's client store; \
-                 every existing token keeps working"
+                "kyu: imported {count} app token(s) from the 2.x apps table into the kit's \
+                 client store (missing by name); every existing token keeps working"
             ),
             Err(e) => {
                 eprintln!("kyu: {e:#}");
