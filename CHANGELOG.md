@@ -11,7 +11,7 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
-## [3.3.0] - 2026-09-18
+## [3.3.0] - 2026-09-20
 
 **`message.expired` is announced once per subscription per window** (W11,
 amended by the 2026-09-18 mini-round). It used to be once per sweep, and a
