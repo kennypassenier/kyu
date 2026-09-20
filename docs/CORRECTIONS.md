@@ -178,6 +178,21 @@ skipping names that already hold a live token — `src/kit.rs`, proven by
 before the migrating path in `src/main.rs`; `tests/fix_check_1.rs` drove red
 first (the check migrated and created the store) and is green. Ships as
 3.5.0. Measurement (field 7) stays OPEN until the first CT 109 deploy of a
-release carrying it, where Homelab Rust runs `--check` against the live
-store and no `kyu.pre-v*.db` appears.
+release carrying it.
+
+**Field 7 restated 2026-09-20 20:40 UTC, before it ran** (Homelab Rust
+caught it): the live store on CT 109 is already at schema 5, so a `--check`
+against it could never have migrated anything — 3.4.0 would pass that test
+too. An assertion that cannot fail proves nothing (the Phase 7 rule). The
+store that CAN fail it sits in the same container: the pre-split
+`/appdata/kyu/kyu-config/data/kyu.db` is still at schema 4, never opened by
+a 3.x binary. The measurement is therefore: (1) copy `data/kyu.db` with its
+`-wal` and `-shm` to a scratch dir owned by `kyu`; (2) as `kyu`, run 3.5.0's
+`--check` with `--state-dir` on the copy — it must report the pending
+migration, exit 0, and leave the copy at `user_version` 4 with no
+`kyu.pre-v*.db` beside it (the `user_version` before and after is the
+evidence, not the exit code, which looked fine last time too); (3) only then
+the live-store run as the weaker confirmation ("store OK … (schema 5,
+current)", exit 0, mtime unchanged). Homelab Rust runs all three at the
+3.5.0 deploy.
 
