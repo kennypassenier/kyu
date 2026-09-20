@@ -170,3 +170,11 @@ skipping names that already hold a live token — `src/kit.rs`, proven by
 9. **When we review the measure.** At 4.0, when the migration set is
    revisited with the alias removal.
 
+**Kenny: Klopt (2026-09-20). Built the same evening** — `Store::inspect`
+(read-only open, `quick_check(1)`, `migrations::pending`), `--check` returns
+before the migrating path in `src/main.rs`; `tests/fix_check_1.rs` drove red
+first (the check migrated and created the store) and is green. Ships as
+3.5.0. Measurement (field 7) stays OPEN until the first CT 109 deploy of a
+release carrying it, where Homelab Rust runs `--check` against the live
+store and no `kyu.pre-v*.db` appears.
+

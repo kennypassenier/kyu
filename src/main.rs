@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use chassis::{App, AppSpec};
+use chassis::{App, AppSpec, Control};
 use kyu::config::Config;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
@@ -27,7 +27,9 @@ const HELP_EXTRA: &str = "The hub's own environment (read next to the knobs abov
   KYU_IDLE_ARCHIVE_MS  idle-subscription archive threshold in ms
   KYU_EXPIRED_EVENT_WINDOW_MS  one message.expired per subscription per this many ms (default a day)
   KYU_DATA_DIR         the 2.x name of KYU_STATE_DIR; still honoured, with a warning
-Long polls (`GET /t/{topic}/next?wait=`) are exempt from the request timeout.";
+Long polls (`GET /t/{topic}/next?wait=`) are exempt from the request timeout.
+--check reads the store (quick_check, schema) and writes nothing: a pending migration is
+reported, and applied only at start, after a snapshot.";
 
 /// The 2.x `KYU_DATA_DIR` still steers the state root when `KYU_STATE_DIR`
 /// is absent; the returned value is the legacy directory to honour, or
@@ -114,11 +116,31 @@ async fn main() -> ExitCode {
         }
     };
 
+    // `--check` reads the store and writes nothing (fix-check-1). It used to
+    // open the store through the same path as a start, which migrates — and
+    // on CT 109 the fix-state-1 drill, run as root, migrated the live store
+    // and left a root-owned snapshot behind. The kit's self-update runs
+    // `<staging> --check` before the swap, so a check that writes would move
+    // the schema forward before the new binary is even in place.
+    if matches!(app.control, Some(Control::Check)) {
+        let inspection = match Store::inspect(&config.data_dir) {
+            Ok(inspection) => inspection,
+            Err(e) => {
+                eprintln!("kyu: {e:#}");
+                return ExitCode::FAILURE;
+            }
+        };
+        app.on_check(move || {
+            println!("{}", inspection.describe());
+            Ok(())
+        });
+        return app.run().await;
+    }
+
     // Opening the store migrates it forward, snapshotting first if there is
     // anything to lose (AR10). Failing here is correct: serving requests
     // without somewhere durable to put them would break K1's promise that a
-    // confirmed publish is a kept one. `--check` opens it too: a store that
-    // will not open is exactly what a pre-start check exists to catch.
+    // confirmed publish is a kept one.
     let store = match Store::open(&config.data_dir) {
         Ok(store) => Arc::new(store),
         Err(e) => {
@@ -127,10 +149,6 @@ async fn main() -> ExitCode {
         }
     };
     let store_for_flush = store.clone();
-    let store_path = store
-        .path()
-        .map(|path| path.display().to_string())
-        .unwrap_or_default();
 
     let clock = SystemClock;
     let heartbeat = Heartbeat::starting_at(clock.now_ms());
@@ -139,11 +157,6 @@ async fn main() -> ExitCode {
         Arc::new(clock),
         config.defaults,
     ));
-    app.on_check(move || {
-        println!("store OK at {store_path}");
-        Ok(())
-    });
-
     let state = AppState::with_auth(
         engine.clone(),
         Limits::from_config(&config),

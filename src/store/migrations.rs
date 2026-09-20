@@ -146,6 +146,43 @@ ALTER TABLE subscriptions ADD COLUMN expired_announced_at INTEGER;
 ALTER TABLE subscriptions ADD COLUMN expired_unannounced INTEGER NOT NULL DEFAULT 0;
 "#;
 
+/// Where a store stands against this binary: its schema version and the
+/// one the binary knows. Read-only; a store written by a newer kyu is
+/// refused here with the same remedy `migrate` gives (fix-check-1: this is
+/// what `--check` asks, and it must not be the migrating path).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pending {
+    pub current: u32,
+    pub target: u32,
+}
+
+impl Pending {
+    pub fn is_behind(&self) -> bool {
+        self.current < self.target
+    }
+}
+
+pub fn pending(conn: &Connection) -> Result<Pending> {
+    let current: u32 = conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .context("cannot read the schema version (PRAGMA user_version)")?;
+    let target = MIGRATIONS.len() as u32;
+    if current > target {
+        bail!("{}", newer_store_message(current, target));
+    }
+    Ok(Pending { current, target })
+}
+
+fn newer_store_message(current: u32, target: u32) -> String {
+    format!(
+        "this store was written by a newer kyu: schema version {current}, \
+         but this binary knows version {target}. Roll back to the newer image, \
+         or restore the snapshot this version's migration wrote \
+         (kyu.pre-v*.db in the data directory). kyu never downgrades a \
+         schema, because guessing at an unknown layout risks the messages in it."
+    )
+}
+
 /// Brings `conn` up to the current schema version, returning it.
 pub fn migrate(conn: &mut Connection, snapshot_dir: Option<&Path>) -> Result<u32> {
     migrate_with(conn, MIGRATIONS, snapshot_dir)
@@ -165,13 +202,7 @@ pub fn migrate_with(
     let target = migrations.len() as u32;
 
     if current > target {
-        bail!(
-            "this store was written by a newer kyu: schema version {current}, \
-             but this binary knows version {target}. Roll back to the newer image, \
-             or restore the snapshot this version's migration wrote \
-             (kyu.pre-v*.db in the data directory). kyu never downgrades a \
-             schema, because guessing at an unknown layout risks the messages in it."
-        );
+        bail!("{}", newer_store_message(current, target));
     }
 
     if current == target {

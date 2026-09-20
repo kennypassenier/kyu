@@ -11,6 +11,22 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-09-20
+
+**`--check` reads the store and writes nothing** (fix-check-1, Kenny's
+"Klopt" of 2026-09-20). It used to open the store through the same path as
+a start, which migrates: on CT 109 the fix-state-1 drill ran `kyu --check`
+as root against the live store, applied migration 5 before the service had
+started and left a root-owned `kyu.pre-v4.db` behind. The kit's self-update
+runs `<staging> --check` before every swap, so that path would have moved
+the schema forward under the old binary too. Now `--check` opens the store
+read-only, runs `PRAGMA quick_check(1)`, reads the schema version and says
+"schema N, this binary knows M — the migration runs at start, after a
+snapshot"; a damaged store or one written by a newer kyu still fails the
+check; a state directory with no store yet passes and nothing is created.
+Proven on the real binary by `tests/fix_check_1.rs` (red first). No change
+to the HTTP contract or the environment variables.
+
 ## [3.4.0] - 2026-09-20
 
 **The 2.x `apps` table is imported into the kit's client store at every

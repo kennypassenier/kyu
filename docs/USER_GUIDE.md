@@ -314,6 +314,13 @@ See the README's "The door" section for setup. In daily use:
   puts the whole command on your clipboard without displaying it; *Reveal*
   shows it for ten seconds.
 
+`kyu --check` (the unit's `ExecStartPre`, and what the self-update runs on a
+staged binary) reads the store and writes nothing (3.5.0): it opens the
+file read-only, runs `quick_check`, and reports the schema — "schema 4,
+this binary knows 5 — the migration runs at start, after a snapshot". A
+damaged store, or one written by a newer kyu, fails the check; a state
+directory with no store yet passes.
+
 A hub with no token configured does not start (since 3.0.0): `--check`
 names `KYU_TOKEN` and `KYU_SECRET_KEY` and refuses, so a lost environment
 file is an error at the door, never an open hub.
