@@ -37,7 +37,13 @@ form Kenny answers is the summary, this is the record.
    after 3.3.0 is live with a polled-by-nobody subscription: the hub
    journal shows at most one `hub event published` with
    `event=message.expired` per subscription per day. Queued in
-   `CLAUDE.md` under mini-rounds.
+   `CLAUDE.md` under mini-rounds. 3.3.0 went live 2026-09-20 19:23 UTC;
+   the window starts at 19:30 UTC (Homelab Rust measured both runner and
+   switchboard `degraded` for seconds right after the restart — a sample
+   taken then describes the restart, not the steady state) and is read
+   after 2026-09-21 19:30 UTC. One `message.expired` was published at the
+   restart itself (the backlog of the `desktop` subscription), which is the
+   first-after-a-quiet-spell case, not a count against the window.
 8. **Fallback if the measurement fails.** `KYU_EXPIRED_EVENT_WINDOW_MS` is
    read at start; the HA-side throttle (24 h per topic in
    `automation.hub_kyu_events_webhook`) holds the to-do list regardless.
@@ -85,6 +91,22 @@ form Kenny answers is the summary, this is the record.
    store at `data/` is untouched either way.
 9. **When we review the measure.** At 4.0, when the alias is removed and
    the guard goes with it.
+
+**Measurement DONE 2026-09-20 19:21 UTC (Homelab Rust, at the 3.3.0 deploy
+on CT 109; verified from this session at 19:40).** With
+`KYU_DATA_DIR=/appdata/kyu/kyu-config/data` added to the unit's
+environment, `kyu --check` exited 1 naming both directories and the three
+files to move; without it: `store OK at /appdata/kyu/kyu-config/kyu.db`,
+`configuration ok`, exit 0. After the swap: `/healthz` 3.3.0 ok, 8 clients
+in the door, journal since the restart 134× 204, 56× 200, 5× 201, zero
+401. Loop closed. Two things seen on the way, neither this correction's:
+the deploy first failed on a root-owned binary in the kyu-owned
+`/opt/kyu/bin` (`cannot keep the previous binary … Operation not
+permitted`) with a kit message that blames directory permissions — a
+chassis-rs finding, queued for relay in CLAUDE.md; and the drill's
+`--check` as root migrated the store to schema 5 and left
+`kyu.pre-v4.db` root-owned in the state dir (removal later works, the
+directory is kyu's — but a `--check` that writes is worth a look at 4.0).
 
 **Follow-up 2026-09-20 — the door, closed by hand.** The restored store
 did not restore the door (kyu 3.x reads `clients.json.enc`, and
