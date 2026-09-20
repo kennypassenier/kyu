@@ -14,8 +14,8 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **3.4.0 built, tagging after green CI** (Kenny's go of 2026-09-20): the 2.x `apps` table merged into `clients.json.enc` at every start, by name (K2-1 amended; `tests/door_import.rs` red first). On top of **v3.3.0** (released 2026-09-20, tag `8af266b`): the W11 expiry window, the fix-state-1 guard, rustls 0.23.45. Neither is signed or on CT 109 yet (3.2.1 runs there with the restored store and a full door) |
-| Last completed gate | Release go for 3.3.0 (2026-09-20, report form re-answered): tagged and published. Before that: mini-round W11 report (2026-09-18), both reports Akkoord, both corrections Klopt |
+| Current phase | **v3.4.0 released to GitHub 2026-09-20** (tag `v3.4.0` = `e03a2a7`, asset verified): the 2.x `apps` table merged into `clients.json.enc` at every start, by name (K2-1 amended, `tests/door_import.rs` red first). Supersedes v3.3.0 (same day): the W11 expiry window, the fix-state-1 guard, rustls 0.23.45. NOT signed, NOT on CT 109 yet (3.2.1 runs there with the restored store and a full door) |
+| Last completed gate | Mini-round merge-import (2026-09-20): "ja" → built and released as 3.4.0 under the same "tag after green CI" go. Before that: release go for 3.3.0 (2026-09-20), mini-round W11 report (2026-09-18) |
 | Next gate | Kenny-only: `scripts/sign-release.sh v3.4.0` (3.3.0 needs no separate signature if 3.4.0 supersedes it). Homelab Rust: the CT 109 deploy with the fix-state-1 drill (`kyu --check` with `KYU_DATA_DIR=…/data` added must refuse, the plain one must pass); the merge-import then proves itself by importing nothing (all 8 already in the door — the journal line says 0) and fix-events-1's measurement runs over the first day. Still open from before: chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk |
 | Next action | waiting on Kenny: `scripts/sign-release.sh v3.4.0` once the tag is out |
 | AFK mode | off |
