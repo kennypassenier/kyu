@@ -72,11 +72,35 @@ form Kenny answers is the summary, this is the record.
 6. **Who or what enforces it.** Code-enforced: unit test beside the code
    (`fix_state_1_two_state_roots_that_disagree_refuse_to_start`, commit
    subset), drove red before the fix.
-7. **How we measure that it works, and when.** At the 3.3.0 deploy on
-   CT 109, BEFORE the store question is settled: `kyu --check` with the
-   unit's environment must refuse while `kyu.env` still carries
-   `KYU_DATA_DIR`. Queued in `CLAUDE.md`.
+7. **How we measure that it works, and when.** Restated 2026-09-20: the
+   `KYU_DATA_DIR` line left `kyu.env` on 2026-09-19 (verified from this
+   session on 2026-09-20: the file carries only `KYU_TOKEN`,
+   `KYU_SECRET_KEY`, `KYU_LISTEN`, `KYU_LOG`), so the original moment can
+   no longer occur by itself. The measurement is now a deliberate drill at
+   the 3.3.0 deploy on CT 109: run `kyu --check` once with
+   `KYU_DATA_DIR=/appdata/kyu/kyu-config/data` added to the unit's
+   environment and expect the refusal naming both directories; then the
+   normal `--check` must pass. Queued in `CLAUDE.md`.
 8. **Fallback if the measurement fails.** The deploy stops there; the old
    store at `data/` is untouched either way.
 9. **When we review the measure.** At 4.0, when the alias is removed and
    the guard goes with it.
+
+**Follow-up 2026-09-20 — the door, closed by hand.** The restored store
+did not restore the door (kyu 3.x reads `clients.json.enc`, and
+`import_app_tokens` runs only when that file is absent). Homelab Rust
+adopted the four missing apps (ha, newsflash, radarr, sonarr) into the
+kit's client store with a one-off tool on CT 109 on 2026-09-20 18:57 UTC;
+homelab-host and alertmanager had been issued through the door on
+2026-09-19 22:15. Verified from this session: `GET /api/clients` lists 8,
+zero 401 in the hub journal after 16:30 UTC, the file is owned by
+`kyu:kyu`. Three things Homelab Rust measured that any future import into
+the kit's store must respect: (1) match on the client's NAME with a live
+token, never on an `app-<name>` id — clients the door issues itself carry
+UUIDs, and an id-based dedup offered to re-add the two working services;
+(2) stop kyu while writing — the running service rewrites
+`clients.json.enc` about once a minute (`last_used_at`/`uses`), so an
+outside write is clobbered; (3) a write as root leaves the file root-owned
+and kyu refuses to start with `cannot read clients store … Permission
+denied` until `chown kyu:kyu`. Whether kyu itself gains an idempotent
+merge-import is Kenny's open choice.
