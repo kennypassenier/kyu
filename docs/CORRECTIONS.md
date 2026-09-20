@@ -128,3 +128,45 @@ denied` until `chown kyu:kyu`. Decided by Kenny on 2026-09-20 ("ja,
 merge-import"): kyu 3.4.0 imports the table at every start, by name,
 skipping names that already hold a live token — `src/kit.rs`, proven by
 `tests/door_import.rs` (red first).
+
+## fix-check-1 · `kyu --check` migrated the live store (found 2026-09-20)
+
+1. **What went wrong.** During the fix-state-1 drill on CT 109, Homelab
+   Rust ran `kyu --check` (3.3.0) as root against the live store: it
+   opened the store, applied migration 5 and left `kyu.pre-v4.db`
+   (35,368,960 bytes, root:root, stamped 2026-09-20T19:21:59Z) in the state
+   dir. Measured there: `pragma user_version` 5 before the service itself
+   had started. `src/main.rs:117-122` does this on purpose ("`--check`
+   opens it too: a store that will not open is exactly what a pre-start
+   check exists to catch"), and opening migrates.
+2. **Which gate let it through.** The 3.0.0 migration to the kit added
+   `--check` as `ExecStartPre` and reused the serve path's `Store::open`;
+   no test asks what `--check` writes, and its help line ("opens no
+   socket") let the operator read "no socket" as "no writes".
+3. **Where else does the same fault sit.** The property: a command that
+   presents itself as a check and opens the store through the migrating
+   path. `Store::open` is called once in the binary (shared by `--check`
+   and serve); the kit's other early flags return before it. Nowhere else.
+   Searched with: `grep -n "Store::open\|app.run()" src/main.rs`.
+4. **How we prevent recurrence.** `--check` opens the store read-only:
+   it reports "schema N, this binary knows M — migration runs at start,
+   snapshot first" and applies nothing; a store it cannot read still fails
+   the check. The help line says what `--check` reads and that it writes
+   nothing.
+5. **What the remedy costs.** A read-only open path in `Store` and one
+   more line of output; the pre-start check loses nothing it exists for.
+6. **Who or what enforces it.** Code: an integration test that runs the
+   real binary with `--check` against a version-4 store and asserts
+   `user_version` is still 4 afterwards and no `kyu.pre-v*.db` appeared
+   (full suite). Discipline until then: Homelab Rust drills on a copy
+   (`--state-dir` at a copy), recorded there as fix-22.
+7. **How we measure that it works, and when.** At the next kyu release
+   after this lands: the drill on CT 109 runs `--check` against the live
+   store and `ls` shows no new `kyu.pre-v*.db`; the journal shows the
+   migration happening at the service start, not before.
+8. **Fallback if the measurement fails.** The migration's own snapshot
+   keeps the store recoverable either way; Homelab Rust keeps drilling on
+   a copy.
+9. **When we review the measure.** At 4.0, when the migration set is
+   revisited with the alias removal.
+
