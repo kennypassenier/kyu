@@ -220,6 +220,13 @@ async fn k2_app_tokens_issued_by_2x_keep_working_after_the_import() {
         !clients.contains("retired"),
         "a revoked 2.x app is not brought back"
     );
+    // The API a headless caller reads lists the import from the first
+    // request on; an empty array here was reported live on 2026-09-10.
+    let api = hub.get("/api/clients").await.text().await.unwrap();
+    assert!(
+        api.contains("printer"),
+        "GET /api/clients lists the imported app right after start: {api}"
+    );
     assert!(
         !clients.contains(&old_token),
         "the token never appears in the page HTML"

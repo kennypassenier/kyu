@@ -47,6 +47,18 @@ form Kenny answers is the summary, this is the record.
    Live so far (verified 2026-09-20 20:00 UTC): exactly one announcement at
    19:32:20 UTC, `expired_announced_at` set on `notify.kenny`/`desktop`,
    `expired_unannounced` 2 — the hub is counting, not announcing.
+   **Measured and closed 2026-09-26** (from the store, read-only:
+   `sqlite3 -readonly /appdata/kyu/kyu-config/kyu.db` on CT 109, the
+   `kyu.events` messages whose payload names `message.expired`): six
+   announcements in six days, one per day at 19:32:20–21 UTC from
+   2026-09-20 to 2026-09-25, all for `notify.kenny`/`desktop`, carrying
+   counts 1, 9, 9, 7, 8, 6; no other subscription announced. Before the
+   fix the same six days produced 27,991. kyu ran without a restart the
+   whole time (`NRestarts=0`, active since 2026-09-20 20:41:46 UTC).
+   The journal command written above could not answer any more: CT 109's
+   journal starts at 2026-09-23 01:21 UTC, so it counts 3, not 6 — the
+   store is the source that survives, and the one to name in a measurement
+   that is read days later.
 8. **Fallback if the measurement fails.** `KYU_EXPIRED_EVENT_WINDOW_MS` is
    read at start; the HA-side throttle (24 h per topic in
    `automation.hub_kyu_events_webhook`) holds the to-do list regardless.

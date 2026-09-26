@@ -14,17 +14,18 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **v3.5.0 LIVE on CT 109 since 2026-09-20 20:41:46 UTC** (signed 20:2x, deployed by Homelab Rust; verified: `/healthz` 3.5.0, door 8, zero 401, binary kyu-owned). fix-check-1 measured and closed at that deploy (schema-4 copy left at 4, no snapshot). fix-state-1 closed 2026-09-20 19:21. fix-events-1 RUNNING: one `message.expired` at 19:32:20 UTC, none since |
-| Last completed gate | Release go for 3.5.0 (2026-09-20): tagged and published. Before that: fix-check-1 Klopt, merge-import → 3.4.0, W11 report (2026-09-18) |
-| Next gate | fix-events-1 reads after 2026-09-21 19:35 UTC (`journalctl -u kyu --since "2026-09-20 19:32" | grep -c 'event="message.expired"'` must be 1 until the window closes, then ≤ 1 per day; no restart since 20:41:46 UTC). Open form: relay of two kit findings to chassis-rs. Still open from before: chassis-rs's fix-3 follow-up; the `/api/clients` empty-array quirk; for 4.0: drop the `KYU_DATA_DIR` alias and its guard together |
-| Next action | waiting on Kenny: the relay form (chassis-rs findings); fix-events-1 reads after 2026-09-21 19:35 UTC |
+| Current phase | **v3.5.0 LIVE on CT 109 since 2026-09-20 20:41:46 UTC** (signed, deployed by Homelab Rust; verified: `/healthz` 3.5.0, door 8, zero 401, binary kyu-owned; `NRestarts=0` measured 2026-09-26). Every correction loop is closed: fix-events-1 2026-09-26, fix-check-1 and fix-state-1 2026-09-20 |
+| Last completed gate | fix-events-1 measured and closed (2026-09-26): one `message.expired` per day for six days, from the store. Before that: release go for 3.5.0 (2026-09-20), fix-check-1 Klopt, merge-import → 3.4.0 |
+| Next gate | Open form (2026-09-26): relay of the kit finding (`cannot keep the previous binary … Operation not permitted` blames directory permissions, the cause was a root-owned binary) to chassis-rs; confirming the journal-retention correction on fix-events-1's measurement; for 4.0: drop the `KYU_DATA_DIR` alias and its guard together. Blocked on chassis-rs: its fix-3 follow-up |
+| Next action | waiting on Kenny: the 2026-09-26 form |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
-| fix-events-1 · measurement | **RUNNING** — the first announcement went out 2026-09-20 19:32:20 UTC (`notify.kenny`/`desktop`, `expired_announced_at` set, 2 expiries counted since, verified in the store). Read after 2026-09-21 19:35 UTC: `journalctl -u kyu --since "2026-09-20 19:32" | grep -c 'event="message.expired"'` must be 1 until the window closes, then at most 1 per day; the two kyu restarts (19:23 and 19:49) sit before the window's first tick. Fallback: the HA throttle holds the queue regardless |
+| fix-events-1 · measurement | **DONE 2026-09-26** — read from the store (`kyu.events` on CT 109, read-only): six announcements for `notify.kenny`/`desktop`, one a day at 19:32 UTC from 2026-09-20 to 2026-09-25, counts 1, 9, 9, 7, 8, 6; before the fix the same span produced 27,991. The journal command queued here could no longer answer (journal starts 2026-09-23 01:21 UTC). Record in CORRECTIONS.md |
+| `/api/clients` empty-array quirk | **CLOSED 2026-09-26** — `k2_app_tokens_issued_by_2x_keep_working_after_the_import` now asserts that the first `GET /api/clients` after start lists the imported app (drove red when inverted). The 2026-09-10 observation fell in the fix-state-1 window, when the hub had opened an empty store and the door held 2 of 8 apps; that it was this and not a load-order fault is inferred, not measured live |
 | fix-check-1 · `--check` migrates the store | **DONE** — released as 3.5.0 and measured at its CT 109 deploy 2026-09-20 (Homelab Rust; verified here): `--check` on a copy of the schema-4 `data/kyu.db` left `user_version` 4, created no `kyu.pre-v*.db`, exit 0 with the pending migration named; live store untouched. Record in CORRECTIONS.md |
 | fix-state-1 · measurement | **DONE 2026-09-20 19:21 UTC** at the 3.3.0 deploy on CT 109 (Homelab Rust; verified here): with `KYU_DATA_DIR=…/data` added, `kyu --check` exit 1 naming both directories and the three files; without it, `configuration ok`, exit 0. Loop closed; record in CORRECTIONS.md |
 | W11 expiry window (mini-round 2026-09-18) | **RELEASED** as 3.3.0 on 2026-09-20; live once Kenny signs and Homelab Rust deploys |
