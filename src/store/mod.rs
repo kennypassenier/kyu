@@ -97,7 +97,7 @@ impl Store {
         std::fs::create_dir_all(data_dir).with_context(|| {
             format!(
                 "cannot create the data directory {}. Check that the volume is \
-                 mounted and writable by this user, or point KYU_DATA_DIR \
+                 mounted and writable by this user, or point KYU_STATE_DIR \
                  somewhere else.",
                 data_dir.display()
             )
@@ -107,7 +107,7 @@ impl Store {
         let mut conn = Connection::open(&path).with_context(|| {
             format!(
                 "cannot open the store at {}. Check file permissions, or point \
-                 KYU_DATA_DIR at a writable directory.",
+                 KYU_STATE_DIR at a writable directory.",
                 path.display()
             )
         })?;

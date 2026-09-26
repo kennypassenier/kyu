@@ -4,6 +4,33 @@ Live-found faults and what was decided about them (standing rule 29,
 FORM_PROTOCOL §8). One record per fault, the nine fields in order; the
 form Kenny answers is the summary, this is the record.
 
+## fix-measure-1 · A measurement read from a source that had already rotated (found 2026-09-26)
+
+1. **What went wrong.** fix-events-1's field 7 queued
+   `journalctl -u kyu --since "2026-09-20 19:32" | grep -c 'event="message.expired"'`;
+   read on 2026-09-26 it counted 3, because CT 109's journal starts at
+   2026-09-23 01:21 UTC. The store's `kyu.events` rows show 6.
+2. **Which gate let it through.** Field 7 chose a source without asking how
+   long that source keeps what it is asked for.
+3. **Where else the same fault sits.** The property: a queued measurement
+   that reads a journal days after the event. Nowhere else open. Searched
+   with: `grep -n journalctl */CLAUDE.md | grep -iE 'read after|measure|meting'`
+   and `grep -in journal homelab/docs/deployment/REGISTER.md | grep -iE 'meetmoment|read after'`
+   in ~/Projects.
+4. **How we prevent recurrence.** A measurement read later names a source
+   that keeps it (here the store), or writes down how long the chosen source
+   is kept.
+5. **What the remedy costs.** One sentence in field 7.
+6. **Who or what enforces it.** Discipline.
+7. **How we measure that it works, and when.** At the next kyu correction
+   whose field 7 is read later: it names its source and that source's
+   retention. Queued in `CLAUDE.md`.
+8. **Fallback if the measurement fails.** The measurement is read as soon as
+   its window closes, not days later.
+9. **When we review the measure.** At kyu's next retrospective.
+
+**Kenny: Klopt (2026-09-26).**
+
 ## fix-events-1 · `message.expired` flooded its consumer (found 2026-09-18)
 
 1. **What went wrong.** 27,991 `message.expired` events for one

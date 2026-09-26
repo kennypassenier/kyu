@@ -22,7 +22,7 @@ pub const REVEAL_SECONDS: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    /// The state root the kit resolved (`KYU_STATE_DIR`, 2.x `KYU_DATA_DIR`).
+    /// The state root the kit resolved (`KYU_STATE_DIR`).
     pub data_dir: PathBuf,
     /// The kit's body limit, mirrored so the publish handler can name it.
     pub max_body_bytes: u64,

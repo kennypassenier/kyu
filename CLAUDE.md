@@ -15,15 +15,16 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | **v3.5.0 LIVE on CT 109 since 2026-09-20 20:41:46 UTC** (signed, deployed by Homelab Rust; verified: `/healthz` 3.5.0, door 8, zero 401, binary kyu-owned; `NRestarts=0` measured 2026-09-26). Every correction loop is closed: fix-events-1 2026-09-26, fix-check-1 and fix-state-1 2026-09-20 |
-| Last completed gate | fix-events-1 measured and closed (2026-09-26): one `message.expired` per day for six days, from the store. Before that: release go for 3.5.0 (2026-09-20), fix-check-1 Klopt, merge-import → 3.4.0 |
-| Next gate | Open form (2026-09-26): relay of the kit finding (`cannot keep the previous binary … Operation not permitted` blames directory permissions, the cause was a root-owned binary) to chassis-rs; confirming the journal-retention correction on fix-events-1's measurement; for 4.0: drop the `KYU_DATA_DIR` alias and its guard together. Blocked on chassis-rs: its fix-3 follow-up |
-| Next action | waiting on Kenny: the 2026-09-26 form |
+| Last completed gate | Form 2026-09-26 answered: relay-kit Doorgeven, relay-themes Doorgeven, journal-retention (fix-measure-1) Klopt, alias-removal **Nu** → 4.0.0 built. Before that: fix-events-1 closed (2026-09-26), release go for 3.5.0 (2026-09-20) |
+| Next gate | 4.0.0 (`KYU_DATA_DIR` retired: a set one refuses to start) tagged after green CI; Kenny signs, Homelab Rust deploys and renames `KYU_DATA_DIR` in its preset compose (the `kyu-backup` unit uses the name for its own script and is unaffected). Relays sent via the coordinator: two kit findings to chassis-rs, `:invalid` to kp-themes. fix-measure-1 measurement queued below. Blocked on chassis-rs: its fix-3 follow-up |
+| Next action | waiting on Kenny: sign v4.0.0 (`scripts/sign-release.sh v4.0.0`, Garuda) |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
 
 | Item | Status |
 |---|---|
+| fix-measure-1 · measurement | **QUEUED** — at the next kyu correction whose field 7 is read later: that field names its source and the source's retention. Record in CORRECTIONS.md |
 | fix-events-1 · measurement | **DONE 2026-09-26** — read from the store (`kyu.events` on CT 109, read-only): six announcements for `notify.kenny`/`desktop`, one a day at 19:32 UTC from 2026-09-20 to 2026-09-25, counts 1, 9, 9, 7, 8, 6; before the fix the same span produced 27,991. The journal command queued here could no longer answer (journal starts 2026-09-23 01:21 UTC). Record in CORRECTIONS.md |
 | `/api/clients` empty-array quirk | **CLOSED 2026-09-26** — `k2_app_tokens_issued_by_2x_keep_working_after_the_import` now asserts that the first `GET /api/clients` after start lists the imported app (drove red when inverted). The 2026-09-10 observation fell in the fix-state-1 window, when the hub had opened an empty store and the door held 2 of 8 apps; that it was this and not a load-order fault is inferred, not measured live |
 | fix-check-1 · `--check` migrates the store | **DONE** — released as 3.5.0 and measured at its CT 109 deploy 2026-09-20 (Homelab Rust; verified here): `--check` on a copy of the schema-4 `data/kyu.db` left `user_version` 4, created no `kyu.pre-v*.db`, exit 0 with the pending migration named; live store untouched. Record in CORRECTIONS.md |

@@ -11,6 +11,25 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-09-26
+
+**`KYU_DATA_DIR` is retired** (Kenny's "Nu" in the 2026-09-26 form). The
+2.x name of the state directory was honoured since 3.0.0 with a warning, and
+since 3.3.0 refused only when it disagreed with `KYU_STATE_DIR`
+(fix-state-1). kyu now reads only `KYU_STATE_DIR`, and a set `KYU_DATA_DIR`
+refuses to start with a message naming its successor, rather than being
+ignored: ignored, an old environment file would start the hub on an empty
+store in the default directory, which is fix-state-1's fault by another
+road. No change to the HTTP contract.
+
+### Migration
+
+Rename `KYU_DATA_DIR` to `KYU_STATE_DIR` in every environment file and
+compose file that starts kyu. If the store lives in the old directory and
+`KYU_STATE_DIR` names another one, move `kyu.db`, `kyu.db-wal` and
+`kyu.db-shm` together. A helper that uses `KYU_DATA_DIR` for its own
+purposes and never starts kyu (such as a backup script) is unaffected.
+
 ## [3.5.0] - 2026-09-20
 
 **`--check` reads the store and writes nothing** (fix-check-1, Kenny's

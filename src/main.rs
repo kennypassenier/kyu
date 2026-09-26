@@ -26,55 +26,39 @@ const HELP_EXTRA: &str = "The hub's own environment (read next to the knobs abov
   KYU_IDLE_FLAG_MS     idle-subscription flag threshold in ms
   KYU_IDLE_ARCHIVE_MS  idle-subscription archive threshold in ms
   KYU_EXPIRED_EVENT_WINDOW_MS  one message.expired per subscription per this many ms (default a day)
-  KYU_DATA_DIR         the 2.x name of KYU_STATE_DIR; still honoured, with a warning
+  KYU_DATA_DIR         retired in 4.0.0 (the 2.x name of KYU_STATE_DIR); set, it refuses to start
 Long polls (`GET /t/{topic}/next?wait=`) are exempt from the request timeout.
 --check reads the store (quick_check, schema) and writes nothing: a pending migration is
 reported, and applied only at start, after a snapshot.";
 
-/// The 2.x `KYU_DATA_DIR` still steers the state root when `KYU_STATE_DIR`
-/// is absent; the returned value is the legacy directory to honour, or
-/// `None` when the 3.x name is in charge.
-///
-/// Both names naming DIFFERENT directories is refused (fix-state-1,
-/// 2026-09-18). On CT 109 the 3.x unit set `KYU_STATE_DIR` one directory
-/// above the `KYU_DATA_DIR` the 2.x environment file still carried; the
-/// 3.x name won silently and the hub opened an empty store there, leaving
-/// every topic and every client token behind in the old one. The alias
-/// exists so an old environment file keeps working — not so two files can
-/// disagree about where the store is (standing rules 12 and 45).
-fn resolve_legacy_data_dir(env: &BTreeMap<String, String>) -> Result<Option<String>, String> {
-    match (env.get("KYU_STATE_DIR"), env.get("KYU_DATA_DIR")) {
-        (Some(state), Some(data)) if state != data => Err(format!(
-            "KYU_STATE_DIR ({state}) and KYU_DATA_DIR ({data}) name two different \
-             directories, so it is not clear which store to open — and opening the \
-             wrong one starts the hub empty, with every topic and app token left \
-             behind in the other. Keep ONE of them: if the store is still in \
-             KYU_DATA_DIR, move kyu.db, kyu.db-wal and kyu.db-shm together into \
-             KYU_STATE_DIR (all three, or the newest writes are lost) and drop \
-             KYU_DATA_DIR from the environment file; if KYU_STATE_DIR already \
-             holds the store you want, drop KYU_DATA_DIR."
+/// `KYU_DATA_DIR`, the 2.x name of the state root, is retired in 4.0.0:
+/// kyu reads only `KYU_STATE_DIR`. A set `KYU_DATA_DIR` is refused rather
+/// than ignored. Ignored, an environment file that still carried it would
+/// start the hub on an empty store in the default directory, with every
+/// topic and app token left behind in the old one — fix-state-1's fault
+/// (CT 109, 2026-09-10) reached by another road (standing rules 12 and 45).
+fn refuse_retired_data_dir(env: &BTreeMap<String, String>) -> Result<(), String> {
+    match env.get("KYU_DATA_DIR") {
+        None => Ok(()),
+        Some(data) => Err(format!(
+            "KYU_DATA_DIR ({data}) is the 2.x name of the state directory and is no \
+             longer read since kyu 4.0.0, so starting would open whatever store \
+             KYU_STATE_DIR points at instead. Rename it to KYU_STATE_DIR in the \
+             environment file. If the store lives in {data} and KYU_STATE_DIR names \
+             another directory, move kyu.db, kyu.db-wal and kyu.db-shm together \
+             (all three, or the newest writes are lost)."
         )),
-        (Some(_), _) => Ok(None),
-        (None, data) => Ok(data.cloned()),
     }
 }
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    // 2.x called the state root KYU_DATA_DIR. Honour it until every
-    // environment file has moved, and say so on every start (standing rule
-    // 12: no silent substitution). Done on the kit's environment snapshot
-    // rather than with set_var, which is unsound once threads exist.
-    let mut env: BTreeMap<String, String> = std::env::vars().collect();
-    let legacy_data_dir = match resolve_legacy_data_dir(&env) {
-        Ok(dir) => dir,
-        Err(message) => {
-            eprintln!("{message}");
-            return ExitCode::from(1);
-        }
-    };
-    if let Some(dir) = &legacy_data_dir {
-        env.insert("KYU_STATE_DIR".to_string(), dir.clone());
+    // Done on the kit's environment snapshot rather than with set_var,
+    // which is unsound once threads exist.
+    let env: BTreeMap<String, String> = std::env::vars().collect();
+    if let Err(message) = refuse_retired_data_dir(&env) {
+        eprintln!("{message}");
+        return ExitCode::from(1);
     }
 
     // K2-1: the kit seals its client store with the same key kyu sealed the
@@ -189,13 +173,6 @@ async fn main() -> ExitCode {
         let engine = engine.clone();
         let heartbeat = heartbeat.clone();
         app.on_start(move || {
-            if let Some(dir) = legacy_data_dir {
-                tracing::warn!(
-                    dir = %dir,
-                    "KYU_DATA_DIR is the 2.x name; it still works, but rename it to \
-                     KYU_STATE_DIR in the environment file — the alias goes away in 4.0"
-                );
-            }
             // W2 (amended 2026-09-06): the kit refuses to start without
             // KYU_TOKEN and KYU_SECRET_KEY, so by the time this runs the door
             // is closed; say so once, the way 2.x did.
@@ -239,48 +216,33 @@ mod tests {
     }
 
     #[test]
-    fn fix_state_1_two_state_roots_that_disagree_refuse_to_start() {
-        // CT 109, 2026-09-10: the unit set KYU_STATE_DIR one directory above
-        // the KYU_DATA_DIR the 2.x env file still carried, and the hub
-        // opened an empty store there — every topic and every client token
-        // left behind in the old one, found eight days later.
-        let error = resolve_legacy_data_dir(&env(&[
-            ("KYU_STATE_DIR", "/appdata/kyu/kyu-config"),
-            ("KYU_DATA_DIR", "/appdata/kyu/kyu-config/data"),
-        ]))
-        .expect_err("two roots that disagree must not start");
-        assert!(
-            error.contains("/appdata/kyu/kyu-config/data"),
-            "names both: {error}"
-        );
-        assert!(
-            error.contains("/appdata/kyu/kyu-config"),
-            "names both: {error}"
-        );
-        assert!(
-            error.contains("kyu.db-wal"),
-            "the remedy moves all three files: {error}"
-        );
+    fn the_retired_2x_name_refuses_to_start_and_names_its_successor() {
+        // 4.0 reads only KYU_STATE_DIR. An environment file that still says
+        // KYU_DATA_DIR would otherwise start the hub on an empty store in the
+        // default directory: fix-state-1's fault, reached by another road.
+        for pairs in [
+            &[("KYU_DATA_DIR", "/appdata/kyu/kyu-config/data")][..],
+            &[
+                ("KYU_STATE_DIR", "/appdata/kyu/kyu-config"),
+                ("KYU_DATA_DIR", "/appdata/kyu/kyu-config"),
+            ][..],
+        ] {
+            let error =
+                refuse_retired_data_dir(&env(pairs)).expect_err("the 2.x name must not start");
+            assert!(
+                error.contains("KYU_STATE_DIR"),
+                "names the successor: {error}"
+            );
+            assert!(
+                error.contains("kyu.db-wal"),
+                "the remedy moves all three files: {error}"
+            );
+        }
     }
 
     #[test]
-    fn fix_state_1_the_same_root_under_both_names_is_fine() {
-        assert_eq!(
-            resolve_legacy_data_dir(&env(&[
-                ("KYU_STATE_DIR", "/var/lib/kyu"),
-                ("KYU_DATA_DIR", "/var/lib/kyu"),
-            ]))
-            .expect("agreeing names are not a conflict"),
-            None
-        );
-        assert_eq!(
-            resolve_legacy_data_dir(&env(&[("KYU_DATA_DIR", "/var/lib/kyu")]))
-                .expect("the 2.x name alone is honoured"),
-            Some("/var/lib/kyu".to_string())
-        );
-        assert_eq!(
-            resolve_legacy_data_dir(&env(&[("KYU_STATE_DIR", "/var/lib/kyu")])).expect("3.x alone"),
-            None
-        );
+    fn the_3x_name_alone_starts() {
+        assert!(refuse_retired_data_dir(&env(&[("KYU_STATE_DIR", "/var/lib/kyu")])).is_ok());
+        assert!(refuse_retired_data_dir(&env(&[])).is_ok());
     }
 }
