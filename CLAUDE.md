@@ -15,9 +15,9 @@ from anywhere — the gates live in git hooks, not in session config.
 | Field | Value |
 |---|---|
 | Current phase | **v4.0.0 LIVE on CT 109 since 2026-09-27 02:13:05 UTC** (installed by the homelab nightly round under update_policy auto; verified here: `kyu --version` 4.0.0, `NRestarts=0`). Signed 2026-09-27 02:59 UTC (verified here: `minisign -Vm SHA256SUMS` OK, trusted comment `kennypassenier/kyu v4.0.0`, VERSION 4.0.0). The install preceded the signature by 46 min: homelab tracks that as their fix-29 |
-| Last completed gate | Form 2026-09-26 answered: relay-kit Doorgeven, relay-themes Doorgeven, journal-retention (fix-measure-1) Klopt, alias-removal **Nu** → 4.0.0 built. Before that: fix-events-1 closed (2026-09-26), release go for 3.5.0 (2026-09-20) |
+| Last completed gate | Release go for 4.0.1 (Kenny, 2026-09-27 06:35 UTC: "geef nu alle dochterprojecten van chassis-rs de update naar de laatste versie … en release daarna elk project"; pause lifted). Before that: form 2026-09-26 answered (4.0.0 built) |
 | Next gate | Unreleased on main (2026-09-27): chassis 2.2.1 via `chassis sync --write` (kp-themes 7.2.0 = kp-themes fix-74, `:user-invalid`; release-order = chassis fix-10; scaffold gates.sh with gate-cache = chassis fix-11; unit install line with `-o/-g` = chassis fix-12). kyu's `:user-invalid` override dropped, test asserts the served kit bundle has no bare `input:invalid` (red first). fix-11 measurement: after the 2.2.1 sync, `.claude/hooks/gates.sh` and `deploy/kyu.service` differ from kyu's former copies only in comment wording and one blank line, and a second `chassis sync` lists neither. fix-measure-1 measurement queued. Blocked on chassis-rs: its fix-3 follow-up |
-| Next action | waiting on Kenny: kyu is PAUSED (Kenny, 2026-09-27 06:33 UTC: "pauzeer de dochterprojecten van chassis-rs") — no 4.0.1, no chassis changes until he lifts it. The open release-401 form stays unanswered until then |
+| Next action | 4.0.1 (chassis 2.2.1) tagged after green CI; then Claude runs `scripts/sign-release.sh v4.0.1` on WSL with Kenny typing the minisign password |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)

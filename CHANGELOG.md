@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-09-27
+
 **Empty required fields are no longer red before they are touched.** kyu
 now builds on chassis-rs 2.2.1, which vendors kp-themes 7.2.0 (its fix-74:
 `:user-invalid` instead of `:invalid`), so kyu's own override in
