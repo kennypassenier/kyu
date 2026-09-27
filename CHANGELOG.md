@@ -12,7 +12,7 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 ## [Unreleased]
 
 **Empty required fields are no longer red before they are touched.** kyu
-now builds on chassis-rs 2.2.0, which vendors kp-themes 7.2.0 (its fix-74:
+now builds on chassis-rs 2.2.1, which vendors kp-themes 7.2.0 (its fix-74:
 `:user-invalid` instead of `:invalid`), so kyu's own override in
 `static/kyu.css` is gone. The same kit release keeps an unsigned release
 from becoming `latest` (chassis fix-10): the release workflow publishes
