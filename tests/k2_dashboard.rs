@@ -811,9 +811,16 @@ async fn k2_the_hub_assets_are_served_open_and_fingerprinted() {
     // The kit's own assets are there too: the pages depend on them.
     // kp-themes 5.0.0 ships one bundle rather than themes.css/components.css
     // separately (chassis-rs 1.8.0).
-    assert_eq!(
-        hub.get_anon("/static/kp/dist/kp-themes.css").await.status(),
-        200
+    let kit_css = hub.get_anon("/static/kp/dist/kp-themes.css").await;
+    assert_eq!(kit_css.status(), 200);
+    // kp-themes fix-74 (7.2.0, chassis 2.2.0): an empty required field is
+    // painted red only after a visitor touched it. Before that the kit's
+    // bundle carried `input:invalid`, the login token field opened red, and
+    // kyu.css overrode it; the override is gone, so the kit must carry it.
+    let kit_css = kit_css.text().await.unwrap();
+    assert!(
+        kit_css.contains("input:user-invalid") && !kit_css.contains("input:invalid"),
+        "the kit's bundle paints only touched fields red"
     );
     hub.shutdown().await;
 }

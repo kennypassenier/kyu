@@ -65,19 +65,3 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 .kp-badge--warning { background: var(--warning); color: var(--warning-foreground); }
 .kp-badge--destructive { background: var(--destructive); color: var(--destructive-foreground); }
 
-/* components.css's own :invalid rule paints a destructive border the
-   instant a required field is empty — before a visitor has typed
-   anything, since that is what "invalid" natively means on an empty
-   required field. The package's own forms.js works around this with
-   novalidate and its own aria-invalid state, reporting on blur rather
-   than on load; kyu does not vendor forms.js (js/forms.js is missing
-   from the v3.0.0 release's own SHA256SUMS — see KP_THEMES.sha256),
-   so without an override every required field on this dashboard would
-   render red on first paint: the login token, the app name, the
-   publish textarea. :user-invalid only matches once a visitor has
-   interacted with the field and left it invalid, which is what
-   "invalid" should mean here. Supported in the same browsers the
-   package's own overlays already assume (AR15: modern Chrome and
-   Firefox). */
-input:invalid, select:invalid, textarea:invalid { border-color: inherit; }
-input:user-invalid, select:user-invalid, textarea:user-invalid { border-color: var(--destructive); }
