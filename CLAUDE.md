@@ -14,10 +14,10 @@ from anywhere — the gates live in git hooks, not in session config.
 
 | Field | Value |
 |---|---|
-| Current phase | **v4.0.0 released 2026-09-26 22:09 UTC** (tag on `ad89654` after green CI; asset verified: SHA256SUMS OK, `--version` 4.0.0, static-pie, `KYU_DATA_DIR=/x kyu --version` refuses with exit 1). NOT signed, NOT deployed. **v3.5.0 LIVE on CT 109** since 2026-09-20 20:41:46 UTC. Every correction loop closed except fix-measure-1's queued measurement |
+| Current phase | **v4.0.0 LIVE on CT 109 since 2026-09-27 02:13:05 UTC** (installed by the homelab nightly round under update_policy auto; verified here: `kyu --version` 4.0.0, `NRestarts=0`). Signed 2026-09-27 02:59 UTC (verified here: `minisign -Vm SHA256SUMS` OK, trusted comment `kennypassenier/kyu v4.0.0`, VERSION 4.0.0). The install preceded the signature by 46 min: homelab tracks that as their fix-29 |
 | Last completed gate | Form 2026-09-26 answered: relay-kit Doorgeven, relay-themes Doorgeven, journal-retention (fix-measure-1) Klopt, alias-removal **Nu** → 4.0.0 built. Before that: fix-events-1 closed (2026-09-26), release go for 3.5.0 (2026-09-20) |
-| Next gate | 4.0.0 (`KYU_DATA_DIR` retired: a set one refuses to start) tagged after green CI; Kenny signs, Homelab Rust deploys and renames `KYU_DATA_DIR` in its preset compose (the `kyu-backup` unit uses the name for its own script and is unaffected). Relays sent via the coordinator: two kit findings to chassis-rs, `:invalid` to kp-themes. fix-measure-1 measurement queued below. Blocked on chassis-rs: its fix-3 follow-up |
-| Next action | waiting on Kenny: GARUDA.md step 1 (`ws-secrets migrate` on Garuda) so the minisign key reaches WSL — measured 2026-09-26: `~/.minisign` does not exist on WSL. Then Claude runs `scripts/sign-release.sh v4.0.0` and Kenny types the password; then Homelab Rust deploys (preset compose renamed first) |
+| Next gate | Release-order fault, relayed to chassis-rs 2026-09-27: the release workflow makes an unsigned release `latest` at once, while `VERSION` (the updater's first read, `releases/latest/download/VERSION`) arrives only when signing runs — every consumer's nightly `update` 404s in between (kyu's failed 2026-09-27). Both files are scaffold-owned (`scaffold/.github/workflows/release.yml`, `scaffold/scripts/sign-release.sh`), so the fix lands in chassis-rs and reaches kyu through `chassis sync`, not as a local fork. fix-measure-1 measurement queued. Blocked on chassis-rs: its fix-3 follow-up |
+| Next action | waiting on chassis-rs: the release-order fix (then `chassis sync --write` here); nothing waits on Kenny in kyu |
 | AFK mode | off |
 
 ### Queued mini-rounds (Phase 2 mandatory items, added to the procedure after this project's freeze)
