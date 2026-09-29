@@ -109,22 +109,24 @@ integration down with it.
 
 ## Releases and updates
 
-Since the 3.0.0 chassis-rs migration, one command cuts a release:
+One command cuts a release, entirely on this machine — nothing is built on
+GitHub Actions (Kenny, 2026-09-29; needs the `chassis` CLI of chassis-rs
+3.0.0 or later):
 
 ```bash
-chassis release 3.1.1   # bump, tag, wait for CI, sign, upload
+chassis release 4.0.2             # gate, bump, tag, build, publish, sign, upload
+chassis release 4.0.2 --dry-run   # gate and build everything, publish nothing
 ```
 
-It bumps `Cargo.toml`'s version and `CHANGELOG.md` in one commit, pushes it
-to a throwaway branch and waits for CI so a red commit never reaches
-`main`, fast-forwards `main` and tags it, waits for
-`.github/workflows/release.yml` (the kit's own, which replaced the earlier
-`release-image.yml` at 3.0.0) to build the glibc binary, write
-`SHA256SUMS` and push the Docker image to GHCR
-(`ghcr.io/kennypassenier/kyu:3.1.1` and `:latest`), then signs it from
-Kenny's own machine — the signing key never leaves it — and uploads
-`SHA256SUMS.minisig` and `VERSION`. The self-updater refuses a release
-until all four assets exist, so an unsigned release is inert.
+It runs the full gate first (fmt, clippy, the suite, the project gates, cargo-deny, the image smoke), bumps
+`Cargo.toml`'s version and `CHANGELOG.md` in one commit and tags it, then
+builds the static musl binary, writes `SHA256SUMS` and builds the Docker
+image (`ghcr.io/kennypassenier/kyu:v4.0.2` and `:latest`). Only then does
+it push `main`, the tag and the image, create the GitHub release with
+`kyu` + `SHA256SUMS`, and sign from Kenny's own machine — the signing key
+never leaves it — uploading `SHA256SUMS.minisig` and `VERSION`. The
+self-updater refuses a release until all four assets exist, so an unsigned
+release is inert.
 
 From there, the image and the native binary update independently:
 

@@ -121,6 +121,11 @@ behind Kenny's explicit go (Phase 9).
 (start → publish → receive → ack → restart container → state intact, plus
 the same volume against a freshly built image, plus a protected hub).
 
+**Amendment (2026-09-29, Kenny: tests and release builds run locally):**
+GitHub Actions builds nothing any more. `chassis release <version>` (chassis-rs
+3.0.0) builds the binary and the image on Kenny's machine, pushes the image
+to ghcr.io and creates the GitHub Release; the LXC side is unchanged.
+
 **Correction (2026-08-28 mini-round M1):** this entry used to close with
 "tag→release→ghcr pipeline verified end-to-end with a pre-release tag".
 That was never true. `.github/workflows/` held only CI and the advisory

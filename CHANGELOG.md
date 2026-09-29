@@ -11,6 +11,18 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **Releases are built and published locally** (Kenny, 2026-09-29: GitHub
+  Actions builds nothing). `.github/workflows/release.yml` is gone;
+  `chassis release <version>` (chassis-rs 3.0.0 or later) runs the gate,
+  builds the static musl binary, `SHA256SUMS` and the image on this machine,
+  and pushes and uploads them itself; `--dry-run` builds everything and
+  publishes nothing. The assets, the image tags and the signing are
+  unchanged. Until kyu moves its pin with `chassis upgrade 3.0.0` and
+  `chassis sync --write`, an older `chassis release` would still wait for
+  the deleted workflow, so release with the 3.0.0 CLI.
+
 ## [4.0.1] - 2026-09-27
 
 **Empty required fields are no longer red before they are touched.** kyu

@@ -85,10 +85,12 @@ directory. That refusal was reproduced on 2026-08-28, not theorised.
 
 ## 2 · Cut a release (how a new image comes into existence)
 
-Kenny asked for this written down rather than remembered. Since the 3.0.0
-chassis-rs migration, one command does the whole thing — from a clean,
-checked-out `main` — but it is worth knowing what it does under the hood
-before you run it unattended.
+Kenny asked for this written down rather than remembered. One command does
+the whole thing — from a clean, checked-out `main`, on this machine; GitHub
+Actions builds nothing since 2026-09-29 (it needs the `chassis` CLI of
+chassis-rs 3.0.0 or later, docker logged in to `ghcr.io` with a token that
+has `write:packages`, `cargo-deny`, `gh` and `minisign`) — but it is worth
+knowing what it does under the hood before you run it unattended.
 
 1. **Decide the version.** Semver over the HTTP contract — the three verbs,
    their parameters, their response shapes, and the environment variables.
@@ -96,34 +98,37 @@ before you run it unattended.
    minor. Fixing behaviour without changing the contract is a patch. The
    dashboard's HTML and the on-disk schema are explicitly *not* part of it.
 2. **Run `chassis release <version>`.** It:
+   - runs the full gate first, the one CI used to run: fmt, clippy
+     `-D warnings`, the suite, `.claude/hooks/gates.project.sh`,
+     `--version`, `cargo deny check all`, the image build with its
+     `--version` and closed-port `--healthcheck` smoke, and coverage when
+     `cargo-llvm-cov` is installed (information only) — a red gate stops
+     everything before a commit exists;
    - bumps `Cargo.toml`'s `version` and writes a dated `<version>` section
      at the top of `CHANGELOG.md`, in one commit
-     (`chore(release): <version> [meta]`);
-   - pushes that commit to a throwaway `release-<version>` branch and waits
-     for its checks, so a red commit never reaches main (standing rule 6) —
-     tagging a red commit is what used to produce a release you then had to
-     withdraw;
-   - fast-forwards `main` to that commit and deletes the work branch;
-   - tags the result `v<version>` and pushes the tag, which is what
-     `.github/workflows/release.yml` triggers on (`tags: ["v*"]`) — nothing
-     else starts it, not a push to main, not a release created by hand;
-   - waits for that workflow run, which builds the glibc binary for Debian
-     trixie, writes `SHA256SUMS`, pushes the Docker image to GHCR as
-     `ghcr.io/kennypassenier/kyu:<version>` and `:latest`, and drafts the
-     GitHub Release with `kyu` + `SHA256SUMS` attached (no notes yet);
+     (`chore(release): <version> [meta]`), and tags it `v<version>`, both
+     locally;
+   - builds the release here: the static musl binary in
+     `rust:1.97-slim-trixie` (refused if `ldd` finds a dynamic link),
+     `dist/kyu` + `dist/SHA256SUMS`, and the image
+     `ghcr.io/kennypassenier/kyu:v<version>` + `:latest`, checked to answer
+     `--version` with the new version;
+   - only then pushes `main` and the tag, pushes the image, and creates the
+     GitHub Release with `kyu` + `SHA256SUMS` attached, not yet `latest`;
    - then calls `scripts/sign-release.sh <tag>` from this machine: it
      downloads that `SHA256SUMS`, signs it with the ecosystem's minisign
      key (one password prompt, the key never leaves the machine), writes
      `VERSION`, and uploads `SHA256SUMS.minisig` before `VERSION` (critic
      #15: an updater that saw `VERSION` first would count a missing
-     signature as a failure).
+     signature as a failure), then marks the release `latest`.
 
    The self-updater refuses a release until all four assets — `kyu`,
    `SHA256SUMS`, `SHA256SUMS.minisig`, `VERSION` — exist, so an unsigned
-   release is inert (J2). `chassis release --dry-run <version>` prints the
-   steps above without touching anything, if you want to see them first.
-3. **Write the GitHub Release notes.** The workflow drafts the release with
-   the built assets but no notes; add them by hand:
+   release is inert (J2). `chassis release <version> --dry-run` runs the
+   gate and every build above and stops before the commit (nothing is
+   pushed or uploaded); `--plan` only prints the steps.
+3. **Write the GitHub Release notes.** `chassis release` creates the release
+   with the built assets and a short build note; add the changelog by hand:
    ```bash
    gh release edit v1.2.3 --notes-file <(sed -n '/## \[1.2.3\]/,/## \[/p' CHANGELOG.md)
    ```
