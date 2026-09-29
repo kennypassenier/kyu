@@ -72,4 +72,7 @@ Enforced twice over:
 - **`.claude/hooks/check-commit.sh`** via `.claude/settings.json` — the
   same two gates for sessions opened in this directory.
 
-CI re-runs everything on every push; red CI blocks the next commit.
+There is no GitHub Actions CI since 2026-09-29 (Kenny: tests and release
+builds run locally): `chassis release <version>` re-runs the full gate —
+including cargo-deny and the container smoke — before anything is tagged,
+and `chassis release <next> --dry-run` runs it without releasing.

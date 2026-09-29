@@ -7,7 +7,8 @@ the Phase 7 gate on 2026-08-28 and maintained from here on.
 inside the modules they belong to. *(Was 148 at the Phase 7 gate; the 2026-08-28
 W2 mini-round added the door and its suite, and the toolchain pin added one
 more after CI caught what the local gate could not.)* Every suite runs on every commit (the
-git hooks refuse a commit whose tests fail) and again in CI.
+git hooks refuse a commit whose tests fail) and again in `chassis release`'s
+gate before every release (there is no CI since 2026-09-29).
 
 ## Principles these suites follow
 

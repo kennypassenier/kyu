@@ -6,7 +6,7 @@ nothing is silently lost, and the dashboard doubles as the
 documentation.
 
 > **Status: 3.1.0.** Every frozen feature is built and under test (183
-> tests, CI green on every push). The version is a promise about the HTTP
+> tests, gated on every commit and again before every release). The version is a promise about the HTTP
 > contract — the three verbs, their parameters and response shapes, and the
 > environment variables. The dashboard's HTML and the on-disk schema are not
 > part of it.
@@ -118,7 +118,7 @@ chassis release 4.0.2             # gate, bump, tag, build, publish, sign, uploa
 chassis release 4.0.2 --dry-run   # gate and build everything, publish nothing
 ```
 
-It runs the full gate first (fmt, clippy, the suite, the project gates, cargo-deny, the image smoke), bumps
+It runs the full gate first (fmt, clippy, the suite, the project gates including the container smoke, cargo-deny, the image smoke), bumps
 `Cargo.toml`'s version and `CHANGELOG.md` in one commit and tags it, then
 builds the static musl binary, writes `SHA256SUMS` and builds the Docker
 image (`ghcr.io/kennypassenier/kyu:v4.0.2` and `:latest`). Only then does
@@ -285,61 +285,25 @@ warnings` and `cargo test --all` pass, no string-built SQL appears in
 
 ### Protecting `main`
 
-The commit hooks are local: a clone without `core.hooksPath` has none, and
-nothing on GitHub stopped a push whose CI then went red. That happened twice
-on 2026-08-28, once while a release tag was about to be cut.
+The commit hooks are local: a clone without `core.hooksPath` has none. Until
+2026-09-29 GitHub Actions re-ran the gates on every push and `main` required
+their checks. Since then GitHub Actions builds nothing (Kenny: tests and
+release builds run locally), so nothing on GitHub can vouch for a commit,
+and the full gate runs on this machine instead: in the commit hooks, and in
+`chassis release <version>` before anything is tagged or pushed
+(`chassis release <next> --dry-run` runs the same gate, plus the release
+build, without publishing).
 
-Settings → Branches → branch protection rule for `main`:
-
-- ✅ **Require status checks to pass before merging**, then select exactly
-  two: `fmt · clippy · tests` and `container build`.
-
-  **Deliberately not required** (Kenny, 2026-08-28), and left running:
-  - `cargo-deny (advisories · licenses · bans)` still runs on every push but
-    does not gate a merge. Its verdict depends on an advisory database that
-    changes without you: someone files a report tonight about a crate four
-    levels down, and tomorrow a documentation fix will not merge for a
-    reason that has nothing to do with it.
-  - `coverage (informational)` runs with `continue-on-error`, so it always
-    reports success and would gate nothing while looking like it does.
-- ✅ **Require branches to be up to date before merging.**
-
-  **Read the setting back after any change here.** Applying the checks in
-  one call once silently dropped `cargo-deny` — the only name containing
-  parentheses — with no error and a settings page that looked configured.
-  Confirm what actually landed:
-
-  ```bash
-  gh api repos/<owner>/<repo>/branches/main/protection/required_status_checks --jq .contexts
-  ```
-- ✅ **Do not allow bypassing the above settings.** Without it the repo owner
-  is exempt and the whole rule is decoration.
-- ❌ **Require a pull request** — deliberately off (see the workflow below).
-- ❌ **Require signed commits** (nothing here is signed), **Lock branch**
-  (read-only), **Require conversation resolution**, **Require deployments**.
-
-**What this does to your day.** Requiring status checks means a direct push
-of a fresh commit to `main` is refused — the commit has no check result yet,
-with or without the pull-request setting. So the flow becomes:
-
-```bash
-git switch -c work
-git push -u origin work          # CI runs here
-gh run watch                     # wait for green
-git switch main && git merge --ff-only work && git push
-git branch -d work && git push origin --delete work
-```
-
-The protection you want lives entirely in the status checks; the
-pull-request requirement would add review ceremony to a repo with one
-reviewer. Turn it on if you catch yourself pushing before the checks
-finish.
+Branch protection on `main` should therefore require no status check — a
+required check nothing produces leaves every non-admin push waiting
+forever — and keep "no force-push, no deletion". With chassis-rs 3.0.0,
+`chassis sync --protect` sets exactly that and reads it back.
 
 ### Toolchain
 
-The Rust version is pinned in `rust-toolchain.toml` and CI asks for that same
-version rather than for "stable". Without that, a green gate here did not
-predict a green build there — which stopped being theoretical the day 1.98
+The Rust version is pinned in `rust-toolchain.toml`, and the release build
+container uses that same version rather than "stable". Without that, a green
+gate on one machine did not predict a green build on another — which stopped being theoretical the day 1.98
 added a lint 1.97 had never heard of.
 
 ## License

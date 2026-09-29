@@ -22,6 +22,15 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
   unchanged. Until kyu moves its pin with `chassis upgrade 3.0.0` and
   `chassis sync --write`, an older `chassis release` would still wait for
   the deleted workflow, so release with the 3.0.0 CLI.
+- **No GitHub Actions CI.** `ci.yml` and the weekly `audit.yml` are gone.
+  Their checks run in the commit hooks and in `chassis release`'s gate
+  (fmt, clippy, tests, the project gates, `--version`, `cargo deny check
+  all` — advisories included —, the image smoke, coverage); the container
+  smoke in `.claude/hooks/gates.project.sh` now runs when
+  `CHASSIS_RELEASE_GATE=1` (set by that gate) as well as under `CI=true`.
+  `chassis release <next> --dry-run` runs all of it without releasing. The
+  weekly advisory scan of an unchanged `Cargo.lock` has no replacement:
+  run `cargo deny check advisories` by hand between releases.
 
 ## [4.0.1] - 2026-09-27
 

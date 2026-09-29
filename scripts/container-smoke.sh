@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Container smoke test (K13, L5 exit criterion): start the real image, walk
 # the three verbs through it, restart the container and check the state
-# survived. Run locally or in CI; it cleans up after itself.
+# survived. Run by hand, or by .claude/hooks/gates.project.sh inside
+# `chassis release`'s gate; it cleans up after itself.
 set -euo pipefail
 
 IMAGE="${1:-kyu:smoke}"

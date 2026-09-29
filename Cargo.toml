@@ -10,7 +10,7 @@ publish = false
 
 # Dependency policy T6 ("reluctant, policed"): each direct dependency is
 # justified in the commit that adds it, and cargo-deny checks advisories,
-# licenses and duplicates in CI.
+# licenses and duplicates in `chassis release`'s gate before every release.
 [dependencies]
 anyhow = "1"                                                    # error context at the binary edge (AR4)
 axum = "0.8"                                                    # HTTP surface (T1)

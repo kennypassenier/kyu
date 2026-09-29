@@ -20,12 +20,14 @@ if [ -d src ]; then
 fi
 
 # The container smoke (every verb through the door, in the built image) is a
-# CI gate: it needs docker and minutes, so a local commit skips it, loudly.
-# The kit's image job builds its own image in another job, so this one
-# builds the image it smokes.
-if [ "${CI:-}" = "true" ] && [ -x scripts/container-smoke.sh ]; then
+# release gate: it needs docker and minutes, so a local commit skips it,
+# loudly. `chassis release` (chassis-rs 3.0.0) sets CHASSIS_RELEASE_GATE=1
+# when its gate runs this file — the local stand-in for the CI=true the
+# GitHub runner exported until 2026-09-29, which still counts. The kit's
+# image check builds its own image, so this one builds the image it smokes.
+if { [ "${CHASSIS_RELEASE_GATE:-}" = "1" ] || [ "${CI:-}" = "true" ]; } && [ -x scripts/container-smoke.sh ]; then
   docker build -q -t kyu:smoke . >/dev/null
   scripts/container-smoke.sh kyu:smoke
 else
-  echo "gates.project: container smoke skipped outside CI (scripts/container-smoke.sh runs there)" >&2
+  echo "gates.project: container smoke skipped outside the release gate (chassis release runs it; CHASSIS_RELEASE_GATE=1 by hand)" >&2
 fi

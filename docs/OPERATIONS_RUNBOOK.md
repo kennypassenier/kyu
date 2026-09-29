@@ -99,7 +99,8 @@ knowing what it does under the hood before you run it unattended.
    dashboard's HTML and the on-disk schema are explicitly *not* part of it.
 2. **Run `chassis release <version>`.** It:
    - runs the full gate first, the one CI used to run: fmt, clippy
-     `-D warnings`, the suite, `.claude/hooks/gates.project.sh`,
+     `-D warnings`, the suite, `.claude/hooks/gates.project.sh` (with
+     `CHASSIS_RELEASE_GATE=1`, so it also runs the container smoke),
      `--version`, `cargo deny check all`, the image build with its
      `--version` and closed-port `--healthcheck` smoke, and coverage when
      `cargo-llvm-cov` is installed (information only) — a red gate stops

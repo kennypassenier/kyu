@@ -76,7 +76,9 @@ Rejected: log + env_logger (string-based; W7 would be hand-rolled).
 New direct dependencies need a one-line justification in the commit
 that adds them; prefer std/existing deps; `Cargo.lock` committed;
 cargo-deny in CI (advisories, license allowlist, duplicate bans) plus
-a weekly scheduled advisory job. Expected direct-dep count for the
+a weekly scheduled advisory job. *(Amended 2026-09-29: no CI and no
+scheduled job any more — cargo-deny runs in `chassis release`'s gate before
+every release, and by hand in between.)* Expected direct-dep count for the
 Essential set: order of ten.
 
 ## T7 · License: MIT OR Apache-2.0, public repo
@@ -501,4 +503,5 @@ dashboard, which means the hub stores them. Decided:
 - **No permissions or roles.** Which app may use which topic stays
   permanently out of scope (N2); a token is admission, not authority.
 - SQL exclusively parameterized (rusqlite params); no string-built SQL
-  anywhere, enforced by review plus a grep gate in CI.
+  anywhere, enforced by review plus a grep gate (the commit hooks and
+`chassis release`'s gate since 2026-09-29; CI before).
