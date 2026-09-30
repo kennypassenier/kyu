@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.1.0] - 2026-09-30
+
 **A deleted dead letter stays deleted.** Deleting a delivery (and "Prune
 every dead letter") removed its row, and a subscription polling with
 `?from=beginning` is handed a delivery for every retained message it has
