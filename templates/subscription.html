@@ -49,7 +49,7 @@
         {% if item.note %}<br><span class="text-secondary italic">{{ item.note }}</span>{% endif %}
       {% endif %}
     </td>
-    <td class="text-end">
+    <td class="text-end row-actions">
       <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" style="margin: 0">
         <input type="hidden" name="subscription" value="{{ subscription.name }}">
         <input type="hidden" name="id" value="{{ item.id }}">

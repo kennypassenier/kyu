@@ -134,6 +134,14 @@ pub fn pages(state: AppState) -> Router {
             get(handlers::dashboard_subscription),
         )
         .route(
+            "/t/{topic}/dashboard/subs/{subscription}/archive",
+            post(handlers::dashboard_archive_subscription),
+        )
+        .route(
+            "/t/{topic}/dashboard/subs/{subscription}/delete",
+            post(handlers::dashboard_delete_subscription),
+        )
+        .route(
             "/t/{topic}/dashboard/publish",
             post(handlers::dashboard_publish),
         )

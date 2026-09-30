@@ -29,6 +29,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_3_PER_SUBSCRIPTION_IDLE,
     MIGRATION_4_APPS,
     MIGRATION_5_EXPIRY_ANNOUNCEMENTS,
+    MIGRATION_6_REMOVED_DELIVERIES,
 ];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
@@ -144,6 +145,38 @@ CREATE UNIQUE INDEX apps_live_name ON apps (name) WHERE revoked_at IS NULL;
 const MIGRATION_5_EXPIRY_ANNOUNCEMENTS: &str = r#"
 ALTER TABLE subscriptions ADD COLUMN expired_announced_at INTEGER;
 ALTER TABLE subscriptions ADD COLUMN expired_unannounced INTEGER NOT NULL DEFAULT 0;
+"#;
+
+/// A delivery the dashboard deleted stays as a `removed` row instead of
+/// going away (2026-09-30). K8's replay hands a `from=beginning`
+/// subscription every retained message it has no row for, so a deleted
+/// row was an invitation: on CT 109 a dead letter Kenny deleted twice came
+/// back after each replay. SQLite cannot widen a CHECK in place, so the
+/// table is rebuilt with the same columns, keys and indexes; nothing
+/// references `deliveries`, so no foreign key has to follow it.
+const MIGRATION_6_REMOVED_DELIVERIES: &str = r#"
+CREATE TABLE deliveries_v6 (
+    msg_seq          INTEGER NOT NULL REFERENCES messages(seq) ON DELETE CASCADE,
+    sub_id           INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+    state            TEXT    NOT NULL CHECK (state IN
+                         ('pending', 'claimed', 'acked', 'dead', 'expired', 'lapsed', 'removed')),
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    lease_expires_at INTEGER,
+    next_attempt_at  INTEGER,
+    dead_at          INTEGER,
+    expired_at       INTEGER,
+    PRIMARY KEY (msg_seq, sub_id)
+) STRICT;
+INSERT INTO deliveries_v6
+    SELECT msg_seq, sub_id, state, attempts, lease_expires_at,
+           next_attempt_at, dead_at, expired_at
+      FROM deliveries;
+DROP TABLE deliveries;
+ALTER TABLE deliveries_v6 RENAME TO deliveries;
+CREATE INDEX deliveries_claimable
+    ON deliveries (sub_id, state, next_attempt_at, msg_seq);
+CREATE INDEX deliveries_by_state
+    ON deliveries (state, lease_expires_at);
 "#;
 
 /// Where a store stands against this binary: its schema version and the

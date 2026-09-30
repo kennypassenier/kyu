@@ -719,15 +719,22 @@ pub fn requeue_dead(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<R
 /// ones, because "remove this from this subscription's queue" does not
 /// care what state it removes it from.
 ///
-/// Only the `deliveries` row goes; `messages` and every other
+/// Only this subscription's delivery changes; `messages` and every other
 /// subscription's delivery for the same message are untouched, since the
 /// payload lives on the message, not on this row (AR2 — one message, fanned
 /// out to N deliveries).
+///
+/// The row is marked `removed` rather than deleted (migration 6): K8's
+/// replay creates a delivery for every retained message a subscription has
+/// no row for, so a deleted row came back at the next `from=beginning`
+/// poll — the CT 109 dead letter Kenny deleted twice (2026-09-30).
 pub fn delete_delivery(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<DeleteOutcome> {
     let deleted = tx
         .execute(
-            "DELETE FROM deliveries
+            "UPDATE deliveries
+                SET state = 'removed', lease_expires_at = NULL, next_attempt_at = NULL
               WHERE sub_id = ?2
+                AND state <> 'removed'
                 AND msg_seq = (SELECT seq FROM messages WHERE id = ?1)",
             (message_id, sub_id),
         )
@@ -740,6 +747,14 @@ pub fn delete_delivery(tx: &Transaction, message_id: &str, sub_id: i64) -> Resul
     })
 }
 
+/// Removes a subscription; its delivery rows follow through the foreign
+/// key's cascade. The engine only calls this for an archived one.
+pub fn delete_subscription(tx: &Transaction, sub_id: i64) -> Result<()> {
+    tx.execute("DELETE FROM subscriptions WHERE id = ?1", [sub_id])
+        .context("cannot delete the subscription")?;
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeleteOutcome {
     Deleted,
@@ -747,13 +762,17 @@ pub enum DeleteOutcome {
 }
 
 /// [K-actions] Removes every dead letter on the hub, across every topic and
-/// subscription, in one statement. The status-page counterpart to
+/// subscription, in one statement (as `removed` rows, for the same reason
+/// as `delete_delivery`). The status-page counterpart to
 /// `delete_delivery`'s one-at-a-time removal (W15): after a storm of
 /// failures whose cause is fixed, clearing the backlog of them one topic
 /// page at a time does not scale.
 pub fn prune_dead_letters(tx: &Transaction) -> Result<usize> {
     let deleted = tx
-        .execute("DELETE FROM deliveries WHERE state = 'dead'", [])
+        .execute(
+            "UPDATE deliveries SET state = 'removed' WHERE state = 'dead'",
+            [],
+        )
         .context("cannot prune the dead letters")?;
     Ok(deleted)
 }

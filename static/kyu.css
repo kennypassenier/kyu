@@ -17,8 +17,11 @@ body {
     padding-bottom: 4rem;
 }
 
+/* Kenny, 2026-09-30: dashboards use 80% of the width by default (he works
+   on a 4K desktop). Same rule as kp-themes' `.kp-page` from its next
+   release, which kyu's own `main` would otherwise override. */
 main {
-    max-width: 60rem;
+    max-width: max(80vw, 64rem);
     margin: 0 auto;
     padding: 1.5rem clamp(0.75rem, 3vw, 1.5rem);
 }
@@ -45,7 +48,7 @@ pre.snippet {
     margin: 0;
     overflow-x: auto;
 }
-td.payload { max-width: 28rem; overflow-wrap: anywhere; }
+td.payload { max-width: 60rem; overflow-wrap: anywhere; }
 .secret {
     font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     overflow-wrap: anywhere;
@@ -65,3 +68,7 @@ td.payload { max-width: 28rem; overflow-wrap: anywhere; }
 .kp-badge--warning { background: var(--warning); color: var(--warning-foreground); }
 .kp-badge--destructive { background: var(--destructive); color: var(--destructive-foreground); }
 
+/* A row's action buttons keep their label on one line (Kenny, 2026-09-30:
+   "Requeue" and "Delete" wrapped in the dead-letter table); the column
+   takes the width the buttons need instead of the payload squeezing it. */
+.row-actions { white-space: nowrap; width: 1%; }

@@ -83,7 +83,9 @@ impl From<EngineError> for ApiError {
             | EngineError::NotClaimed { .. }
             | EngineError::NotDead { .. } => StatusCode::CONFLICT,
             EngineError::InvalidPolicy { .. } => StatusCode::BAD_REQUEST,
-            EngineError::SubscriptionArchived { .. } => StatusCode::CONFLICT,
+            EngineError::SubscriptionArchived { .. } | EngineError::NotArchived { .. } => {
+                StatusCode::CONFLICT
+            }
             EngineError::AppExists { .. } => StatusCode::CONFLICT,
             EngineError::UnknownApp { .. } => StatusCode::NOT_FOUND,
             EngineError::Unprotected => StatusCode::CONFLICT,

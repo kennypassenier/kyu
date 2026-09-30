@@ -78,6 +78,13 @@ pub enum EngineError {
     #[error("subscription {subscription:?} on topic {topic:?} is archived")]
     SubscriptionArchived { topic: String, subscription: String },
 
+    #[error("subscription {subscription:?} on topic {topic:?} is {state}, not archived")]
+    NotArchived {
+        topic: String,
+        subscription: String,
+        state: String,
+    },
+
     #[error("an app named {name:?} already exists")]
     AppExists { name: String },
 
@@ -163,6 +170,11 @@ impl EngineError {
                  POST /api/t/{topic}/subs/{subscription}/unarchive to start receiving \
                  again — from that moment on, or add ?from=beginning to a poll to pick up \
                  what the topic still retains."
+            ),
+            Self::NotArchived { state, .. } => format!(
+                "only an archived subscription can be deleted, and this one is {state}. \
+                 Archive it first (the Archive button on the topic page): that settles \
+                 its backlog as lapsed, so nothing it still holds is lost silently."
             ),
             Self::Internal(_) => {
                 "this is a fault in kyu rather than in the request. Check the hub's logs \
@@ -560,6 +572,54 @@ impl Engine {
                 },
             )?;
             Ok(true)
+        })
+    }
+
+    /// Archives a subscription by hand (Kenny, 2026-09-30): the same state
+    /// and the same `subscription.archived` event the idle sweep produces,
+    /// with its backlog settled as lapsed. Returns `None` when it already
+    /// was archived, so a second click announces nothing.
+    pub fn archive(&self, topic: &str, subscription: &str) -> Result<Option<usize>> {
+        let now = self.clock.now_ms();
+        self.write(|tx| -> Result<Option<usize>> {
+            let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            if queries::subscription_state(tx, sub_id)? == "archived" {
+                return Ok(None);
+            }
+            queries::set_subscription_state(tx, sub_id, "archived")?;
+            let lapsed = queries::lapse_outstanding(tx, sub_id)?;
+            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            events::emit(
+                tx,
+                &mut ids,
+                now,
+                &Event::SubscriptionArchived {
+                    topic: topic.to_string(),
+                    subscription: subscription.to_string(),
+                    lapsed,
+                },
+            )?;
+            Ok(Some(lapsed))
+        })
+    }
+
+    /// Deletes an archived subscription and every delivery row it had
+    /// (Kenny, 2026-09-30). Refused for one that is not archived: archiving
+    /// first is what settles its backlog visibly. A client that polls the
+    /// name again later starts a new subscription from that moment.
+    pub fn delete_subscription(&self, topic: &str, subscription: &str) -> Result<()> {
+        self.write(|tx| -> Result<()> {
+            let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            let state = queries::subscription_state(tx, sub_id)?;
+            if state != "archived" {
+                return Err(EngineError::NotArchived {
+                    topic: topic.to_string(),
+                    subscription: subscription.to_string(),
+                    state,
+                });
+            }
+            queries::delete_subscription(tx, sub_id)?;
+            Ok(())
         })
     }
 

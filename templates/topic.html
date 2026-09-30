@@ -50,7 +50,7 @@
   <thead>
     <tr>
       <th>Name</th><th>State</th><th class="text-end">Backlog</th><th class="text-end">In flight</th>
-      <th class="text-end">Dead</th><th class="text-end">Lapsed</th><th>Oldest unacked</th><th>Policy</th>
+      <th class="text-end">Dead</th><th class="text-end">Lapsed</th><th>Oldest unacked</th><th>Policy</th><th></th>
     </tr>
   </thead>
   <tbody>
@@ -75,6 +75,18 @@
       lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
       {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
       ttl {{ subscription.ttl_ms }}ms{% endif %}
+    </td>
+    <td class="text-end row-actions">
+      {% if subscription.state == "archived" %}
+      <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}/delete" style="margin: 0">
+        <button type="submit" class="kp-button kp-button--destructive"
+                data-kp-destructive data-kp-confirm="Delete subscription {{ subscription.name }} and its delivery history?">Delete</button>
+      </form>
+      {% else %}
+      <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}/archive" style="margin: 0">
+        <button type="submit" class="kp-button">Archive</button>
+      </form>
+      {% endif %}
     </td>
   </tr>
   {% endfor %}
@@ -109,7 +121,7 @@
         {% if dead.note %}<br><span class="text-secondary italic">{{ dead.note }}</span>{% endif %}
       {% endif %}
     </td>
-    <td class="text-end">
+    <td class="text-end row-actions">
       <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
         <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" style="margin: 0">
           <input type="hidden" name="subscription" value="{{ dead.subscription }}">

@@ -824,3 +824,118 @@ async fn k2_the_hub_assets_are_served_open_and_fingerprinted() {
     );
     hub.shutdown().await;
 }
+
+#[tokio::test]
+async fn a_deleted_dead_letter_stays_deleted_when_the_subscription_replays_from_the_beginning() {
+    // CT 109, 2026-09-27/28: Kenny deleted the dead letter
+    // {"title":"eerste echte bericht"} on notify.kenny/desktop; the next
+    // `from=beginning` poll replayed the still-retained message into a new
+    // delivery row (K8 backfill hands out every retained message the
+    // subscription has no row for), it died again, and the dead letter was
+    // back. A delete has to leave a mark the replay respects.
+    let hub = spawn_kit().await;
+    hub.bootstrap_two_clean("print.receipt", "printer", "archiver")
+        .await;
+    let id = hub.publish("print.receipt", r#"{"receipt":"kapot"}"#).await;
+    let received = hub.receive("print.receipt", "as=printer&wait=0").await;
+    assert_eq!(header(&received, "kyu-id").as_deref(), Some(id.as_str()));
+    assert_eq!(
+        hub.post_api(&format!("/t/print.receipt/nack/{id}?as=printer&dead=true"))
+            .await
+            .status(),
+        200
+    );
+    let deleted = hub
+        .form(
+            "/t/print.receipt/dashboard/delivery/delete",
+            &format!("subscription=printer&id={id}"),
+        )
+        .await;
+    assert!(deleted.status().is_redirection());
+
+    // The replay: every retained message this subscription lacks a row for.
+    let mut replayed = Vec::new();
+    loop {
+        let r = hub
+            .receive("print.receipt", "as=printer&from=beginning&wait=0")
+            .await;
+        if r.status() != 200 {
+            break;
+        }
+        let got = header(&r, "kyu-id").expect("an id");
+        hub.post_api(&format!("/t/print.receipt/ack/{got}?as=printer"))
+            .await;
+        replayed.push(got);
+    }
+    assert!(
+        !replayed.contains(&id),
+        "the deleted message is not handed out again: {replayed:?}"
+    );
+    let after = topic_page(&hub, "print.receipt").await;
+    assert!(
+        after.contains("Nothing has been dead-lettered"),
+        "and it does not come back as a dead letter"
+    );
+    hub.shutdown().await;
+}
+
+#[tokio::test]
+async fn the_subscriptions_table_archives_a_live_subscription_and_deletes_an_archived_one() {
+    // Kenny, 2026-09-30: a button on Subscriptions that archives a
+    // subscription that is not archived, and deletes one that is.
+    let hub = spawn_kit().await;
+    hub.bootstrap_two_clean("print.receipt", "printer", "archiver")
+        .await;
+    hub.publish("print.receipt", r#"{"receipt":"wacht"}"#).await;
+    let page = topic_page(&hub, "print.receipt").await;
+    assert!(
+        page.contains("/t/print.receipt/dashboard/subs/printer/archive"),
+        "a live subscription offers Archive"
+    );
+    assert!(
+        !page.contains("/t/print.receipt/dashboard/subs/printer/delete"),
+        "and not Delete while it is live"
+    );
+
+    let archived = hub
+        .form("/t/print.receipt/dashboard/subs/printer/archive", "")
+        .await;
+    assert!(archived.status().is_redirection());
+    let page = topic_page(&hub, "print.receipt").await;
+    assert!(
+        page.contains("/t/print.receipt/dashboard/subs/printer/delete"),
+        "an archived subscription offers Delete"
+    );
+    assert!(
+        page.contains("data-kp-confirm=\"Delete subscription printer"),
+        "which names what goes before it acts"
+    );
+    assert_eq!(
+        hub.receive("print.receipt", "as=printer&wait=0")
+            .await
+            .status(),
+        409,
+        "archiving is the same state the idle sweep produces: polls are refused"
+    );
+
+    let deleted = hub
+        .form("/t/print.receipt/dashboard/subs/printer/delete", "")
+        .await;
+    assert!(deleted.status().is_redirection());
+    let page = topic_page(&hub, "print.receipt").await;
+    assert!(
+        !page.contains("/dashboard/subs/printer\""),
+        "the subscription is gone from the table"
+    );
+    assert!(
+        page.contains("/dashboard/subs/archiver\""),
+        "the other one is untouched"
+    );
+
+    // A live subscription cannot be deleted by crafting the form.
+    let refused = hub
+        .form("/t/print.receipt/dashboard/subs/archiver/delete", "")
+        .await;
+    assert_eq!(refused.status(), 409);
+    hub.shutdown().await;
+}

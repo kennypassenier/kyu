@@ -1146,6 +1146,33 @@ pub async fn dashboard_delete_delivery(
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }
 
+/// `POST /t/{topic}/dashboard/subs/{subscription}/archive` — the Archive
+/// button on the topic page's subscriptions table (Kenny, 2026-09-30).
+pub async fn dashboard_archive_subscription(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let (t, s) = (topic.clone(), subscription.clone());
+    if let Some(lapsed) = spawn_engine(move || engine.archive(&t, &s)).await? {
+        tracing::info!(%topic, %subscription, lapsed, "subscription archived from the dashboard");
+    }
+    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+}
+
+/// `POST /t/{topic}/dashboard/subs/{subscription}/delete` — the Delete
+/// button an archived subscription gets instead (Kenny, 2026-09-30).
+pub async fn dashboard_delete_subscription(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let (t, s) = (topic.clone(), subscription.clone());
+    spawn_engine(move || engine.delete_subscription(&t, &s)).await?;
+    tracing::info!(%topic, %subscription, "subscription deleted from the dashboard");
+    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+}
+
 /// [K-actions] `POST /dashboard/dead-letters/prune` — the status page's
 /// "Prune every dead letter" button (`kit::TopicsSection::actions`): every
 /// topic and subscription in one confirmed sweep, after the storm that

@@ -11,6 +11,25 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+**A deleted dead letter stays deleted.** Deleting a delivery (and "Prune
+every dead letter") removed its row, and a subscription polling with
+`?from=beginning` is handed a delivery for every retained message it has
+no row for, so the next replay brought the message back and it died again:
+on CT 109 a dead letter from 2026-08-28 returned after being deleted twice.
+A deleted delivery now stays as a `removed` row (migration 6 rebuilds the
+`deliveries` table to allow that state; a snapshot is taken first, as for
+every migration). `kyu_deliveries` gains a `state="removed"` series.
+
+**Archive and Delete on the subscriptions table.** A subscription that is
+not archived gets an Archive button (the same state and
+`subscription.archived` event the idle sweep produces, backlog settled as
+lapsed); an archived one gets Delete, which asks first and removes the
+subscription and its delivery rows. Deleting one that is not archived is
+refused with 409.
+
+**Wider pages.** The dashboard uses up to 80% of the window (at least
+64rem), and a row's action buttons keep their label on one line.
+
 ### Changed
 
 - **Releases are built and published locally** (Kenny, 2026-09-29: GitHub
