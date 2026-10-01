@@ -13,6 +13,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [4.2.0] - 2026-10-01
 
+## [4.2.0] - 2026-10-01
+
 ### Added
 
 - **The hub joins the kit's backup pause** (chassis-rs 3.1.0, feat-backup-1).
