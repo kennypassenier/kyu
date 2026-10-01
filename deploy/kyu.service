@@ -30,6 +30,10 @@ User=kyu
 Group=kyu
 EnvironmentFile=/appdata/kyu/kyu-config/kyu.env
 WorkingDirectory=/appdata/kyu/kyu-config
+# feat-backup-1: /run/kyu/backup.sock, where `kyu backup-pause`
+# reaches the running service; outside the state root, so never archived.
+RuntimeDirectory=kyu
+RuntimeDirectoryMode=0700
 ExecStartPre=/opt/kyu/bin/kyu --check
 ExecStart=/opt/kyu/bin/kyu
 Restart=always

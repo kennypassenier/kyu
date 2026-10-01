@@ -11,6 +11,33 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-10-01
+
+### Added
+
+- **The hub joins the kit's backup pause** (chassis-rs 3.1.0, feat-backup-1).
+  `kyu backup-pause --for <secs>` now actually holds kyu's own writes, not
+  only the kit's: every store write goes through a new
+  `http::handlers::spawn_engine_write`, which wraps the existing
+  `spawn_engine` in `chassis::shell::backup::writing_blocking()`, so a new
+  write blocks for the length of the pause instead of racing it. The pause
+  hook (`App::on_backup_pause`) then runs the same `wal_checkpoint(TRUNCATE)`
+  W12 already runs at shutdown, so a file-level backup of the state root
+  never sees a WAL or SHM file to miss. Reads (`policy`, `retention`,
+  `dead_letters`) are unaffected and keep answering under the default
+  `writes` mode, as the kit intends.
+
+### Changed
+
+- **chassis-rs 3.0.0 → 3.1.0**, `chassis sync --write`. The unit
+  (`deploy/kyu.service`) gains `RuntimeDirectory=kyu` /
+  `RuntimeDirectoryMode=0700`, the home of `/run/kyu/backup.sock` that
+  `backup-pause` talks to; without it the pause falls back to stopping the
+  unit. `kp_themes` moves to 8.1.0 (vendored by the kit; no visible change
+  to kyu, which doesn't serve kp-themes' webapp module set). kyu mounts no
+  `webapp`, so the kit's root-mount default (feat-pages-1) does not apply
+  here.
+
 ## [4.1.0] - 2026-09-30
 
 **A deleted dead letter stays deleted.** Deleting a delivery (and "Prune

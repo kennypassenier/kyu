@@ -116,7 +116,7 @@ pub async fn publish(
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
-    let published = spawn_engine(move || {
+    let published = spawn_engine_write(move || {
         engine.publish_due(&topic_for_engine, &payload, content_type.as_deref(), due_at)
     })
     .await?;
@@ -260,7 +260,7 @@ async fn claim(
     let engine = state.engine.clone();
     let topic = topic.to_string();
     let subscription = subscription.to_string();
-    spawn_engine(move || engine.claim_next(&topic, &subscription, from_beginning)).await
+    spawn_engine_write(move || engine.claim_next(&topic, &subscription, from_beginning)).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,7 +280,8 @@ pub async fn ack(
     let subscription = query.as_.clone();
     let id_for_engine = id.clone();
 
-    spawn_engine(move || engine.ack(&topic_for_engine, &subscription, &id_for_engine)).await?;
+    spawn_engine_write(move || engine.ack(&topic_for_engine, &subscription, &id_for_engine))
+        .await?;
 
     tracing::info!(topic = %topic, subscription = %query.as_, id = %id, "message acknowledged");
 
@@ -301,6 +302,23 @@ where
             anyhow::anyhow!("a store task failed to run: {join_error}"),
         ))),
     }
+}
+
+/// Like [`spawn_engine`], for calls that write the store (AR5, feat-backup-1
+/// in chassis 3.1.0): holds a `chassis::shell::backup::writing_blocking()`
+/// ticket for the call, so `<name> backup-pause` sees it as in flight and
+/// waits for it, and a new one blocks until `backup-resume` instead of
+/// racing the pause hook's WAL checkpoint.
+async fn spawn_engine_write<T, F>(work: F) -> Result<T, ApiError>
+where
+    F: FnOnce() -> Result<T, crate::engine::EngineError> + Send + 'static,
+    T: Send + 'static,
+{
+    spawn_engine(move || {
+        let _ticket = chassis::shell::backup::writing_blocking();
+        work()
+    })
+    .await
 }
 
 /// AR2's two response shapes. Raw is the default so payload bytes stay
@@ -443,7 +461,7 @@ pub async fn nack(
     let topic_for_engine = topic.clone();
     let subscription_for_engine = subscription.clone();
     let id_for_engine = id.clone();
-    let settled = spawn_engine(move || {
+    let settled = spawn_engine_write(move || {
         engine.nack(
             &topic_for_engine,
             &subscription_for_engine,
@@ -543,7 +561,8 @@ pub async fn put_policy(
     let defaults = engine.defaults();
     let topic_for_log = topic.clone();
     let subscription_for_log = subscription.clone();
-    let effective = spawn_engine(move || engine.set_policy(&topic, &subscription, stored)).await?;
+    let effective =
+        spawn_engine_write(move || engine.set_policy(&topic, &subscription, stored)).await?;
     let idle = (
         stored.idle_flag_ms.unwrap_or(defaults.idle_flag_ms),
         stored.idle_archive_ms.unwrap_or(defaults.idle_archive_ms),
@@ -660,7 +679,7 @@ pub async fn requeue_dead(
     let topic_for_wake = topic.clone();
     let subscription_for_wake = subscription.clone();
     let id_for_response = id.clone();
-    spawn_engine(move || engine.requeue_dead(&topic, &subscription, &id)).await?;
+    spawn_engine_write(move || engine.requeue_dead(&topic, &subscription, &id)).await?;
 
     state.notifiers.wake(
         &topic_for_wake,
@@ -692,7 +711,7 @@ pub async fn delete_delivery(
     let topic_for_log = topic.clone();
     let subscription_for_log = subscription.clone();
     let id_for_response = id.clone();
-    spawn_engine(move || engine.delete_delivery(&topic, &subscription, &id)).await?;
+    spawn_engine_write(move || engine.delete_delivery(&topic, &subscription, &id)).await?;
 
     tracing::info!(
         topic = %topic_for_log,
@@ -718,7 +737,7 @@ pub async fn unarchive(
     let engine = state.engine.clone();
     let topic_for_response = topic.clone();
     let subscription_for_response = subscription.clone();
-    let changed = spawn_engine(move || engine.unarchive(&topic, &subscription)).await?;
+    let changed = spawn_engine_write(move || engine.unarchive(&topic, &subscription)).await?;
 
     tracing::info!(
         topic = %topic_for_response,
@@ -793,7 +812,7 @@ pub async fn put_retention(
 
     let engine = state.engine.clone();
     let topic_for_response = topic.clone();
-    spawn_engine(move || engine.set_retention(&topic, retention)).await?;
+    spawn_engine_write(move || engine.set_retention(&topic, retention)).await?;
 
     let engine = state.engine.clone();
     let (effective, explicit) = spawn_engine(move || engine.retention(&topic_for_response)).await?;
@@ -1052,7 +1071,7 @@ pub async fn dashboard_publish(
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
-    let published = spawn_engine(move || {
+    let published = spawn_engine_write(move || {
         engine.publish(
             &topic_for_engine,
             payload.as_bytes(),
@@ -1099,7 +1118,7 @@ pub async fn dashboard_requeue(
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
     let subscription_for_wake = subscription.clone();
-    spawn_engine(move || engine.requeue_dead(&topic_for_engine, &subscription, &id)).await?;
+    spawn_engine_write(move || engine.requeue_dead(&topic_for_engine, &subscription, &id)).await?;
 
     state
         .notifiers
@@ -1141,7 +1160,8 @@ pub async fn dashboard_delete_delivery(
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
-    spawn_engine(move || engine.delete_delivery(&topic_for_engine, &subscription, &id)).await?;
+    spawn_engine_write(move || engine.delete_delivery(&topic_for_engine, &subscription, &id))
+        .await?;
 
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }
@@ -1154,7 +1174,7 @@ pub async fn dashboard_archive_subscription(
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
     let (t, s) = (topic.clone(), subscription.clone());
-    if let Some(lapsed) = spawn_engine(move || engine.archive(&t, &s)).await? {
+    if let Some(lapsed) = spawn_engine_write(move || engine.archive(&t, &s)).await? {
         tracing::info!(%topic, %subscription, lapsed, "subscription archived from the dashboard");
     }
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
@@ -1168,7 +1188,7 @@ pub async fn dashboard_delete_subscription(
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
     let (t, s) = (topic.clone(), subscription.clone());
-    spawn_engine(move || engine.delete_subscription(&t, &s)).await?;
+    spawn_engine_write(move || engine.delete_subscription(&t, &s)).await?;
     tracing::info!(%topic, %subscription, "subscription deleted from the dashboard");
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }
@@ -1184,7 +1204,7 @@ pub async fn dashboard_prune_dead_letters(
     State(state): State<AppState>,
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
-    let count = spawn_engine(move || engine.prune_dead_letters()).await?;
+    let count = spawn_engine_write(move || engine.prune_dead_letters()).await?;
     Ok(axum::Json(json!({ "pruned": count })).into_response())
 }
 

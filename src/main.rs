@@ -133,6 +133,7 @@ async fn main() -> ExitCode {
         }
     };
     let store_for_flush = store.clone();
+    let store_for_pause = store.clone();
 
     let clock = SystemClock;
     let heartbeat = Heartbeat::starting_at(clock.now_ms());
@@ -188,6 +189,21 @@ async fn main() -> ExitCode {
             });
         });
     }
+    // feat-backup-1 (chassis 3.1.0) · `<name> backup-pause` holds every
+    // write wrapped in `chassis::shell::backup::writing_blocking()` (see
+    // `http::handlers::spawn_engine_write`), waits for the ones already in
+    // flight, then runs this hook before answering the caller: the same
+    // `wal_checkpoint(TRUNCATE)` W12 runs at shutdown, so a file-level
+    // backup of the state root sees no WAL/SHM to miss. An error here falls
+    // the pause back to stopping the unit instead.
+    app.on_backup_pause(move |_mode| {
+        store_for_pause.checkpoint().map_err(|error| {
+            chassis::Error::dependency(
+                format!("could not checkpoint the store for a backup pause: {error:#}"),
+                "the pause falls back to stopping the unit; investigate the write-ahead log",
+            )
+        })
+    });
     // W12 · after the drain, settle the write-ahead log. Bounded by the
     // kit's shutdown budget (KYU_SHUTDOWN_TIMEOUT_MS); a checkpoint that does
     // not finish costs nothing but a file-level backup's restorability —
