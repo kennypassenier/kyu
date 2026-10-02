@@ -83,6 +83,11 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // fix-15 (chassis-rs 3.2.0): without this the kit's dashboard pages and
+    // layout would show the binary name ("kyu") as the brand — which here
+    // happens to already be the service's own display name (README,
+    // templates), but set it explicitly rather than rely on that match.
+    app.brand_title("kyu");
     if !app.needs_project_config() {
         return app.run().await;
     }
