@@ -1,0 +1,9 @@
+# Kenny, 2026-10-04: the suites run side by side under cargo-nextest. These
+# suites start real hubs on fixed ports or share backup paths, so they keep
+# running one at a time among themselves; everything else runs in parallel.
+[test-groups]
+serial-hubs = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'binary(l5_crash) | binary(f179_backup) | binary(w12_shutdown)'
+test-group = 'serial-hubs'

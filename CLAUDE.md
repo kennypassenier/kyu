@@ -76,3 +76,13 @@ There is no GitHub Actions CI since 2026-09-29 (Kenny: tests and release
 builds run locally): `chassis release <version>` re-runs the full gate —
 including cargo-deny and the container smoke — before anything is tagged,
 and `chassis release <next> --dry-run` runs it without releasing.
+
+## When tests run (Kenny, 2026-10-04, test report)
+
+A commit runs fmt and clippy only, and skips them when their input did not
+move. The whole suite runs once, at the release (`chassis release`, or
+`scripts/release-kit.sh` in chassis-rs), side by side under cargo-nextest
+when it is installed; suites that share ports or fixtures are grouped in
+`.config/nextest.toml`. When Kenny says a release goes without tests, it
+does. A test that waits on the clock gets a short test value instead of the
+production one; no test may cost development time it does not need.
