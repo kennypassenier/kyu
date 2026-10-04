@@ -1093,7 +1093,7 @@ async fn p7_g15_several_waiters_and_one_message_wakes_someone_promptly() {
     // Four long polls waiting on the same subscription; one message arrives.
     let mut waiters = Vec::new();
     for _ in 0..4 {
-        let url = hub.url("/t/notify.kenny/next?as=printer&wait=10");
+        let url = hub.url("/t/notify.kenny/next?as=printer&wait=4");
         waiters.push(tokio::spawn(async move {
             let started = std::time::Instant::now();
             let response = client().get(url).send().await.expect("a response");

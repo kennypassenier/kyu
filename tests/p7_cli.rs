@@ -61,7 +61,9 @@ fn run(args: &[&str]) -> (Option<i32>, String) {
         buf
     });
 
-    let deadline = Instant::now() + Duration::from_secs(10);
+    // 3 s is plenty: a refused flag exits in milliseconds (was 10 s until
+    // 2026-10-04, which made the no-argument case cost 10 s).
+    let deadline = Instant::now() + Duration::from_secs(3);
     let status = loop {
         match child.try_wait().expect("waiting on the child must work") {
             Some(status) => break Some(status),
