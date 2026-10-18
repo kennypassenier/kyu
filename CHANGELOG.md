@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.2.9] - 2026-10-18
+
 ## [4.2.8] - 2026-10-16
 
 ## [4.2.7] - 2026-10-08
