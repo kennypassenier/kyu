@@ -1,0 +1,97 @@
+{#- The parts that cross every page: command palette, keys and the ? sheet,
+    Help with the first-visit tour, anchors, and the Topics page's "who reads
+    what" map. Included in each page's head block; the pages render it from
+    the `shell` view-model (every topic and subscription). Markup that belongs
+    in the body (dialogs) sits in <template>s, which a head may hold, and
+    /assets/common.js moves it in. -#}
+<link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+<script type="module" src="/assets/common.js?v={{ kyu_assets }}"></script>
+<script type="module" src="/static/kp/js/auto.js"></script>
+
+<template id="kyu-shell">
+  <dialog class="kp-palette" id="kyu-palette" data-kp-palette data-kp-primary
+          data-kp-nomatch="plate" data-kp-subject-name="topic or app"
+          data-kp-group-order="Do, Topics, Subscriptions" aria-label="Commands">
+    <input class="kp-palette__input" type="text" role="combobox" aria-label="Commands" aria-expanded="true"
+           aria-controls="kyu-palette-list" autocomplete="off" placeholder="Go to a topic or an app, or type a verb">
+    <ul class="kp-palette__list" id="kyu-palette-list" role="listbox" aria-label="Commands">
+      <li role="presentation" class="kp-palette__group" data-kp-group>
+        <span class="kp-palette__group-label">Do</span>
+        <ul role="group" aria-label="Do">
+          <li class="kp-palette__option" role="option" data-kp-option data-value="publish" data-kp-featured data-kp-verb="Publish" data-kp-keys="p" data-kp-words="send post message curl test"
+              data-hint-topic="Open the publish box on this topic" data-hint-elsewhere="Open a topic first, then publish to it">Publish a test message<span class="kp-palette__description"></span></li>
+          <li class="kp-palette__option" role="option" data-kp-option data-value="prune" data-kp-featured data-kp-verb="Prune" data-kp-words="delete purge clear remove dead"
+              data-dead="{{ shell.dead_total }}">Prune dead letters<span class="kp-palette__description"></span></li>
+          <li role="presentation"><a class="kp-palette__option" role="option" data-kp-option data-value="apps" href="/clients" data-kp-verb="Open" data-kp-words="clients tokens sign-in keys">Apps<span class="kp-palette__description">Every app with its own token</span></a></li>
+        </ul>
+      </li>
+      <li role="presentation" class="kp-palette__group" data-kp-group>
+        <span class="kp-palette__group-label">Topics</span>
+        <ul role="group" aria-label="Topics">
+          {% for topic in shell.topics %}
+          <li role="presentation"><a class="kp-palette__option" role="option" data-kp-option data-value="topic-{{ topic.name }}" href="/t/{{ topic.name }}/dashboard" data-kp-verb="Open"
+              data-kyu-topic="{{ topic.name }}" data-kyu-messages="{{ topic.messages }}">{{ topic.name }}<span class="kp-palette__description">{{ topic.detail }}</span></a></li>
+          {% endfor %}
+        </ul>
+      </li>
+      <li role="presentation" class="kp-palette__group" data-kp-group>
+        <span class="kp-palette__group-label">Subscriptions</span>
+        <ul role="group" aria-label="Subscriptions">
+          {% for sub in shell.subscriptions %}
+          <li role="presentation"><a class="kp-palette__option" role="option" data-kp-option data-value="sub-{{ sub.topic }}/{{ sub.name }}" href="/t/{{ sub.topic }}/dashboard/subs/{{ sub.name }}" data-kp-verb="Open"
+              data-kp-context-of="{{ sub.topic }}" data-kyu-sub="{{ sub.name }}" data-kyu-topic="{{ sub.topic }}" data-kyu-tone="{{ sub.tone }}" data-kyu-detail="{{ sub.detail }}">{{ sub.topic }} / {{ sub.name }}<span class="kp-palette__description">{{ sub.detail }}</span></a></li>
+          {% endfor %}
+        </ul>
+      </li>
+    </ul>
+    <p class="kp-palette__status" role="status" aria-live="polite"></p>
+  </dialog>
+
+  <dialog class="kp-shortcuts" id="kyu-sheet" data-kp-shortcuts data-kp-shortcuts-live data-kp-shortcuts-group="Anywhere" aria-labelledby="kyu-sheet-title">
+    <h3 class="kp-dialog__title" id="kyu-sheet-title">Keyboard shortcuts</h3>
+  </dialog>
+
+  <dialog class="kp-drawer" id="kyu-help" aria-labelledby="kyu-help-title">
+    <header class="kp-drawer__head">
+      <h2 class="kp-dialog__title" id="kyu-help-title">Help</h2>
+      <button type="button" class="kp-icon-button kp-dialog__close" aria-label="Close Help" title="Close Help" data-kyu-help-close>✕</button>
+      <p class="kp-drawer__desc">Where things live on this page, the words kyu uses, and its keys.</p>
+    </header>
+    <div class="kp-drawer__body">
+      <section class="kp-card kp-help">
+        <h3>Words</h3>
+        <dl class="kp-help__list">
+          <dt>Topic</dt>
+          <dd>A named queue that apps publish to.</dd>
+          <dt>Subscription</dt>
+          <dd>One app&rsquo;s own place in line on a topic.</dd>
+          <dt>Dead letter</dt>
+          <dd>A message that could not be delivered after its attempts.</dd>
+        </dl>
+      </section>
+      <section class="kp-card kp-help">
+        <h3>Keys</h3>
+        <dl class="kp-help__list" data-kyu-help-keys></dl>
+      </section>
+    </div>
+    <footer class="kp-drawer__foot">
+      <button type="button" class="kp-button kp-button--primary" data-kyu-help-tour>Take the 1-minute tour</button>
+    </footer>
+  </dialog>
+
+  <button type="button" class="kp-button kp-button--destructive" id="kyu-prune" hidden
+          data-kp-destructive data-kp-confirm="Delete every dead letter on this hub? Nothing can bring them back."
+          data-kp-confirm-type="prune" data-kp-confirm-label="Prune dead letters">Prune dead letters</button>
+
+  <section id="kyu-uses" class="kyu-uses" aria-labelledby="kyu-uses-title">
+    <h2 id="kyu-uses-title">Who reads what</h2>
+    <p class="text-secondary">Every topic on the left, the apps that read it on the right, a line for each subscription. A line is red when the subscription has a dead letter, amber when a lease ran out, muted when it is archived.</p>
+    <div class="kyu-uses__bar">
+      <div class="kp-segmented" data-kp-segmented="single" role="radiogroup" aria-label="View">
+        <button type="button" class="kp-segmented__item" data-value="lines" role="radio" aria-checked="true"><span class="kp-segmented__label">Map</span></button>
+        <button type="button" class="kp-segmented__item" data-value="grid" role="radio" aria-checked="false"><span class="kp-segmented__label">Grid</span></button>
+      </div>
+    </div>
+    <div class="kp-matrix" data-kp-matrix data-kp-view="lines" data-kp-matrix-owned data-kp-remember="kyu-uses" aria-label="Which app reads which topic" id="kyu-uses-matrix"></div>
+  </section>
+</template>
