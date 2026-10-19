@@ -11,6 +11,10 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Topic page: "Clear the filter" on the subscriptions table also turns
+  the state chips back to All.
+
 ## [4.3.1] - 2026-10-19
 
 ### Fixed
