@@ -1,1 +1,154 @@
-/* kyu: topics.css — filled by the kp-themes 11.0.0 adoption. */
+/* kyu: topics.css — layout glue for the Topics page. Everything with a kp-
+   class is the package; these tp- rules only place the page's parts and the
+   few cells that hold two package parts side by side. */
+
+.tp-stage,
+.tp-heat-stage,
+.tp-trend-stage {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+    min-inline-size: 0;
+    align-content: start;
+}
+
+.tp-section {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+    min-inline-size: 0;
+    margin-block-start: var(--kp-space-xl, 2rem);
+}
+
+.tp-section__head {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.tp-section > :is(h2, p),
+.tp-section__head > :is(h2, p) {
+    margin: 0;
+}
+
+.tp-live-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.tp-table {
+    display: grid;
+    min-inline-size: 0;
+}
+
+.tp-table > [hidden] {
+    display: none;
+}
+
+/* The empty hub: a plate as tall as the table was, its content centred in it. */
+.tp-none {
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    text-align: center;
+    min-block-size: 18rem;
+}
+
+/* Header. */
+.tp-header {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+    min-inline-size: 0;
+}
+
+.tp-header > :is(h1, p) {
+    margin: 0;
+}
+
+.tp-meta {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    justify-content: start;
+    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    min-block-size: 2rem;
+    color: var(--muted-foreground);
+}
+
+/* The topic cell: the mark and the name side by side. */
+.tp-topic {
+    display: inline-flex;
+    gap: var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    min-inline-size: 0;
+}
+
+.tp-topic__link {
+    overflow-wrap: anywhere;
+}
+
+.tp-name {
+    min-inline-size: 12rem;
+}
+
+.tp-hover {
+    cursor: help;
+}
+
+.tp-flow {
+    min-inline-size: 8rem;
+}
+
+.tp-flow .kp-stackbar {
+    min-inline-size: 6rem;
+    inline-size: 100%;
+}
+
+.kp-table .kp-badge {
+    white-space: nowrap;
+}
+
+.tp-then,
+.tp-readout {
+    margin: 0;
+    color: var(--muted-foreground);
+}
+
+.tp-start {
+    max-inline-size: 60rem;
+}
+
+.tp-start > :is(h2, p) {
+    margin: 0;
+}
+
+.tp-trend-plate {
+    min-block-size: 14rem;
+}
+
+.tp-heat-controls {
+    display: grid;
+    grid-template-columns: max-content repeat(2, minmax(8rem, max-content));
+    gap: var(--kp-space-xs, 0.25rem);
+    align-items: center;
+    justify-content: start;
+}
+
+/* A heat row's name wraps instead of being cut with an ellipsis. */
+.kp-heat__label-text {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* The heat grid's own knob: its empty and failed states are as tall as the grid. */
+.tp-heat-stage [data-tp-heat] {
+    --kp-heat-state-height: 13.5rem;
+}
+
+.tp-readout-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: var(--kp-space-sm, 0.5rem) var(--kp-space-md, 1rem);
+    align-items: center;
+    min-block-size: 2.5rem;
+}
