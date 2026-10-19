@@ -728,7 +728,22 @@ pub fn requeue_dead(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<R
 /// replay creates a delivery for every retained message a subscription has
 /// no row for, so a deleted row came back at the next `from=beginning`
 /// poll — the CT 109 dead letter Kenny deleted twice (2026-09-30).
-pub fn delete_delivery(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<DeleteOutcome> {
+pub fn delete_delivery(
+    tx: &Transaction,
+    message_id: &str,
+    sub_id: i64,
+    now: Millis,
+) -> Result<DeleteOutcome> {
+    if let Some(msg_seq) = message_seq_of_id(tx, message_id)? {
+        close_attempt(
+            tx,
+            msg_seq,
+            sub_id,
+            now,
+            "nacked",
+            "deleted from the dashboard",
+        )?;
+    }
     let deleted = tx
         .execute(
             "UPDATE deliveries
@@ -969,7 +984,8 @@ pub fn subscription_state(tx: &Transaction, sub_id: i64) -> Result<String> {
 /// `lapsed` rather than silent deletion: the count is reported, the state is
 /// visible, and the messages themselves stay on the topic until retention
 /// collects them (G8).
-pub fn lapse_outstanding(tx: &Transaction, sub_id: i64) -> Result<usize> {
+pub fn lapse_outstanding(tx: &Transaction, sub_id: i64, now: Millis) -> Result<usize> {
+    close_subscription_attempts(tx, sub_id, now, "expired", "the subscription was archived")?;
     let lapsed = tx
         .execute(
             "UPDATE deliveries
@@ -1396,4 +1412,349 @@ pub fn revoke_app(tx: &Transaction, name: &str, now: Millis) -> Result<bool> {
         )
         .with_context(|| format!("cannot revoke app {name:?}"))?;
     Ok(changed == 1)
+}
+
+// ─── kp-themes 11 · attempts and statistics (schema 7) ─────────────────────
+
+/// How long an attempt row is kept even when its message is (the sweeper's
+/// cap; the cascade already removes rows with their message).
+pub const ATTEMPTS_KEPT_MS: Millis = 30 * 24 * 60 * 60 * 1_000;
+/// How long hourly counters are kept.
+pub const HOURLY_KEPT_MS: Millis = 30 * 24 * 60 * 60 * 1_000;
+/// How long daily counters are kept, in days.
+pub const DAILY_KEPT_DAYS: i64 = 400;
+/// How long hub-total samples are kept.
+pub const SAMPLES_KEPT_MS: Millis = 48 * 60 * 60 * 1_000;
+/// How often the sweeper samples the hub totals.
+pub const SAMPLE_EVERY_MS: Millis = 5 * 60 * 1_000;
+
+/// One delivery attempt as the dashboard shows it.
+#[derive(Debug, Clone)]
+pub struct AttemptRow {
+    pub n: i64,
+    pub claimed_at: Millis,
+    pub ended_at: Option<Millis>,
+    pub outcome: String,
+    pub app: Option<String>,
+    pub reason: Option<String>,
+}
+
+pub fn message_seq_of_id(tx: &Transaction, message_id: &str) -> Result<Option<i64>> {
+    tx.query_row(
+        "SELECT seq FROM messages WHERE id = ?1",
+        [message_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .context("cannot look up the message")
+}
+
+/// Records a claim as attempt number `n` of this delivery. A stray attempt
+/// that never ended (it cannot happen through the engine, but a crash is
+/// not the engine) is closed first, so a delivery never has two in flight.
+pub fn open_attempt(
+    tx: &Transaction,
+    msg_seq: i64,
+    sub_id: i64,
+    now: Millis,
+    app: Option<&str>,
+) -> Result<()> {
+    close_attempt(
+        tx,
+        msg_seq,
+        sub_id,
+        now,
+        "expired",
+        "superseded by a new claim",
+    )?;
+    tx.execute(
+        "INSERT INTO attempts (msg_seq, sub_id, n, claimed_at, outcome, app)
+         VALUES (?1, ?2,
+                 COALESCE((SELECT max(n) FROM attempts WHERE msg_seq = ?1 AND sub_id = ?2), 0) + 1,
+                 ?3, 'in_flight', ?4)",
+        (msg_seq, sub_id, now, app),
+    )
+    .context("cannot record the delivery attempt")?;
+    Ok(())
+}
+
+/// Ends the attempt in flight for a delivery, if there is one.
+pub fn close_attempt(
+    tx: &Transaction,
+    msg_seq: i64,
+    sub_id: i64,
+    now: Millis,
+    outcome: &str,
+    reason: &str,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE attempts
+            SET ended_at = ?3, outcome = ?4, reason = ?5
+          WHERE msg_seq = ?1 AND sub_id = ?2 AND outcome = 'in_flight'",
+        (msg_seq, sub_id, now, outcome, reason),
+    )
+    .context("cannot close the delivery attempt")?;
+    Ok(())
+}
+
+/// Ends every attempt in flight on one subscription (archiving it).
+pub fn close_subscription_attempts(
+    tx: &Transaction,
+    sub_id: i64,
+    now: Millis,
+    outcome: &str,
+    reason: &str,
+) -> Result<()> {
+    tx.execute(
+        "UPDATE attempts
+            SET ended_at = ?2, outcome = ?3, reason = ?4
+          WHERE sub_id = ?1 AND outcome = 'in_flight'",
+        (sub_id, now, outcome, reason),
+    )
+    .context("cannot close the subscription's attempts")?;
+    Ok(())
+}
+
+pub fn bump_published(tx: &Transaction, topic: &str, now: Millis) -> Result<()> {
+    tx.execute(
+        "INSERT INTO stats_hourly (topic, hour, published, dead) VALUES (?1, ?2, 1, 0)
+         ON CONFLICT (topic, hour) DO UPDATE SET published = published + 1",
+        (topic, crate::engine::days::hour_of(now)),
+    )
+    .context("cannot count the published message")?;
+    Ok(())
+}
+
+pub fn bump_dead(tx: &Transaction, topic: &str, subscription: &str, now: Millis) -> Result<()> {
+    tx.execute(
+        "INSERT INTO stats_hourly (topic, hour, published, dead) VALUES (?1, ?2, 0, 1)
+         ON CONFLICT (topic, hour) DO UPDATE SET dead = dead + 1",
+        (topic, crate::engine::days::hour_of(now)),
+    )
+    .context("cannot count the dead letter per hour")?;
+    tx.execute(
+        "INSERT INTO stats_daily (topic, subscription, day, delivered, dead) VALUES (?1, ?2, ?3, 0, 1)
+         ON CONFLICT (topic, subscription, day) DO UPDATE SET dead = dead + 1",
+        (topic, subscription, crate::engine::days::day_of(now)),
+    )
+    .context("cannot count the dead letter per day")?;
+    Ok(())
+}
+
+pub fn bump_delivered(
+    tx: &Transaction,
+    topic: &str,
+    subscription: &str,
+    now: Millis,
+) -> Result<()> {
+    tx.execute(
+        "INSERT INTO stats_daily (topic, subscription, day, delivered, dead) VALUES (?1, ?2, ?3, 1, 0)
+         ON CONFLICT (topic, subscription, day) DO UPDATE SET delivered = delivered + 1",
+        (topic, subscription, crate::engine::days::day_of(now)),
+    )
+    .context("cannot count the delivered message")?;
+    Ok(())
+}
+
+/// Writes one hub-totals sample when the newest is older than
+/// [`SAMPLE_EVERY_MS`]. Returns whether it wrote one.
+pub fn sample_totals_if_due(tx: &Transaction, now: Millis) -> Result<bool> {
+    let newest: Option<Millis> = tx
+        .query_row("SELECT max(at) FROM stats_samples", [], |row| row.get(0))
+        .context("cannot read the newest sample")?;
+    if newest.is_some_and(|at| now - at < SAMPLE_EVERY_MS) {
+        return Ok(false);
+    }
+    tx.execute(
+        "INSERT OR REPLACE INTO stats_samples (at, messages, backlog, dead, in_flight)
+         VALUES (?1,
+                 (SELECT count(*) FROM messages),
+                 (SELECT count(*) FROM deliveries WHERE state = 'pending'),
+                 (SELECT count(*) FROM deliveries WHERE state = 'dead'),
+                 (SELECT count(*) FROM deliveries WHERE state = 'claimed'))",
+        [now],
+    )
+    .context("cannot sample the hub totals")?;
+    Ok(true)
+}
+
+/// Drops statistics past their caps and returns how many rows went. The
+/// attempts are bounded by `limit` like every sweeper batch; the counters
+/// are small enough to prune whole.
+pub fn prune_history(tx: &Transaction, now: Millis, limit: usize) -> Result<usize> {
+    let mut removed = 0;
+    removed += tx
+        .execute(
+            "DELETE FROM attempts WHERE id IN (
+                 SELECT id FROM attempts WHERE claimed_at < ?1 ORDER BY claimed_at LIMIT ?2)",
+            (now - ATTEMPTS_KEPT_MS, limit as i64),
+        )
+        .context("cannot prune old attempts")?;
+    removed += tx
+        .execute(
+            "DELETE FROM stats_hourly WHERE hour < ?1",
+            [now - HOURLY_KEPT_MS],
+        )
+        .context("cannot prune hourly counters")?;
+    removed += tx
+        .execute(
+            "DELETE FROM stats_daily WHERE day < ?1",
+            [crate::engine::days::day_of(now) - DAILY_KEPT_DAYS],
+        )
+        .context("cannot prune daily counters")?;
+    removed += tx
+        .execute(
+            "DELETE FROM stats_samples WHERE at < ?1",
+            [now - SAMPLES_KEPT_MS],
+        )
+        .context("cannot prune samples")?;
+    Ok(removed)
+}
+
+/// The attempts of one message on one subscription, oldest first.
+pub fn attempts_for(
+    conn: &rusqlite::Connection,
+    sub_id: i64,
+    message_id: &str,
+) -> Result<Option<Vec<AttemptRow>>> {
+    let seq: Option<i64> = conn
+        .query_row(
+            "SELECT d.msg_seq FROM deliveries d JOIN messages m ON m.seq = d.msg_seq
+              WHERE m.id = ?1 AND d.sub_id = ?2",
+            (message_id, sub_id),
+            |row| row.get(0),
+        )
+        .optional()
+        .context("cannot look up the delivery")?;
+    let Some(seq) = seq else {
+        return Ok(None);
+    };
+    let mut statement = conn
+        .prepare(
+            "SELECT n, claimed_at, ended_at, outcome, app, reason
+               FROM attempts WHERE msg_seq = ?1 AND sub_id = ?2 ORDER BY id",
+        )
+        .context("cannot list the attempts")?;
+    let rows = statement
+        .query_map((seq, sub_id), |row| {
+            Ok(AttemptRow {
+                n: row.get(0)?,
+                claimed_at: row.get(1)?,
+                ended_at: row.get(2)?,
+                outcome: row.get(3)?,
+                app: row.get(4)?,
+                reason: row.get(5)?,
+            })
+        })
+        .context("cannot list the attempts")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the attempts")?;
+    Ok(Some(rows))
+}
+
+/// `(day, delivered, dead)` for a subscription between two day counts,
+/// inclusive; days without activity are absent.
+pub fn daily_for(
+    conn: &rusqlite::Connection,
+    topic: &str,
+    subscription: &str,
+    from_day: i64,
+    to_day: i64,
+) -> Result<Vec<(i64, i64, i64)>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT day, delivered, dead FROM stats_daily
+              WHERE topic = ?1 AND subscription = ?2 AND day BETWEEN ?3 AND ?4
+              ORDER BY day",
+        )
+        .context("cannot read the daily counters")?;
+    let rows = statement
+        .query_map((topic, subscription, from_day, to_day), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .context("cannot read the daily counters")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the daily counters")?;
+    Ok(rows)
+}
+
+/// `(topic, hour, published, dead)` for every hour at or after `from_hour`.
+pub fn hourly_since(
+    conn: &rusqlite::Connection,
+    from_hour: Millis,
+) -> Result<Vec<(String, i64, i64, i64)>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT topic, hour, published, dead FROM stats_hourly WHERE hour >= ?1 ORDER BY hour",
+        )
+        .context("cannot read the hourly counters")?;
+    let rows = statement
+        .query_map([from_hour], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .context("cannot read the hourly counters")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the hourly counters")?;
+    Ok(rows)
+}
+
+/// One sampled set of hub totals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TotalsSample {
+    pub at: Millis,
+    pub messages: i64,
+    pub backlog: i64,
+    pub dead: i64,
+    pub in_flight: i64,
+}
+
+/// The samples since `from`, oldest first.
+pub fn samples_since(conn: &rusqlite::Connection, from: Millis) -> Result<Vec<TotalsSample>> {
+    let mut statement = conn
+        .prepare(
+            "SELECT at, messages, backlog, dead, in_flight FROM stats_samples
+              WHERE at >= ?1 ORDER BY at",
+        )
+        .context("cannot read the samples")?;
+    let rows = statement
+        .query_map([from], |row| {
+            Ok(TotalsSample {
+                at: row.get(0)?,
+                messages: row.get(1)?,
+                backlog: row.get(2)?,
+                dead: row.get(3)?,
+                in_flight: row.get(4)?,
+            })
+        })
+        .context("cannot read the samples")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the samples")?;
+    Ok(rows)
+}
+
+/// A stored message's payload and content type, for replay.
+pub fn message_for_replay(
+    conn: &rusqlite::Connection,
+    topic_id: i64,
+    message_id: &str,
+) -> Result<Option<(Vec<u8>, Option<String>)>> {
+    conn.query_row(
+        "SELECT payload, content_type FROM messages WHERE id = ?1 AND topic_id = ?2",
+        (message_id, topic_id),
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )
+    .optional()
+    .context("cannot read the message to replay")
+}
+
+pub fn topic_names_conn(conn: &rusqlite::Connection) -> Result<Vec<String>> {
+    let mut statement = conn
+        .prepare("SELECT name FROM topics ORDER BY name")
+        .context("cannot list topics")?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .context("cannot list topics")?
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .context("cannot read the topic list")?;
+    Ok(names)
 }

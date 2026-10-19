@@ -13,7 +13,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use chassis::Dashboard;
+use chassis::{Caller, Dashboard};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::time::Instant;
@@ -158,9 +158,16 @@ pub struct ReceiveQuery {
 /// K2 · `GET /t/{topic}/next?as={subscription}`
 pub async fn receive(
     State(state): State<AppState>,
+    caller: Option<Extension<Caller>>,
     Path(topic): Path<String>,
     Query(query): Query<ReceiveQuery>,
 ) -> Result<Response, ApiError> {
+    // Who polled goes into the attempt history the dashboard shows. The
+    // login token is "admin"; an open hub (tests) has no caller at all.
+    let app = caller.map(|Extension(caller)| match caller {
+        Caller::Client { name, .. } => name,
+        Caller::Admin => "admin".to_string(),
+    });
     let subscription = query
         .as_
         .clone()
@@ -202,7 +209,7 @@ pub async fn receive(
         let mut waiter = std::pin::pin!(waiter);
         waiter.as_mut().enable();
 
-        let received = claim(&state, &topic, &subscription, from_beginning).await?;
+        let received = claim(&state, &topic, &subscription, from_beginning, app.clone()).await?;
         if received.created.is_some() {
             created = received.created;
         }
@@ -256,11 +263,15 @@ async fn claim(
     topic: &str,
     subscription: &str,
     from_beginning: bool,
+    app: Option<String>,
 ) -> Result<Received, ApiError> {
     let engine = state.engine.clone();
     let topic = topic.to_string();
     let subscription = subscription.to_string();
-    spawn_engine_write(move || engine.claim_next(&topic, &subscription, from_beginning)).await
+    spawn_engine_write(move || {
+        engine.claim_next_as(&topic, &subscription, from_beginning, app.as_deref())
+    })
+    .await
 }
 
 #[derive(Debug, Deserialize)]
@@ -1153,6 +1164,7 @@ pub async fn dashboard_subscription(
 pub async fn dashboard_publish(
     State(state): State<AppState>,
     Path(topic): Path<String>,
+    headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Response, ApiError> {
     // A browser form posts urlencoded; take the payload field out of it.
@@ -1177,6 +1189,9 @@ pub async fn dashboard_publish(
     state.notifiers.wake(&topic, &published.delivered_to);
     tracing::info!(topic = %topic, id = %published.id, "test message published from the dashboard");
 
+    if wants_json(&headers) {
+        return Ok(axum::Json(json!({ "ok": true, "id": published.id })).into_response());
+    }
     Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
 }
 
@@ -1184,6 +1199,7 @@ pub async fn dashboard_publish(
 pub async fn dashboard_requeue(
     State(state): State<AppState>,
     Path(topic): Path<String>,
+    headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Response, ApiError> {
     let form = String::from_utf8_lossy(&body);
@@ -1218,7 +1234,7 @@ pub async fn dashboard_requeue(
         .notifiers
         .wake(&topic, std::slice::from_ref(&subscription_for_wake));
 
-    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+    Ok(done(&headers, &format!("/t/{topic}/dashboard")))
 }
 
 /// [W15, W16] `POST /t/{topic}/dashboard/delivery/delete` — the Delete
@@ -1227,6 +1243,7 @@ pub async fn dashboard_requeue(
 pub async fn dashboard_delete_delivery(
     State(state): State<AppState>,
     Path(topic): Path<String>,
+    headers: HeaderMap,
     body: axum::body::Bytes,
 ) -> Result<Response, ApiError> {
     let form = String::from_utf8_lossy(&body);
@@ -1257,7 +1274,7 @@ pub async fn dashboard_delete_delivery(
     spawn_engine_write(move || engine.delete_delivery(&topic_for_engine, &subscription, &id))
         .await?;
 
-    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+    Ok(done(&headers, &format!("/t/{topic}/dashboard")))
 }
 
 /// `POST /t/{topic}/dashboard/subs/{subscription}/archive` — the Archive
@@ -1265,13 +1282,14 @@ pub async fn dashboard_delete_delivery(
 pub async fn dashboard_archive_subscription(
     State(state): State<AppState>,
     Path((topic, subscription)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
     let (t, s) = (topic.clone(), subscription.clone());
     if let Some(lapsed) = spawn_engine_write(move || engine.archive(&t, &s)).await? {
         tracing::info!(%topic, %subscription, lapsed, "subscription archived from the dashboard");
     }
-    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+    Ok(done(&headers, &format!("/t/{topic}/dashboard")))
 }
 
 /// `POST /t/{topic}/dashboard/subs/{subscription}/delete` — the Delete
@@ -1279,12 +1297,13 @@ pub async fn dashboard_archive_subscription(
 pub async fn dashboard_delete_subscription(
     State(state): State<AppState>,
     Path((topic, subscription)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> Result<Response, ApiError> {
     let engine = state.engine.clone();
     let (t, s) = (topic.clone(), subscription.clone());
     spawn_engine_write(move || engine.delete_subscription(&t, &s)).await?;
     tracing::info!(%topic, %subscription, "subscription deleted from the dashboard");
-    Ok(Redirect::to(&format!("/t/{topic}/dashboard")).into_response())
+    Ok(done(&headers, &format!("/t/{topic}/dashboard")))
 }
 
 /// [K-actions] `POST /dashboard/dead-letters/prune` — the status page's
@@ -1300,6 +1319,356 @@ pub async fn dashboard_prune_dead_letters(
     let engine = state.engine.clone();
     let count = spawn_engine_write(move || engine.prune_dead_letters()).await?;
     Ok(axum::Json(json!({ "pruned": count })).into_response())
+}
+
+/// Whether the page's script asked for JSON instead of the no-script
+/// redirect (`Accept: application/json`).
+fn wants_json(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|accept| accept.contains("application/json"))
+}
+
+/// How a dashboard form post ends: `{ "ok": true }` for a script, the
+/// redirect back to the page for a browser form.
+fn done(headers: &HeaderMap, location: &str) -> Response {
+    if wants_json(headers) {
+        axum::Json(json!({ "ok": true })).into_response()
+    } else {
+        Redirect::to(location).into_response()
+    }
+}
+
+// ─── kp-themes 11 · data the pages fetch ────────────────────────────────────
+
+/// Most ids one bulk request may carry. Each id is its own small
+/// transaction, so the cap keeps one request from holding the writer.
+const BULK_MAX_IDS: usize = 1_000;
+
+#[derive(Debug, Deserialize)]
+struct BulkBody {
+    subscription: String,
+    ids: Vec<String>,
+}
+
+fn parse_bulk(body: &[u8]) -> Result<BulkBody, ApiError> {
+    let parsed: BulkBody = serde_json::from_slice(body).map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("the bulk request body is not usable: {error}"),
+            "send JSON like {\"subscription\": \"name\", \"ids\": [\"<message id>\"]}.",
+        )
+    })?;
+    if parsed.ids.len() > BULK_MAX_IDS {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!(
+                "a bulk request carries at most {BULK_MAX_IDS} messages, got {}",
+                parsed.ids.len()
+            ),
+            "split the selection into several requests.",
+        ));
+    }
+    Ok(parsed)
+}
+
+/// Runs `one` for each id and sorts the answers into `done` and `refused`.
+/// A refusal is an id the subscription cannot do this to (not dead any
+/// more, never delivered); anything else — an unknown topic or
+/// subscription, a store fault — fails the whole request, because every id
+/// would fail the same way.
+fn bulk_each(
+    ids: Vec<String>,
+    mut one: impl FnMut(&str) -> Result<(), EngineError>,
+) -> Result<serde_json::Value, EngineError> {
+    let mut done = Vec::new();
+    let mut refused = Vec::new();
+    for id in ids {
+        match one(&id) {
+            Ok(()) => done.push(id),
+            Err(EngineError::NoSuchDelivery { .. }) => {
+                refused.push(json!({
+                    "id": id,
+                    "reason": "this subscription holds no such message: it was never \
+                               delivered to it, or it was already deleted",
+                }));
+            }
+            Err(error @ EngineError::NotDead { .. }) => {
+                refused.push(json!({ "id": id, "reason": error.to_string() }));
+            }
+            Err(other) => return Err(other),
+        }
+    }
+    Ok(json!({ "done": done, "refused": refused }))
+}
+
+/// `POST /t/{topic}/dashboard/bulk/requeue` — the dead-letter selection
+/// bar's Requeue.
+pub async fn dashboard_bulk_requeue(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let BulkBody { subscription, ids } = parse_bulk(&body)?;
+    let engine = state.engine.clone();
+    let (t, s) = (topic.clone(), subscription.clone());
+    let answer =
+        spawn_engine_write(move || bulk_each(ids, |id| engine.requeue_dead(&t, &s, id))).await?;
+    state
+        .notifiers
+        .wake(&topic, std::slice::from_ref(&subscription));
+    Ok(axum::Json(answer).into_response())
+}
+
+/// `POST /t/{topic}/dashboard/bulk/delete` — Delete on the dead-letter
+/// selection bar and on the subscription backlog.
+pub async fn dashboard_bulk_delete(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+    body: axum::body::Bytes,
+) -> Result<Response, ApiError> {
+    let BulkBody { subscription, ids } = parse_bulk(&body)?;
+    let engine = state.engine.clone();
+    let answer = spawn_engine_write(move || {
+        bulk_each(ids, |id| engine.delete_delivery(&topic, &subscription, id))
+    })
+    .await?;
+    Ok(axum::Json(answer).into_response())
+}
+
+/// `POST /t/{topic}/dashboard/messages/{id}/replay` — publishes a stored
+/// message again as a new one.
+pub async fn dashboard_replay(
+    State(state): State<AppState>,
+    Path((topic, id)): Path<(String, String)>,
+) -> Result<Response, ApiError> {
+    let engine = state.engine.clone();
+    let (t, i) = (topic.clone(), id.clone());
+    let published = spawn_engine_write(move || engine.replay(&t, &i)).await?;
+    state.notifiers.wake(&topic, &published.delivered_to);
+    tracing::info!(topic = %topic, original = %id, id = %published.id, "message replayed from the dashboard");
+    Ok(axum::Json(json!({ "id": published.id })).into_response())
+}
+
+fn unknown_subscription(topic: &str, subscription: &str) -> ApiError {
+    ApiError::new(
+        StatusCode::NOT_FOUND,
+        format!("subscription {subscription:?} on topic {topic:?} does not exist"),
+        "a subscription is created by polling, so this name has never polled this \
+         topic. Check the spelling, or open the topic's own page to see which \
+         subscriptions it has.",
+    )
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AttemptsQuery {
+    pub id: Option<String>,
+}
+
+/// `GET /t/{topic}/dashboard/subs/{name}/attempts?id=…` — the delivery
+/// attempts of one message on one subscription.
+pub async fn dashboard_attempts(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+    Query(query): Query<AttemptsQuery>,
+) -> Result<Response, ApiError> {
+    let Some(id) = query.id.filter(|id| !id.is_empty()) else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "the id parameter is required: which message's attempts?",
+            "add ?id=<message id>, for example one from the subscription's backlog.",
+        ));
+    };
+    let engine = state.engine.clone();
+    let (t, s, i) = (topic.clone(), subscription.clone(), id.clone());
+    let attempts = spawn_engine(move || {
+        engine
+            .store()
+            .read(|conn| {
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &t)? else {
+                    return Ok(None);
+                };
+                let Some(sub_id) = queries::subscription_id_by_name_conn(conn, topic_id, &s)?
+                else {
+                    return Ok(None);
+                };
+                Ok(Some(queries::attempts_for(conn, sub_id, &i)?))
+            })
+            .map_err(EngineError::Internal)
+    })
+    .await?;
+    let attempts = match attempts {
+        None => return Err(unknown_subscription(&topic, &subscription)),
+        Some(None) => {
+            return Err(EngineError::NoSuchDelivery { id, subscription }.into());
+        }
+        Some(Some(rows)) => rows,
+    };
+    let rows: Vec<_> = attempts
+        .into_iter()
+        .map(|attempt| {
+            json!({
+                "n": attempt.n,
+                "claimed_at": attempt.claimed_at,
+                "ended_at": attempt.ended_at,
+                "outcome": attempt.outcome,
+                "app": attempt.app,
+                "reason": attempt.reason.filter(|reason| !reason.is_empty()),
+            })
+        })
+        .collect();
+    Ok(axum::Json(json!({ "message": id, "attempts": rows })).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DaysQuery {
+    pub days: Option<i64>,
+}
+
+/// `GET /t/{topic}/dashboard/subs/{name}/daily?days=90` — delivered and
+/// dead per Brussels day, every day of the window present.
+pub async fn dashboard_daily(
+    State(state): State<AppState>,
+    Path((topic, subscription)): Path<(String, String)>,
+    Query(query): Query<DaysQuery>,
+) -> Result<Response, ApiError> {
+    let days = query.days.unwrap_or(90).clamp(1, queries::DAILY_KEPT_DAYS);
+    let engine = state.engine.clone();
+    let (t, s) = (topic.clone(), subscription.clone());
+    let found = spawn_engine(move || {
+        engine
+            .store()
+            .read(|conn| {
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &t)? else {
+                    return Ok(None);
+                };
+                if queries::subscription_id_by_name_conn(conn, topic_id, &s)?.is_none() {
+                    return Ok(None);
+                }
+                let today = crate::engine::days::day_of(engine.now_ms());
+                let from = today - days + 1;
+                let rows = queries::daily_for(conn, &t, &s, from, today)?;
+                Ok(Some((from, today, rows)))
+            })
+            .map_err(EngineError::Internal)
+    })
+    .await?;
+    let Some((from, today, rows)) = found else {
+        return Err(unknown_subscription(&topic, &subscription));
+    };
+    let by_day: std::collections::HashMap<i64, (i64, i64)> = rows
+        .into_iter()
+        .map(|(day, delivered, dead)| (day, (delivered, dead)))
+        .collect();
+    let days: Vec<_> = (from..=today)
+        .map(|day| {
+            let (delivered, dead) = by_day.get(&day).copied().unwrap_or((0, 0));
+            json!({ "day": crate::engine::days::day_label(day), "delivered": delivered, "dead": dead })
+        })
+        .collect();
+    Ok(axum::Json(json!({ "days": days })).into_response())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HoursQuery {
+    pub hours: Option<i64>,
+}
+
+/// `GET /dashboard/stats/hourly?hours=24` — published and dead per topic
+/// per hour; `hours` lists the hour starts, oldest first, and every topic's
+/// arrays line up with it.
+pub async fn dashboard_stats_hourly(
+    State(state): State<AppState>,
+    Query(query): Query<HoursQuery>,
+) -> Result<Response, ApiError> {
+    use crate::engine::days;
+    let hours = query.hours.unwrap_or(24).clamp(1, 720);
+    let engine = state.engine.clone();
+    let (starts, names, rows) = spawn_engine(move || {
+        let last = days::hour_of(engine.now_ms());
+        let first = last - (hours - 1) * days::HOUR;
+        engine
+            .store()
+            .read(|conn| {
+                let names = queries::topic_names_conn(conn)?;
+                let rows = queries::hourly_since(conn, first)?;
+                Ok(((first, last), names, rows))
+            })
+            .map_err(EngineError::Internal)
+    })
+    .await?;
+    let (first, last) = starts;
+    let starts: Vec<i64> = (0..hours).map(|index| first + index * days::HOUR).collect();
+    let mut table: std::collections::BTreeMap<String, (Vec<i64>, Vec<i64>)> = names
+        .into_iter()
+        .map(|name| (name, (vec![0; hours as usize], vec![0; hours as usize])))
+        .collect();
+    for (topic, hour, published, dead) in rows {
+        if hour > last {
+            continue;
+        }
+        if let Some((published_row, dead_row)) = table.get_mut(&topic) {
+            let index = ((hour - first) / days::HOUR) as usize;
+            published_row[index] = published;
+            dead_row[index] = dead;
+        }
+    }
+    let topics: Vec<_> = table
+        .into_iter()
+        .map(|(topic, (published, dead))| json!({ "topic": topic, "published": published, "dead": dead }))
+        .collect();
+    Ok(axum::Json(json!({ "hours": starts, "topics": topics })).into_response())
+}
+
+/// `GET /dashboard/stats/totals?hours=24` — the hub totals the sweeper
+/// samples every five minutes, oldest first.
+pub async fn dashboard_stats_totals(
+    State(state): State<AppState>,
+    Query(query): Query<HoursQuery>,
+) -> Result<Response, ApiError> {
+    let hours = query.hours.unwrap_or(24).clamp(1, 48);
+    let engine = state.engine.clone();
+    let samples = spawn_engine(move || {
+        let from = engine.now_ms() - hours * 3_600_000;
+        engine
+            .store()
+            .read(|conn| queries::samples_since(conn, from))
+            .map_err(EngineError::Internal)
+    })
+    .await?;
+    let samples: Vec<_> = samples
+        .into_iter()
+        .map(|sample| {
+            json!({
+                "at": sample.at,
+                "messages": sample.messages,
+                "backlog": sample.backlog,
+                "dead": sample.dead,
+                "in_flight": sample.in_flight,
+            })
+        })
+        .collect();
+    Ok(axum::Json(json!({ "samples": samples })).into_response())
+}
+
+/// `GET /t/{topic}/dashboard/retention` — how long dead letters stay. A dead
+/// letter lives as long as its message, which the topic's retention window
+/// decides (explicit, else the hub default); `null` means kept forever.
+pub async fn dashboard_retention(
+    State(state): State<AppState>,
+    Path(topic): Path<String>,
+) -> Result<Response, ApiError> {
+    const DAY_MS: i64 = 24 * 60 * 60 * 1_000;
+    let engine = state.engine.clone();
+    let t = topic.clone();
+    let (effective, explicit) = spawn_engine(move || engine.retention(&t)).await?;
+    Ok(axum::Json(json!({
+        "dead_letter_days": effective.map(|ms| (ms + DAY_MS - 1) / DAY_MS),
+        "retention_ms": effective,
+        "explicit": explicit.is_some(),
+    }))
+    .into_response())
 }
 
 fn urldecode(input: &str) -> String {

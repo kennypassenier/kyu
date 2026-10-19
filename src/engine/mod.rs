@@ -10,6 +10,7 @@
 //! message stays claimed.
 
 pub mod clock;
+pub mod days;
 pub mod ids;
 pub mod names;
 pub mod policy;
@@ -54,6 +55,9 @@ pub enum EngineError {
 
     #[error("message {id:?} was never delivered to subscription {subscription:?}")]
     NoSuchDelivery { id: String, subscription: String },
+
+    #[error("message {id:?} is not on topic {topic:?}")]
+    NoSuchMessage { id: String, topic: String },
 
     #[error("message {id:?} was already acknowledged by {subscription:?}")]
     AlreadyAcked { id: String, subscription: String },
@@ -140,6 +144,10 @@ impl EngineError {
                 "this message id was not delivered to {subscription:?}. Acknowledge with the \
                  same subscription name that received it, and use the id from that response."
             ),
+            Self::NoSuchMessage { .. } => "the topic no longer holds that message: retention \
+                 collects messages after the topic's retention window. Pick a message from \
+                 the topic's recent messages, or publish the payload again."
+                .to_string(),
             Self::AlreadyAcked { .. } => {
                 "the message is already settled, so there is nothing left to acknowledge. \
                  Acknowledging twice is harmless; if you expected a new message, poll again."
@@ -370,6 +378,7 @@ impl Engine {
 
             let seq =
                 queries::insert_message(tx, &id, topic_id, payload, content_type, now, due_at)?;
+            queries::bump_published(tx, topic, now)?;
 
             let subscriptions = queries::active_subscriptions(tx, topic_id)?;
             for subscription in &subscriptions {
@@ -401,6 +410,19 @@ impl Engine {
         topic: &str,
         subscription: &str,
         from_beginning: bool,
+    ) -> Result<Received> {
+        self.claim_next_as(topic, subscription, from_beginning, None)
+    }
+
+    /// [`Self::claim_next`] that also records which app polled, for the
+    /// attempt history the dashboard shows. `None` for a caller that is not
+    /// a registered app (the login token, an open test hub).
+    pub fn claim_next_as(
+        &self,
+        topic: &str,
+        subscription: &str,
+        from_beginning: bool,
+        app: Option<&str>,
     ) -> Result<Received> {
         if !names::is_valid(topic) {
             return Err(EngineError::InvalidName {
@@ -481,6 +503,9 @@ impl Engine {
 
             let policy = Policy::effective(queries::subscription_policy(tx, sub_id)?);
             let claimed = queries::claim_next(tx, sub_id, now, policy.lease_ms)?;
+            if let Some(message) = &claimed {
+                queries::open_attempt(tx, message.seq, sub_id, now, app)?;
+            }
 
             Ok(Received {
                 claimed: claimed.map(|message| Claimed {
@@ -496,6 +521,7 @@ impl Engine {
     /// K3. Settles a message for one subscription only — an ack speaks for
     /// the consumer that sends it and for nobody else (G3).
     pub fn ack(&self, topic: &str, subscription: &str, message_id: &str) -> Result<()> {
+        let now = self.clock.now_ms();
         if !names::is_valid(topic) {
             return Err(EngineError::InvalidName {
                 kind: "topic",
@@ -525,7 +551,13 @@ impl Engine {
             };
 
             match queries::ack(tx, message_id, sub_id)? {
-                AckOutcome::Acked => Ok(()),
+                AckOutcome::Acked => {
+                    if let Some(msg_seq) = queries::message_seq_of_id(tx, message_id)? {
+                        queries::close_attempt(tx, msg_seq, sub_id, now, "acked", "")?;
+                    }
+                    queries::bump_delivered(tx, topic, subscription, now)?;
+                    Ok(())
+                }
                 AckOutcome::NoSuchDelivery => Err(EngineError::NoSuchDelivery {
                     id: message_id.to_string(),
                     subscription: subscription.to_string(),
@@ -587,7 +619,7 @@ impl Engine {
                 return Ok(None);
             }
             queries::set_subscription_state(tx, sub_id, "archived")?;
-            let lapsed = queries::lapse_outstanding(tx, sub_id)?;
+            let lapsed = queries::lapse_outstanding(tx, sub_id, now)?;
             let mut ids = self.ids.lock().expect("the id lock is never poisoned");
             events::emit(
                 tx,
@@ -621,6 +653,28 @@ impl Engine {
             queries::delete_subscription(tx, sub_id)?;
             Ok(())
         })
+    }
+
+    /// Publishes a stored message again as a new one (the dashboard's
+    /// replay): same payload and content type, immediate, to every active
+    /// subscription. The original stays as it is.
+    pub fn replay(&self, topic: &str, message_id: &str) -> Result<Published> {
+        let found = self
+            .store
+            .read(|conn| {
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, topic)? else {
+                    return Ok(None);
+                };
+                queries::message_for_replay(conn, topic_id, message_id)
+            })
+            .map_err(EngineError::Internal)?;
+        let Some((payload, content_type)) = found else {
+            return Err(EngineError::NoSuchMessage {
+                id: message_id.to_string(),
+                topic: topic.to_string(),
+            });
+        };
+        self.publish(topic, &payload, content_type.as_deref())
     }
 
     /// K9 · a topic's retention, `None` meaning "keep forever".
@@ -732,11 +786,13 @@ impl Engine {
                 .ok_or_else(|| anyhow::anyhow!("the delivery vanished mid-transaction"))?;
 
             if dead {
-                queries::mark_dead(tx, delivery.msg_seq, sub_id, delivery.attempts + 1, now)?;
+                if queries::mark_dead(tx, delivery.msg_seq, sub_id, delivery.attempts + 1, now)? {
+                    record_dead(tx, &delivery, now, "nacked straight to the dead letters")?;
+                }
                 return Ok(Settled::DeadLettered);
             }
 
-            Ok(apply(tx, &delivery, now)?)
+            Ok(apply(tx, &delivery, now, Cause::Nack)?)
         })
     }
 
@@ -779,9 +835,10 @@ impl Engine {
     /// (W16). Only this subscription's delivery goes; the message and
     /// every other subscription's copy of it are untouched.
     pub fn delete_delivery(&self, topic: &str, subscription: &str, message_id: &str) -> Result<()> {
+        let now = self.clock.now_ms();
         self.write(|tx| -> Result<()> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
-            match queries::delete_delivery(tx, message_id, sub_id)? {
+            match queries::delete_delivery(tx, message_id, sub_id, now)? {
                 DeleteOutcome::Deleted => Ok(()),
                 DeleteOutcome::NoSuchDelivery => Err(EngineError::NoSuchDelivery {
                     id: message_id.to_string(),
@@ -821,7 +878,7 @@ impl Engine {
             let mut ids = self.ids.lock().expect("the id lock is never poisoned");
 
             for delivery in overdue {
-                let settled = apply(tx, &delivery, now)?;
+                let settled = apply(tx, &delivery, now, Cause::LeaseExpired)?;
                 match settled {
                     Settled::Redelivered => {
                         report.redelivered += 1;
@@ -914,7 +971,7 @@ impl Engine {
                 batch_limit,
             )? {
                 queries::set_subscription_state(tx, subscription.id, "archived")?;
-                let lapsed = queries::lapse_outstanding(tx, subscription.id)?;
+                let lapsed = queries::lapse_outstanding(tx, subscription.id, now)?;
                 report.archived += 1;
                 report.lapsed += lapsed;
                 let woken = events::emit(
@@ -948,6 +1005,12 @@ impl Engine {
                 || collected >= batch_limit
                 || report.flagged >= batch_limit
                 || report.archived >= batch_limit;
+
+            // History: a totals sample every few minutes, and the caps on
+            // everything the dashboard's statistics keep.
+            queries::sample_totals_if_due(tx, now)?;
+            let pruned = queries::prune_history(tx, now, batch_limit)?;
+            report.more_work = report.more_work || pruned >= batch_limit;
 
             report.wake.sort();
             report.wake.dedup();
@@ -1040,7 +1103,12 @@ impl SweepReport {
 
 /// The one place a failed delivery's fate is decided (AR9), shared by lease
 /// expiry and nack so the two can never diverge.
-fn apply(tx: &rusqlite::Transaction, delivery: &Overdue, now: Millis) -> anyhow::Result<Settled> {
+fn apply(
+    tx: &rusqlite::Transaction,
+    delivery: &Overdue,
+    now: Millis,
+    cause: Cause,
+) -> anyhow::Result<Settled> {
     let policy = Policy::effective(delivery.policy);
     let attempts = delivery.attempts + 1;
 
@@ -1050,6 +1118,14 @@ fn apply(tx: &rusqlite::Transaction, delivery: &Overdue, now: Millis) -> anyhow:
     if policy.is_past_ttl(delivery.published_at, now) {
         return Ok(
             if queries::mark_expired(tx, delivery.msg_seq, delivery.sub_id, now)? {
+                queries::close_attempt(
+                    tx,
+                    delivery.msg_seq,
+                    delivery.sub_id,
+                    now,
+                    "expired",
+                    "the message passed its time to live",
+                )?;
                 Settled::Expired
             } else {
                 Settled::Unchanged
@@ -1060,6 +1136,7 @@ fn apply(tx: &rusqlite::Transaction, delivery: &Overdue, now: Millis) -> anyhow:
     if attempts >= policy.max_attempts {
         return Ok(
             if queries::mark_dead(tx, delivery.msg_seq, delivery.sub_id, attempts, now)? {
+                record_dead(tx, delivery, now, cause.exhausted())?;
                 Settled::DeadLettered
             } else {
                 Settled::Unchanged
@@ -1076,11 +1153,49 @@ fn apply(tx: &rusqlite::Transaction, delivery: &Overdue, now: Millis) -> anyhow:
             attempts,
             next_attempt_at,
         )? {
+            let (outcome, reason) = cause.retry();
+            queries::close_attempt(tx, delivery.msg_seq, delivery.sub_id, now, outcome, reason)?;
             Settled::Redelivered
         } else {
             Settled::Unchanged
         },
     )
+}
+
+/// Why a delivery failed, for the attempt history.
+#[derive(Debug, Clone, Copy)]
+enum Cause {
+    Nack,
+    LeaseExpired,
+}
+
+impl Cause {
+    /// The attempt's outcome and reason when another try follows.
+    fn retry(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Nack => ("nacked", "the consumer nacked the message"),
+            Self::LeaseExpired => ("expired", "the lease ran out before an ack"),
+        }
+    }
+
+    fn exhausted(self) -> &'static str {
+        match self {
+            Self::Nack => "nacked on the last allowed attempt",
+            Self::LeaseExpired => "the lease ran out on the last allowed attempt",
+        }
+    }
+}
+
+/// A delivery just became a dead letter: end its attempt and count it.
+fn record_dead(
+    tx: &rusqlite::Transaction,
+    delivery: &Overdue,
+    now: Millis,
+    reason: &str,
+) -> anyhow::Result<()> {
+    queries::close_attempt(tx, delivery.msg_seq, delivery.sub_id, now, "dead", reason)?;
+    queries::bump_dead(tx, &delivery.topic, &delivery.subscription, now)?;
+    Ok(())
 }
 
 /// W2 · a registered app as the dashboard shows it, token in the clear.
