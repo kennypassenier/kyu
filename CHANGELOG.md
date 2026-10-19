@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-10-19
+
 ### Added
 - The dashboard is rebuilt on kp-themes 11.0.0, as Kenny approved it in
   review on 2026-10-19: a command palette (Ctrl+K), keyboard shortcuts with
