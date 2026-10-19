@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [4.3.3] - 2026-10-19
+
 ### Changed
 - chassis-rs 3.9.0 with kp-themes 11.1.1: the heat map, trend tiles,
   drain bar, timeline, 90-day strip and payload view show their own failed
