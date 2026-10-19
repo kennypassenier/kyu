@@ -28,21 +28,19 @@
         </div>
         <p class="kp-lede">
           Publishers send messages to this topic and every subscription reads its own copy. Here you copy the commands
-          that publish, receive and acknowledge, see who reads the topic and how far behind they are, deal with what died,
+          that publish, receive and acknowledge, see who reads the topic and how far behind they are,
           and archive or delete a subscription you no longer use.
         </p>
         <p class="kp-page-header__meta kt-facts" data-kt-facts>{{ topic.messages }} messages retained · backlog {{ topic.backlog }} · {{ topic.subscriptions }} subscriptions</p>
       </div>
       <div class="kp-page-header__actions kt-header__actions">
-        <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
-        <a class="kp-button" href="/topics">All topics</a>
         <code id="kt-topic-url" class="kp-sr-only" data-kt-topic-url></code>
         <button type="button" class="kp-button kp-copyable__button kt-copy" data-kp-copy="kt-topic-url">Copy address</button>
       </div>
     </div>
   </header>
 
-  <section class="kp-card kt-send" data-kp-state="ready" aria-labelledby="kt-send-title" data-kp-loading-words="Building the commands" data-kt-send>
+  <section class="kp-card kt-send" data-kp-state="ready" aria-labelledby="kt-send-title" data-kp-loading-words="Building the commands" data-kt-send data-kyu-tour="snippets">
     <div class="kp-card__header">
       <h2 class="kp-card__title" id="kt-send-title">Commands for {{ topic.name }}</h2>
       <div class="kp-card__actions"><button type="button" class="kp-button kp-button--sm" data-kt-start-over>Start over</button></div>
@@ -74,20 +72,20 @@
           <div class="kt-step" data-kt-step="publish">
             <p class="kt-caption">Publish a message:</p>
             <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that publishes" data-kt-command="publish"><pre><code></code></pre></div>
-            <div class="kp-secret" data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: publish" data-kt-secret="publish"></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: publish" data-kt-secret="publish"></div>
           </div>
           <div class="kt-step" data-kt-step="receive">
             <p class="kt-caption">Receive it: the payload is the body, the id comes back in a header:</p>
             <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_raw"><pre><code></code></pre></div>
-            <div class="kp-secret" data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the raw payload" data-kt-secret="receive_raw"></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the raw payload" data-kt-secret="receive_raw"></div>
             <p class="kt-caption kt-caption--next">Or ask for one JSON document instead:</p>
             <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_envelope"><pre><code></code></pre></div>
-            <div class="kp-secret" data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the envelope" data-kt-secret="receive_envelope"></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the envelope" data-kt-secret="receive_envelope"></div>
           </div>
           <div class="kt-step" data-kt-step="ack">
             <p class="kt-caption">Then acknowledge it, so it is not delivered again:</p>
             <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="ack"><pre><code></code></pre></div>
-            <div class="kp-secret" data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: acknowledge" data-kt-secret="ack"></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: acknowledge" data-kt-secret="ack"></div>
           </div>
         </div>
       </div>
@@ -102,7 +100,7 @@
   </section>
   {% endif %}
 
-  <section class="kp-card kt-subs" data-kp-state="ready" aria-labelledby="kt-subs-title" data-kp-loading-words="Reading the subscriptions" data-kt-subs>
+  <section class="kp-card kt-subs" data-kp-state="ready" aria-labelledby="kt-subs-title" data-kp-loading-words="Reading the subscriptions" data-kt-subs data-kyu-tour="subs">
     <div class="kp-card__header">
       <h2 class="kp-card__title" id="kt-subs-title">Subscriptions of {{ topic.name }}</h2>
       <div class="kp-card__actions"><span class="kp-timestamp" data-kt-sub-total></span></div>
@@ -143,9 +141,9 @@
     </div>
   </section>
 
-  <section class="kt-dead" aria-labelledby="kt-dead-title" data-kt-dead>
+  <section class="kt-dead" aria-labelledby="kt-dead-title" data-kt-dead data-kyu-tour="dead">
     <div class="kt-head">
-      <h2 id="kt-dead-title">Dead letters</h2>
+      <h2 class="kp-card__title" id="kt-dead-title">Dead letters</h2>
       <p class="kt-lead">These gave up. Nothing is lost: each one waits here until you requeue or delete it.</p>
     </div>
     <div class="kt-stage" data-kt-stage="problems" hidden>
@@ -202,15 +200,16 @@
   </section>
 
   <section class="kt-recent" aria-labelledby="kt-recent-title" data-kt-recent>
-    <div class="kt-head">
-      <h2 id="kt-recent-title">Recent messages</h2>
+    <div class="kt-head kt-head--live">
+      <h2 class="kp-card__title" id="kt-recent-title">Recent messages</h2>
       <p class="kt-lead" data-kt-recent-count></p>
+      <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
     </div>
     <div class="kt-stage" data-kt-stage="recent" style="--kt-stage-min: 26rem">
       <div data-kt-filled>
         <div class="kp-split kp-split--panes kt-md" data-kp-master-detail data-kp-resizable data-kp-remember="kyu-topic-recent" data-kp-narrow="sheet" data-kp-pane-widths="20rem 1fr" data-kt-md>
           <section data-kp-pane="list" aria-label="Recent messages" data-kp-newpill-host>
-            <ul class="kp-pane__list kt-live" role="listbox" aria-label="Recent messages" tabindex="0" data-kp-follow="head" data-kp-pill-unit="new message,new messages" data-kp-since-left="on" data-kt-items></ul>
+            <ul class="kp-pane__list kt-live" role="listbox" aria-label="Recent messages" tabindex="0" data-kp-follow="head" data-kp-pill-unit="message,messages" data-kp-since-left="on" data-kt-items></ul>
           </section>
           <section data-kp-pane="detail" aria-label="Message">
             <h3 data-kp-pane-heading tabindex="-1"></h3>
@@ -224,7 +223,7 @@
 
   <section class="kt-publish" aria-labelledby="kt-publish-title">
     <div class="kt-head">
-      <h2 id="kt-publish-title">Publish a test message</h2>
+      <h2 class="kp-card__title" id="kt-publish-title">Publish a test message</h2>
       <p class="kt-lead">One click puts a known message on {{ topic.name }}: it answers whether the producer or the consumer is broken.</p>
     </div>
     <form class="kt-form kp-form" id="kt-publish-form" data-kp-form novalidate method="post" action="/t/{{ topic.name }}/dashboard/publish">
@@ -232,15 +231,22 @@
       <div class="kp-field">
         <label class="kp-field__label" for="kt-publish-body">Message to {{ topic.name }} <span class="kp-field__required">required</span></label>
         <textarea class="kp-field__input kp-field__input--multiline" id="kt-publish-body" name="payload" required rows="6" maxlength="4000"
-          placeholder='{"title":"hello","body":"world"}'
+          placeholder='{"title":"hello","body":"world"}' data-kyu-publish
           data-kp-json="strict" data-kp-json-check="input" data-kp-json-format="button" data-kp-json-indent="2"
           data-kp-autosize data-kp-autosize-engine="js" data-kp-autosize-max="20" data-kp-counter="chars"
           data-kp-submit-key="mod-enter" data-kp-remember="kyu-topic-publish-draft"></textarea>
         <span class="kp-field__error" data-kp-field-error hidden></span>
       </div>
-      <div class="kt-submit">
-        <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-flash-button
-          data-kp-flash-words="Published,Refused,Failed" data-kp-flash-word="Published" data-kp-refusal="line">Publish test message</button>
+      <div class="kt-form__foot">
+        <div class="kp-field">
+          <label class="kp-field__label" for="kt-publish-delay">Deliver after (seconds)</label>
+          <input class="kp-field__input" id="kt-publish-delay" name="delay" type="number" inputmode="numeric" min="0" max="86400" step="1" placeholder="0" />
+          <span class="kp-field__error" data-kp-field-error hidden></span>
+        </div>
+        <div class="kt-submit">
+          <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-flash-button
+            data-kp-flash-words="Published,Refused,Failed" data-kp-flash-word="Published" data-kp-refusal="line">Publish test message</button>
+        </div>
       </div>
     </form>
   </section>

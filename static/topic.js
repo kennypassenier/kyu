@@ -115,7 +115,7 @@ async function call(path, body = {}) {
         if (res.ok) return { ok: true, json };
         if (json && json.error) return { ok: false, status: res.status, error: String(json.error), remedy: String(json.remedy ?? '') };
         if (res.status === 404 || res.status === 405)
-            return { ok: false, status: res.status, error: 'This hub does not offer that action yet.', remedy: 'Update kyu, then try again.' };
+            return { ok: false, missing: true, status: res.status, error: 'This hub does not offer that action yet.', remedy: 'Update kyu, then try again.' };
         return { ok: false, status: res.status, error: `The hub answered ${res.status}.`, remedy: 'Try again in a moment.' };
     } catch {
         return { ok: false, status: 0, error: 'kyu did not answer.', remedy: 'Check that the hub is running, then try again.' };
@@ -191,7 +191,12 @@ function renderCommands() {
         const code = $('code', block);
         if (code) code.textContent = withOrigin(DATA.commands.shown[block.dataset.ktCommand ?? ''] ?? '');
     }
-    for (const field of $$('[data-kt-secret]', send)) field.setAttribute('data-kp-secret-ttl', String(ttl));
+    for (const field of $$('[data-kt-secret]', send)) {
+        field.setAttribute('data-kp-secret-ttl', String(ttl));
+        // Without a login token on this hub there is nothing to reveal or copy.
+        if (DATA.commands.has_token) field.removeAttribute('data-kp-secret-disabled');
+        else field.setAttribute('data-kp-secret-disabled', 'This hub has no login token to put in the command.');
+    }
 }
 // The token is read from the page's data only when a field is asked to show or copy it.
 send.addEventListener('kp-secret-request', (event) => {
@@ -273,6 +278,10 @@ const badge = (/** @type {any} */ s) =>
 /** @param {any} s */
 function subRow(s) {
     const tr = document.createElement('tr');
+    // Before the kit's boot the mark is in the markup and the boot paints it. Afterwards the kit's own document-wide
+    // watcher paints a mark added to the page; attaching the row on top of it would paint the shared palette twice,
+    // from two different roots, and the two would undo each other forever. So a late row gets its mark after attach.
+    const mark = booted ? '' : `<span class="kp-idmark kp-idmark--sm" data-kp-idmark="${esc(s.name)}" aria-hidden="true"></span>`;
     const n = esc(s.name);
     const oldest = s.oldest_unacked_ms
         ? `<time datetime="${iso(s.oldest_unacked_ms)}">${dmy(s.oldest_unacked_ms)}</time>`
@@ -280,14 +289,14 @@ function subRow(s) {
     tr.dataset.kpKey = s.name;
     tr.dataset.ktSub = s.name;
     tr.innerHTML = `
-        <td data-label="Name"><span class="kt-name"><span class="kp-idmark kp-idmark--sm" data-kp-idmark="${n}" aria-hidden="true"></span><a href="${T}/subs/${encodeURIComponent(s.name)}">${n}</a></span></td>
+        <td data-label="Name"><span class="kt-name">${mark}<a href="${T}/subs/${encodeURIComponent(s.name)}">${n}</a></span></td>
         <td data-label="State" data-kt-state-cell>${badge(s)}</td>
         <td data-label="Backlog" class="kp-text-end">${num(s.backlog)}</td>
         <td data-label="In flight" class="kp-text-end">${num(s.claimed)}</td>
         <td data-label="Dead" class="kp-text-end">${s.dead > 0 ? `<span class="kp-badge kp-badge--destructive">${num(s.dead)}</span>` : '0'}</td>
         <td data-label="Lapsed" class="kp-text-end">${num(s.lapsed)}</td>
         <td data-label="Oldest unacked" data-kp-sort-value="${s.oldest_unacked_ms ? iso(s.oldest_unacked_ms) : ''}">${oldest}</td>
-        <td data-label="Policy" class="kt-policy">${policyHtml(s)}</td>
+        <td data-label="Policy" class="kt-policy"><span>${policyHtml(s)}</span></td>
         <td class="kt-col-actions">
             <div class="kp-row-actions">
                 <button type="button" class="kp-button kp-button--sm" data-kp-action="archive" data-kt-archive data-kp-disabled-reason="${n} is already archived">Archive</button>
@@ -422,6 +431,13 @@ function fixTooltips(rows, attach = true) {
     if (!booted) return;
     for (const row of rows) {
         if (attach) attachAll?.(row);
+        const name = row.querySelector('.kt-name');
+        if (name && !name.querySelector('.kp-idmark') && row.dataset.ktSub) {
+            const markEl = make('span', 'kp-idmark kp-idmark--sm');
+            markEl.setAttribute('data-kp-idmark', row.dataset.ktSub);
+            markEl.setAttribute('aria-hidden', 'true');
+            name.prepend(markEl);
+        }
         for (const anchor of $$('.kp-row-actions > .kp-tooltip-anchor', row)) {
             const role = anchor.querySelector('[data-kp-action]')?.getAttribute('data-kp-action');
             if (role) anchor.setAttribute('data-kp-action', role);
@@ -572,7 +588,7 @@ function deadRow(d) {
     const when = d.dead_ms ?? d.published_ms;
     tr.innerHTML =
         `<td data-label="Select"><input class="kp-field__check" type="checkbox" data-kp-select-row aria-label="Select dead letter ${esc(d.id)}" /></td>` +
-        `<td data-label="Died" data-kp-sort-value="${iso(when)}"><div class="kt-when"><time class="kp-ago" data-kp-ago data-kp-ago-verb="" datetime="${iso(when)}">${d.dead_ms ? esc(d.dead_at) : 'unknown'}</time><small>${d.dead_ms ? dmy(d.dead_ms) : `published ${dmy(d.published_ms)}`}</small></div></td>` +
+        `<td data-label="Died" data-kp-sort-value="${iso(when)}"><div class="kt-when"><time class="kp-ago" data-kp-ago data-kp-ago-verb="died" datetime="${iso(when)}">${d.dead_ms ? esc(d.dead_at) : 'unknown'}</time><small>${d.dead_ms ? dmy(d.dead_ms) : `published ${dmy(d.published_ms)}`}</small></div></td>` +
         `<td data-label="Subscription" data-kp-filter-value="${esc(d.subscription)}"><b>${esc(d.subscription)}</b></td>` +
         `<td data-label="Tries" class="kp-text-end">${num(d.attempts)}</td>` +
         `<td data-label="Why it died">${esc(whyDied(d))}</td>` +
@@ -649,7 +665,7 @@ async function renderProblems() {
             key: name,
             severity: archived ? 'info' : s?.state === 'flagged' ? 'critical' : 'warning',
             what: `${plural(total, 'message', 'messages')} died on ${name}`,
-            why: `${name} did not acknowledge ${total === 1 ? 'it' : 'them'} in ${s?.max_attempts ?? 'the allowed number of'} attempts.${last ? ` The last one died on ${dmy(last)}.` : ''}`,
+            why: `${name} did not acknowledge ${total === 1 ? 'it' : 'them'} in ${s ? plural(s.max_attempts, 'attempt', 'attempts') : 'the allowed number of attempts'}.${last ? ` The last one died on ${dmy(last)}.` : ''}`,
             remedy: archived
                 ? `${name} is archived and no longer delivers. Delete these dead letters, or bring it back and requeue them:`
                 : `Fix whatever reads ${name}, then requeue them.`,
@@ -859,7 +875,7 @@ function messageItem(m) {
     const wrap = make('span', 'kt-msg');
     const ago = make('time', 'kp-ago');
     ago.setAttribute('data-kp-ago', '');
-    ago.setAttribute('data-kp-ago-verb', '');
+    ago.setAttribute('data-kp-ago-verb', 'published');
     ago.setAttribute('datetime', iso(m.published_ms));
     ago.textContent = m.published_at;
     const small = make('small');
@@ -951,7 +967,7 @@ function fillDetail(id) {
         runFlashButton(replay, async () => {
             const r = await call(`${T}/messages/${encodeURIComponent(m.id)}/replay`);
             if (!r.ok) {
-                return r.status === 404 || r.status === 405
+                return /** @type {any} */ (r).missing
                     ? { error: 'Replay is not available on this hub yet.', remedy: 'Update kyu, or publish the payload again from the box below.' }
                     : refusal(/** @type {any} */ (r));
             }
@@ -1023,14 +1039,15 @@ mdRoot.addEventListener('kp-pane-retry', () => void load());
 
 const form = /** @type {HTMLFormElement} */ (document.getElementById('kt-publish-form'));
 const area = /** @type {HTMLTextAreaElement} */ (document.getElementById('kt-publish-body'));
+const delayField = /** @type {HTMLInputElement | null} */ (document.getElementById('kt-publish-delay'));
 const sendButton = /** @type {HTMLElement} */ (document.getElementById('kt-publish-send'));
 form.addEventListener('submit', (event) => event.preventDefault());
 form.addEventListener('kp-form-valid', () => {
     void runFlashButton(sendButton, async () => {
-        const r = await call(`${T}/publish`, { form: { payload: area.value } });
+        const r = await call(`${T}/publish`, { form: { payload: area.value, delay: delayField?.value ?? '' } });
         if (!r.ok) return refusal(/** @type {any} */ (r));
         void load();
-        return { word: 'Published', line: `Published to ${TOPIC}.` };
+        return { word: 'Published', line: r.json?.id ? `Published as ${r.json.id}.` : `Published to ${TOPIC}.` };
     });
 });
 
@@ -1098,6 +1115,7 @@ booted = true;
 
 subsTable = dataTable(subsTableEl);
 deadTable = dataTable(deadTableEl);
+subsTable?.density('comfortable');
 fixTooltips($$('tr', subsBody), false);
 updateCounts();
 

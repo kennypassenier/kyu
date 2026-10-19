@@ -1458,14 +1458,39 @@ pub async fn dashboard_publish(
         .find_map(|pair| pair.strip_prefix("payload="))
         .map(urldecode)
         .unwrap_or_default();
+    // The optional "Deliver after (seconds)" field: the message is stored now
+    // and becomes deliverable that many seconds later (W4, at most a day).
+    let delay_seconds = form
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("delay="))
+        .map(urldecode)
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty());
+    let due_at = match delay_seconds {
+        None => None,
+        Some(text) => match text.parse::<i64>() {
+            Ok(seconds) if (0..=86_400).contains(&seconds) => {
+                (seconds > 0).then(|| state.engine.now_ms().saturating_add(seconds * 1000))
+            }
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("the delay {text:?} is not between 0 and 86400 seconds"),
+                    "type a whole number of seconds from 0 to 86400, or leave it empty to \
+                     deliver at once.",
+                ));
+            }
+        },
+    };
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
     let published = spawn_engine_write(move || {
-        engine.publish(
+        engine.publish_due(
             &topic_for_engine,
             payload.as_bytes(),
             Some("application/json"),
+            due_at,
         )
     })
     .await?;
