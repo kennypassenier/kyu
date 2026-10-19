@@ -1,1 +1,330 @@
-/* kyu: topic.css — filled by the kp-themes 11.0.0 adoption. */
+/* kyu: topic.css, the Topic page on kp-themes 11.0.0.
+   Everything with a kp- class is the package's. These kt- rules only compose the page on a grid,
+   hold each region at one footprint in every state, and set the few widths the tables need.
+   Tokens only. */
+
+/* The page: one column of regions on a shared gap. */
+.kt-page {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-xl, 2rem);
+    min-inline-size: 0;
+}
+
+.kt-page > * {
+    min-inline-size: 0;
+}
+
+/* A section head: the title over one sentence, on the section's own grid. */
+.kt-head {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.kt-head :is(h2, p) {
+    margin: 0;
+}
+
+.kt-lead,
+.kt-note {
+    margin: 0;
+    max-inline-size: 80ch;
+    color: var(--muted-foreground);
+}
+
+.kt-note:empty {
+    display: none;
+}
+
+.kt-dead,
+.kt-recent,
+.kt-publish {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-md, 1rem);
+    align-content: start;
+}
+
+/* 1 · the header: the title block and the controls stand in two grid columns, the controls in a grid of their own. */
+.kt-header__main {
+    display: grid;
+    gap: var(--kp-space-sm, 0.5rem);
+    min-inline-size: 0;
+}
+
+.kt-facts {
+    margin: 0;
+}
+
+.kt-header__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+    gap: var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    justify-items: stretch;
+}
+
+.kt-header__actions > .kp-refresh {
+    grid-column: 1 / -1;
+}
+
+.kt-copy {
+    min-inline-size: 8.5rem;
+}
+
+@media (max-width: 40rem) {
+    .kt-header__actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* 2 · send and receive: the journey on top, the three steps in three columns beneath it. */
+.kt-send .kp-card__data {
+    display: grid;
+    gap: var(--kp-space-lg, 1.5rem);
+}
+
+.kt-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--kp-space-lg, 1.5rem);
+    align-items: start;
+}
+
+.kt-step {
+    display: grid;
+    gap: var(--kp-space-sm, 0.5rem);
+    align-content: start;
+    min-inline-size: 0;
+}
+
+.kt-caption {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-caption--next {
+    margin-block-start: var(--kp-space-sm, 0.5rem);
+}
+
+@media (max-width: 64rem) {
+    .kt-steps {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* 4 · the subscriptions table. */
+.kt-subs .kp-card__data {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+}
+
+.kt-filterbar {
+    display: grid;
+    grid-template-columns: minmax(0, max-content);
+    min-inline-size: 0;
+}
+
+@media (max-width: 36rem) {
+    .kt-filterbar {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .kt-filterbar > .kp-segmented {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.kt-name {
+    display: inline-grid;
+    grid-auto-flow: column;
+    gap: var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    justify-content: start;
+    min-inline-size: 0;
+}
+
+.kt-quiet,
+.kt-policy i {
+    color: var(--muted-foreground);
+    font-style: italic;
+}
+
+.kt-policy i {
+    font-style: normal;
+}
+
+.kt-policy {
+    overflow-wrap: anywhere;
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-col-actions {
+    inline-size: 1%;
+    white-space: nowrap;
+}
+
+/* The action columns stay at the table's end while the rest scrolls under them. */
+.kt-table-sticky .kt-col-actions {
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 1;
+    background: var(--card);
+    box-shadow: -1px 0 0 var(--border);
+}
+
+.kt-table-sticky :is(th, td) {
+    padding-inline: var(--kp-space-sm, 0.5rem);
+}
+
+@media (min-width: 48rem) {
+    .kt-table-sticky td.kt-policy {
+        min-inline-size: 8rem;
+    }
+}
+
+/* 5 · dead letters. */
+.kt-col-select {
+    inline-size: 3rem;
+}
+
+.kt-col-payload {
+    inline-size: 24rem;
+}
+
+.kt-when {
+    display: grid;
+    gap: 0.125rem;
+}
+
+.kt-when small {
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+/* One footprint for every state of a region: the filled content keeps its place; a plate or the busy card fills the same box. */
+.kt-stage {
+    position: relative;
+    min-block-size: var(--kt-stage-min, 0);
+}
+
+.kt-stage > [data-kt-plate] {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: stretch;
+}
+
+.kt-stage > [data-kt-plate][hidden] {
+    display: none;
+}
+
+.kt-stage > [data-kt-plate] > * {
+    inline-size: 100%;
+    block-size: 100%;
+    box-sizing: border-box;
+    justify-content: center;
+    align-items: center;
+}
+
+.kt-stage[data-kt-state='plate'] > [data-kt-filled],
+.kt-stage[data-kt-state='loading'] > [data-kt-filled] {
+    visibility: hidden;
+}
+
+/* 6 · recent messages: the list and the payload on one grid. */
+.kt-md {
+    min-block-size: 26rem;
+}
+
+.kt-live {
+    max-block-size: 26rem;
+    margin: 0;
+    overflow-y: auto;
+}
+
+.kt-live > li[data-new] {
+    background: var(--muted);
+}
+
+.kt-msg {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.125rem var(--kp-space-sm, 0.5rem);
+    align-items: baseline;
+}
+
+.kt-msg b {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+}
+
+.kt-msg small {
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+}
+
+.kt-msg code {
+    grid-column: 1 / -1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: clip;
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-facts-list {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-md, 0.75rem);
+    margin: 0 0 var(--kp-space-md, 0.75rem);
+}
+
+.kt-facts-list dt {
+    color: var(--muted-foreground);
+}
+
+.kt-facts-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.kt-detail-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: var(--kp-space-sm, 0.5rem);
+    justify-content: start;
+    margin-block-start: var(--kp-space-md, 0.75rem);
+}
+
+@media (max-width: 30rem) {
+    .kt-detail-actions {
+        grid-auto-flow: row;
+        grid-auto-columns: minmax(0, 1fr);
+    }
+}
+
+/* 7 · publish: the section head in a narrow column, the form beside it. */
+@media (min-width: 64rem) {
+    .kt-publish {
+        grid-template-columns: minmax(14rem, 1fr) minmax(0, 3fr);
+        column-gap: var(--kp-space-xl, 2rem);
+        align-items: start;
+    }
+}
+
+.kt-form {
+    display: grid;
+    gap: var(--kp-space-md, 0.75rem);
+    max-inline-size: 52rem;
+}
+
+.kt-submit {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+    justify-items: start;
+}
