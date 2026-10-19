@@ -116,7 +116,7 @@ async fn k2_the_kit_owns_the_door() {
     );
     let clients = hub.page("/clients").await;
     assert!(
-        clients.contains("<h1>Apps</h1>"),
+        clients.contains(">Apps</h1>"),
         "the clients page keeps the hub's word for them"
     );
     hub.shutdown().await;
@@ -130,7 +130,7 @@ async fn k2_the_kit_says_app_not_client_everywhere_not_only_the_heading() {
     let hub = spawn_kit().await;
     let clients = hub.page("/clients").await;
     assert!(
-        clients.contains("Every app listed here"),
+        clients.contains("is one app with its own token"),
         "the page's own prose says app, not client: {clients}"
     );
     assert!(
@@ -140,7 +140,9 @@ async fn k2_the_kit_says_app_not_client_everywhere_not_only_the_heading() {
     // The URL and the nav link stay "/clients" on purpose (E1: code and URL
     // are stable, only what a person reads changes) — checked against the
     // page's prose with that one href stripped out, not the raw HTML.
-    let prose = unescape(&clients).replace("href=\"/clients\"", "");
+    // Since chassis-rs 3.9.0 the page's markup carries `data-clients-*`
+    // hooks, ids and classes; only the text a person reads is held to it.
+    let prose = visible_text(&unescape(&clients));
     assert!(
         !prose.to_lowercase().contains("client"),
         "no leftover \"client\" wording outside the /clients URL: {prose}"
@@ -1019,4 +1021,30 @@ async fn the_subscriptions_table_archives_a_live_subscription_and_deletes_an_arc
         .await;
     assert_eq!(refused.status(), 409);
     hub.shutdown().await;
+}
+
+/// The text a reader sees: comments, script and style bodies and every tag
+/// (with its attributes) removed.
+fn visible_text(html: &str) -> String {
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+    while let Some(start) = rest.find('<') {
+        out.push_str(&rest[..start]);
+        let tail = &rest[start..];
+        let skip_to = |end: &str| tail.find(end).map(|i| i + end.len()).unwrap_or(tail.len());
+        let lower = tail.get(..7).unwrap_or(tail).to_ascii_lowercase();
+        let consumed = if tail.starts_with("<!--") {
+            skip_to("-->")
+        } else if lower.starts_with("<script") {
+            skip_to("</script>")
+        } else if lower.starts_with("<style") {
+            skip_to("</style>")
+        } else {
+            skip_to(">")
+        };
+        out.push(' ');
+        rest = &tail[consumed..];
+    }
+    out.push_str(rest);
+    out
 }
