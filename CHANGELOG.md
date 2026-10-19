@@ -11,6 +11,13 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Changed
+- chassis-rs 3.9.0 with kp-themes 11.1.1: the heat map, trend tiles,
+  drain bar, timeline, 90-day strip and payload view show their own failed
+  plates with Try again; label | value rows sit on the package's form grid.
+- Topic page: the publish button again says "Published as <id>" or the
+  refusal right under it, next to its busy state.
+
 ## [4.3.2] - 2026-10-19
 
 ### Fixed
