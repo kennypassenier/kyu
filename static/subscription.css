@@ -42,17 +42,21 @@
 }
 
 .ky-counts {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    justify-content: start;
     align-items: center;
-    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
+    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-md, 1rem);
     margin: var(--kp-space-xs, 0.25rem) 0 0;
     font-size: var(--kp-text-sm, 0.8125rem);
 }
 
 .ky-crumbs {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    justify-content: start;
     align-items: center;
     gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
     margin: 0 0 var(--kp-space-sm, 0.5rem);
@@ -153,4 +157,28 @@
 
 .ky-gantt-host {
     min-inline-size: 0;
+}
+
+/* The narrow table as cards: the package spreads label and value to the two
+   edges, so the values sit wherever their width leaves them. Here every card
+   line is a two-track grid, the label track as wide as the longest label
+   ("Attempts"), the value track left-aligned, so the values of every card start on
+   one x. */
+@container kp-table (max-width: 40rem) {
+    .ky-comp .kp-table td {
+        display: grid;
+        grid-template-columns: 6rem minmax(0, 1fr);
+        justify-content: stretch;
+        justify-items: start;
+        align-items: center;
+        text-align: start;
+    }
+
+    .ky-comp .kp-table td[data-label=""] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ky-comp .kp-table td[data-label=""]::before {
+        display: none;
+    }
 }
