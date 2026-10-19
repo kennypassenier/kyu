@@ -261,22 +261,6 @@
     font-size: var(--kp-text-sm, 0.8125rem);
 }
 
-.kt-facts-list {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-md, 0.75rem);
-    margin: 0 0 var(--kp-space-md, 0.75rem);
-}
-
-.kt-facts-list dt {
-    color: var(--muted-foreground);
-}
-
-.kt-facts-list dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-}
-
 .kt-detail-actions {
     display: grid;
     grid-auto-flow: column;
@@ -300,37 +284,6 @@
         column-gap: var(--kp-space-xl, 2rem);
         align-items: start;
     }
-}
-
-.kt-form {
-    display: grid;
-    gap: var(--kp-space-md, 0.75rem);
-    max-inline-size: 52rem;
-}
-
-.kt-form__foot {
-    display: grid;
-    grid-template-columns: minmax(0, 14rem) max-content;
-    column-gap: var(--kp-space-md, 0.75rem);
-    align-items: start;
-}
-
-.kt-form__foot > .kt-submit {
-    /* The button sits on the input's row: the label's height is skipped so the two share one baseline. */
-    align-self: end;
-}
-
-@media (max-width: 40rem) {
-    .kt-form__foot {
-        grid-template-columns: minmax(0, 1fr);
-        row-gap: var(--kp-space-md, 0.75rem);
-    }
-}
-
-.kt-submit {
-    display: grid;
-    gap: var(--kp-space-xs, 0.25rem);
-    justify-items: start;
 }
 
 /* The recent messages head: title and sentence on the left, the refresh control on the right, on one grid. */

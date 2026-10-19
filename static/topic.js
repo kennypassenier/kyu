@@ -22,7 +22,6 @@ import { setCode } from '/static/kp/js/code.js';
 import { masterDetail, setPaneState } from '/static/kp/js/master-detail.js';
 import { openViewer } from '/static/kp/js/viewer.js';
 import { runFlashButton } from '/static/kp/js/flash.js';
-import { form as formHandle } from '/static/kp/js/forms.js';
 import { setSelectionBusy, setSelectionResult } from '/static/kp/js/selection-bar.js';
 import { statePlate } from '/static/kp/js/state-plate.js';
 import { openBusyCard } from '/static/kp/js/busy-card.js';
@@ -960,14 +959,20 @@ function fillDetail(id) {
     const heading = $('[data-kp-pane-heading]', mdRoot);
     if (heading) heading.textContent = `Message ${m.id}`;
     detailBody.replaceChildren();
-    const facts = make('dl', 'kt-facts-list');
+    const facts = make('div', 'kp-formgrid');
+    const kv = make('dl', 'kp-kv');
+    facts.append(kv);
     const rows = [
         ['Published', dmy(m.published_ms)],
         ['Content type', m.content_type ?? 'not given'],
         ['Size', bytesText(m.payload.bytes)],
         ...(m.due_ms ? [['Due', dmy(m.due_ms)]] : []),
     ];
-    for (const [k, v] of rows) facts.append(make('dt', '', k), make('dd', '', v));
+    for (const [k, v] of rows) {
+        const row = make('div', 'kp-kv__row');
+        row.append(make('dt', '', k), make('dd', '', v));
+        kv.append(row);
+    }
     const fig = make('figure', 'kp-code');
     fig.setAttribute('data-kp-code', '');
     const actions = make('div', 'kt-detail-actions');
@@ -1053,6 +1058,8 @@ mdRoot.addEventListener('kp-pane-open', (event) => {
     setPaneState(mdRoot, 'ready');
 });
 mdRoot.addEventListener('kp-pane-retry', () => void reload(true));
+// The payload block's own failed plate: its Retry fires kp-code-retry (code.js), which reads the messages again.
+mdRoot.addEventListener('kp-code-retry', () => void reload(true));
 
 // ---------------------------------------------------------------- 7 · publish a test message
 
@@ -1060,22 +1067,22 @@ const form = /** @type {HTMLFormElement} */ (document.getElementById('kt-publish
 const area = /** @type {HTMLTextAreaElement} */ (document.getElementById('kt-publish-body'));
 const delayField = /** @type {HTMLInputElement | null} */ (document.getElementById('kt-publish-delay'));
 form.addEventListener('submit', (event) => event.preventDefault());
-// The package's own form: data-kp-submit shows the busy state while the message goes out, `done()` ends it, and a
-// refusal stands in the form's summary and under the field it is about (forms.js, form(el).errors).
+// The package's own form: data-kp-submit holds the button busy while the message goes out and `done()` hands it back;
+// the same button is a flash button, so its word ("Published" / "Refused" / "Failed") and the line under it
+// ("Published as <id>." / the refusal and what to do) are the package's too (flash.js).
+const sendButton = /** @type {HTMLButtonElement} */ (document.getElementById('kt-publish-send'));
 form.addEventListener('kp-form-valid', (event) => {
     const { done } = /** @type {CustomEvent<{ done: () => void }>} */ (event).detail;
     void (async () => {
-        const r = await call(`${T}/publish`, { form: { payload: area.value, delay: delayField?.value ?? '' } });
+        let published = false;
+        await runFlashButton(sendButton, async () => {
+            const r = await call(`${T}/publish`, { form: { payload: area.value, delay: delayField?.value ?? '' } });
+            if (!r.ok) return refusal(/** @type {any} */ (r));
+            published = true;
+            return { word: 'Published', line: r.json?.id ? `Published as ${r.json.id}.` : 'Published.' };
+        });
         done();
-        if (!r.ok) {
-            const message = sentence(/** @type {any} */ (r));
-            const handle = formHandle(form);
-            if (handle) handle.errors({ payload: message });
-            else toast(message, { sticky: true, live: 'assertive' });
-            return;
-        }
-        toast(r.json?.id ? `Published to ${TOPIC} as ${r.json.id}.` : `Published to ${TOPIC}.`);
-        void reload();
+        if (published) void reload();
     })();
 });
 
@@ -1126,7 +1133,11 @@ async function reload(visible = false) {
     } catch {
         readFailed = true;
         for (const t of tables) t?.fail(READ_FAILED);
-        setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
+        // With the payload block on screen its own failed plate (and Retry, kp-code-retry) says it; the pane's plate
+        // would cover it. Where the block is not on screen (a phone, nothing opened yet) the pane's plate says it.
+        const codeShown = detailCode !== null && detailCode.fig.getBoundingClientRect().width > 1;
+        if (codeShown) setPaneState(mdRoot, 'ready');
+        else setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
         setDetailCode('error', READ_FAILED);
         return;
     }
