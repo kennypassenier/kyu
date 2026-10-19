@@ -919,9 +919,11 @@ function openPayload(m, opener = null) {
 
 const detailBody = /** @type {HTMLElement} */ ($('[data-kt-md-body]', recent));
 /** @param {string} id */
+let filledId = '';
 function fillDetail(id) {
     const m = MESSAGES.get(id) ?? [...MESSAGES.values()][0];
-    if (!m) return;
+    if (!m || filledId === m.id) return;
+    filledId = m.id;
     const heading = $('[data-kp-pane-heading]', mdRoot);
     if (heading) heading.textContent = `Message ${m.id}`;
     detailBody.replaceChildren();
@@ -976,6 +978,7 @@ function renderRecent() {
     const list = DATA.messages;
     MESSAGES.clear();
     for (const m of list) MESSAGES.set(m.id, m);
+    filledId = '';
     const count = $('[data-kt-recent-count]', recent);
     if (count) count.textContent = list.length ? `The newest ${num(list.length)} of ${num(DATA.topic.messages)} messages retained on ${TOPIC}.` : '';
     if (list.length === 0) {
