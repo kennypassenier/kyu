@@ -395,7 +395,15 @@ function drawAttempts(gantt, requests, title, id, attempts) {
     setRequests(requests, list);
 }
 
-function initAttempts() {
+/** The timeline and the inspector are one read: both show the busy card until kyu has said which message to look at. */
+function holdAttempts() {
+    const gantt = $('#ky-gantt');
+    const requests = $('#ky-requests');
+    if (gantt) setGanttState(gantt, 'loading', 'Reading the attempts');
+    if (requests) setRequestsState(requests, 'loading');
+}
+
+function wireAttempts() {
     const gantt = $('#ky-gantt');
     const requests = $('#ky-requests');
     const title = $('#ky-attempts-title');
@@ -406,13 +414,30 @@ function initAttempts() {
         { kind: 'dead', label: 'Dead', shape: 'square', tone: 'destructive' },
         { kind: 'ack', label: 'Acked', shape: 'diamond', tone: 'success' },
     ]);
-    requests.addEventListener('kp-requests-retry', () => void loadAttempts(currentMessage));
-    gantt.addEventListener('kp-gantt-retry', () => void loadAttempts(currentMessage));
+    // Before a message is picked there is nothing to read again but the page itself.
+    const retry = () => void (currentMessage ? loadAttempts(currentMessage) : startAttempts());
+    requests.addEventListener('kp-requests-retry', retry);
+    gantt.addEventListener('kp-gantt-retry', retry);
     document.addEventListener('kp-bullets-pick', (event) => {
         const key = /** @type {CustomEvent<{ key: string }>} */ (event).detail?.key;
         if (key && items.has(key)) void loadAttempts(key);
     });
-    // The message that is closest to dying; the oldest when none was tried yet.
+}
+
+/** Read the page, then show the attempts of the message that is closest to dying (the oldest when none was tried yet). */
+async function startAttempts() {
+    const gantt = $('#ky-gantt');
+    const requests = $('#ky-requests');
+    const title = $('#ky-attempts-title');
+    if (!gantt || !requests || !title) return;
+    holdAttempts();
+    if (!(await readPage())) {
+        setGanttState(gantt, 'error', 'Could not read the attempts', { text: 'kyu did not answer.' });
+        setRequestsState(requests, 'error', { message: 'kyu could not read the backlog, so no message is picked.' });
+        return;
+    }
+    // Someone pressed Attempts on a row while the page was being read: that message stays.
+    if (currentMessage) return;
     const held = [...items.entries()];
     if (held.length === 0) {
         title.textContent = `${DATA.subscription} holds no message right now.`;
@@ -500,7 +525,7 @@ function showPageState(state) {
     drawGauges();
 }
 
-/** Read this page again: its data block, the policy and the backlog rows. */
+/** Read this page again: its data block, the policy and the backlog rows. @returns {Promise<boolean>} whether kyu answered */
 async function readPage() {
     showPageState('loading');
     try {
@@ -522,9 +547,10 @@ async function readPage() {
         drawCounts();
     } catch {
         showPageState('error');
-        return;
+        return false;
     }
     showPageState('ready');
+    return true;
 }
 for (const id of ['ky-bullets-age', 'ky-bullets-attempts']) document.getElementById(id)?.addEventListener('kp-bullets-retry', () => void readPage());
 policyCard()?.addEventListener(CARD_RETRY_EVENT, () => void readPage());
@@ -535,9 +561,10 @@ onReady(() => {
     pageState = 'loading';
     drawGauges();
     initBacklog();
-    initAttempts();
+    wireAttempts();
+    holdAttempts();
     void initUptime();
     // The first read is a real one with the components' own states: the server-drawn page stands behind the busy
-    // cards until kyu has answered.
-    void readPage();
+    // cards until kyu has answered; the attempts wait for it, since the backlog it reads says which message to show.
+    void startAttempts();
 });
