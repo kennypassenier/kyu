@@ -71,3 +71,13 @@ the phone card label | value grid in `topics.css` and `subscription.css`,
 the topic cell grid, the palette rows and the who-reads-what tracks in
 `kyu.css`, and the Topic page's command and publish grids in `topic.css`.
 The same release carries formal's graph loading (no kyu change needed).
+
+With kp-themes 11.1.0 (kp-themes main 612cf357), replace kyu's card-failed
+fallbacks with the components' own failed plates and Retry events:
+`setHeat(el, {state})` → `kp-heat-retry`, `setMatrix(el, {state})` →
+`kp-matrix-retry`, `setGanttState(el, state, words)` → `kp-gantt-retry`,
+`setGraphState(el, state, words)` → `kp-graph-retry`,
+`setUptime(el, {state, error})` → `kp-uptime-retry`,
+`setTrendData(figure, null | {points: []} | {error})` → `kp-chart-retry`,
+`setProgressFailed(bar, {title})` → `kp-progressbar-retry`. Heat, matrix and
+uptime need `attachFootprints()`, which auto.js already runs.
