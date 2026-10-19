@@ -418,10 +418,10 @@ function renderSubs() {
 }
 
 /** The tooltip wrapper of a button that can be off stands in the row's button box: it carries the button's role. @param {HTMLElement[]} rows */
-function fixTooltips(rows) {
+function fixTooltips(rows, attach = true) {
     if (!booted) return;
     for (const row of rows) {
-        attachAll?.(row);
+        if (attach) attachAll?.(row);
         for (const anchor of $$('.kp-row-actions > .kp-tooltip-anchor', row)) {
             const role = anchor.querySelector('[data-kp-action]')?.getAttribute('data-kp-action');
             if (role) anchor.setAttribute('data-kp-action', role);
@@ -1098,7 +1098,7 @@ booted = true;
 
 subsTable = dataTable(subsTableEl);
 deadTable = dataTable(deadTableEl);
-fixTooltips($$('tr', subsBody));
+fixTooltips($$('tr', subsBody), false);
 updateCounts();
 
 {
