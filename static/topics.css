@@ -86,7 +86,7 @@
 }
 
 .tp-name {
-    min-inline-size: 12rem;
+    min-inline-size: 9rem;
 }
 
 .tp-hover {
@@ -94,7 +94,7 @@
 }
 
 .tp-flow {
-    min-inline-size: 8rem;
+    min-inline-size: 6rem;
 }
 
 .tp-flow .kp-stackbar {

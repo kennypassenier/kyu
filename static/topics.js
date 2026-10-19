@@ -394,7 +394,7 @@ function drawMeta() {
     const meta = $('[data-tp-meta]');
     if (!meta) return;
     const time = h('time', { class: 'kp-ago', 'data-kp-ago': true, 'data-kp-ago-verb': 'updated', 'data-kp-stale-after': '180' });
-    meta.replaceChildren(h('span', {}, `${plural(model.topics.length, 'topic', 'topics')} \u00b7`), time);
+    meta.replaceChildren(h('span', {}, `${plural(model.topics.length, 'topic', 'topics')}\u00a0\u00b7\u00a0`), time);
     setAgo(time, model.now_ms);
 }
 
