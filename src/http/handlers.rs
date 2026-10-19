@@ -1304,8 +1304,56 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
 /// The hub's own two assets, beyond what the kit serves under `/static`:
 /// the page styles and the copy/reveal behaviour of the command snippets.
 /// Embedded in the binary, so the image stays a single file (T9).
-const APP_JS: &str = include_str!("../../static/app.js");
-const KYU_CSS: &str = include_str!("../../static/kyu.css");
+/// kyu's own browser files, served from memory on `/assets/{file}`: one
+/// script and one stylesheet per page beside the shared ones, so each page
+/// carries only what it uses (kp-themes 11.0.0 adoption).
+const ASSETS: &[(&str, &str, &str)] = &[
+    (
+        "app.js",
+        include_str!("../../static/app.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "common.js",
+        include_str!("../../static/common.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "topics.js",
+        include_str!("../../static/topics.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "topic.js",
+        include_str!("../../static/topic.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "subscription.js",
+        include_str!("../../static/subscription.js"),
+        "text/javascript; charset=utf-8",
+    ),
+    (
+        "kyu.css",
+        include_str!("../../static/kyu.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topics.css",
+        include_str!("../../static/topics.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic.css",
+        include_str!("../../static/topic.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "subscription.css",
+        include_str!("../../static/subscription.css"),
+        "text/css; charset=utf-8",
+    ),
+];
 
 /// The cache-busting fingerprint every page appends to its asset URLs.
 ///
@@ -1317,7 +1365,7 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
     // FNV-1a: not cryptographic, and does not need to be — this answers
     // "did these bytes change", nothing more (T6: no crate for six lines).
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in APP_JS.bytes().chain(KYU_CSS.bytes()) {
+    for byte in ASSETS.iter().flat_map(|(_, body, _)| body.bytes()) {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -1330,17 +1378,13 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
 /// from user input is how a static handler turns into a file-disclosure
 /// bug, and there are exactly two files.
 pub async fn kyu_asset(Path(file): Path<String>) -> Response {
-    let (body, content_type) = match file.as_str() {
-        "app.js" => (APP_JS, "text/javascript; charset=utf-8"),
-        "kyu.css" => (KYU_CSS, "text/css; charset=utf-8"),
-        _ => {
-            return ApiError::new(
-                StatusCode::NOT_FOUND,
-                format!("no asset named {file:?}"),
-                "the hub serves app.js and kyu.css here; everything else is the kit's, under /static",
-            )
-            .into_response();
-        }
+    let Some(&(_, body, content_type)) = ASSETS.iter().find(|(name, _, _)| *name == file) else {
+        return ApiError::new(
+            StatusCode::NOT_FOUND,
+            format!("no asset named {file:?}"),
+            "the hub serves its own page scripts and stylesheets here; everything else is the kit's, under /static",
+        )
+        .into_response();
     };
     (
         [
