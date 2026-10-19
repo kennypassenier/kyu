@@ -862,30 +862,124 @@ fn page<C: serde::Serialize>(
         .map_err(|error| internal(format!("cannot render the page: {error}")))
 }
 
+/// A topic is "Backlog" on the Topics page from this many waiting messages.
+const BACKLOG_STATUS_AT: i64 = 50;
+
+/// A topic is "Quiet" on the Topics page after this long without a publish.
+const QUIET_AFTER_MS: i64 = 24 * 3_600_000;
+
+/// The longest dead-letter excerpt the Topics page keeps for its hover card.
+const DEAD_NOTE_CHARS: usize = 80;
+
+/// One row of the Topics page as the page's script reads it: the counts the
+/// flow bar and the key figures are drawn from, the subscriptions behind the
+/// "who reads this" card and the attention band, and the status word the
+/// table sorts and filters by. Times are Unix milliseconds.
+#[derive(serde::Serialize)]
+struct TopicRowView {
+    name: String,
+    status: &'static str,
+    messages: i64,
+    subscriptions: Vec<String>,
+    flagged: Vec<String>,
+    backlog: i64,
+    in_flight: i64,
+    dead: i64,
+    lapsed: i64,
+    last_published_ms: Option<i64>,
+    dead_note: Option<String>,
+}
+
+/// The status word of a topic: the worst thing true of it.
+fn topic_status(dead: i64, backlog: i64, last_published_ms: Option<i64>, now: i64) -> &'static str {
+    if dead > 0 {
+        "Dead letters"
+    } else if backlog >= BACKLOG_STATUS_AT {
+        "Backlog"
+    } else if last_published_ms.is_some_and(|at| now - at > QUIET_AFTER_MS) {
+        "Quiet"
+    } else {
+        "Healthy"
+    }
+}
+
 /// K10 · `GET /topics` — every topic on this hub. Until step 2 this was `/`;
 /// the kit's status page owns `/` now and carries a Topics section.
+///
+/// The page's script reads the rows from one JSON block (`topics_json`), so
+/// the automatic refresh, which fetches this same URL and swaps one region,
+/// carries fresh numbers with it.
 pub async fn topics_page(
     Extension(dash): Extension<Dashboard>,
     State(state): State<AppState>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
-    let topics = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<TopicView>> {
+    let built = tokio::task::spawn_blocking(move || -> anyhow::Result<(i64, Vec<TopicRowView>)> {
         let now = engine.now_ms();
-        Ok(engine
-            .store()
-            .read(queries::topic_summaries)?
-            .into_iter()
-            .map(|summary| TopicView::at(summary, now))
-            .collect())
+        let rows = engine.store().read(|conn| {
+            let mut rows = Vec::new();
+            for summary in queries::topic_summaries(conn)? {
+                let topic_id = queries::topic_id_by_name_conn(conn, &summary.name)?;
+                let subscriptions = match topic_id {
+                    Some(id) => queries::subscription_summaries(conn, id)?,
+                    None => Vec::new(),
+                };
+                let dead_note = match topic_id {
+                    Some(id) if summary.dead > 0 => queries::dead_letters_for_topic(conn, id, 1)?
+                        .into_iter()
+                        .next()
+                        .map(|dead| {
+                            let text = String::from_utf8_lossy(&dead.letter.payload);
+                            let excerpt: String = text.chars().take(DEAD_NOTE_CHARS).collect();
+                            format!("{}: {excerpt}", dead.subscription)
+                        }),
+                    _ => None,
+                };
+                rows.push(TopicRowView {
+                    status: topic_status(
+                        summary.dead,
+                        summary.backlog,
+                        summary.last_published_at,
+                        now,
+                    ),
+                    name: summary.name,
+                    messages: summary.messages,
+                    flagged: subscriptions
+                        .iter()
+                        .filter(|sub| sub.state == "flagged")
+                        .map(|sub| sub.name.clone())
+                        .collect(),
+                    in_flight: subscriptions.iter().map(|sub| sub.claimed).sum(),
+                    lapsed: subscriptions.iter().map(|sub| sub.lapsed).sum(),
+                    subscriptions: subscriptions.into_iter().map(|sub| sub.name).collect(),
+                    backlog: summary.backlog,
+                    dead: summary.dead,
+                    last_published_ms: summary.last_published_at,
+                    dead_note,
+                });
+            }
+            Ok(rows)
+        })?;
+        Ok((now, rows))
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
     .map_err(|error| internal(format!("{error:#}")))?;
+    let (now, topics) = built;
+    // The block sits inside a <script type="application/json">: `<` is
+    // escaped so a payload excerpt can never close the element.
+    let topics_json = serde_json::to_string(&json!({ "now_ms": now, "topics": topics }))
+        .map_err(|error| internal(format!("cannot encode the topics: {error}")))?
+        .replace('<', "\\u003c");
     page(
         &dash,
         "/topics",
         TOPICS_HTML,
-        json!({ "topics": topics, "kyu_assets": ASSET_VERSION.as_str() }),
+        json!({
+            "topics": topics,
+            "topics_json": topics_json,
+            "kyu_assets": ASSET_VERSION.as_str(),
+        }),
     )
 }
 
