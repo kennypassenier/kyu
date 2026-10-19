@@ -1,1 +1,156 @@
-/* kyu: subscription.css — filled by the kp-themes 11.0.0 adoption. */
+/* kyu: subscription.css — layout glue of the Subscription page. Everything
+   with a kp- class is the package; ky- rules only lay out the sections. */
+
+.ky-sections {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-xl, 2rem);
+    margin-block-start: var(--kp-space-lg, 1rem);
+}
+
+.ky-sec {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-md, 0.75rem);
+}
+
+.ky-sec__head {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.ky-sec__head :is(h2, p) {
+    margin: 0;
+}
+
+.ky-sec__head p {
+    max-inline-size: 80ch;
+    color: var(--muted-foreground);
+}
+
+.ky-comp {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-md, 0.75rem);
+    min-inline-size: 0;
+}
+
+.ky-label {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.ky-counts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
+    margin: var(--kp-space-xs, 0.25rem) 0 0;
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.ky-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
+    margin: 0 0 var(--kp-space-sm, 0.5rem);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+/* The backlog table: the payload column has room, the id wraps whole. */
+.ky-col-select {
+    inline-size: 2.5rem;
+}
+
+.ky-col-payload {
+    min-inline-size: 13rem;
+}
+
+.ky-col-actions {
+    inline-size: 6.5rem;
+    text-align: end;
+}
+
+.ky-row-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.ky-row-form {
+    display: grid;
+    margin: 0;
+}
+
+.ky-cell-when {
+    display: grid;
+    gap: 0;
+}
+
+.ky-cell-when > span {
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-xs, 0.75rem);
+}
+
+.ky-comp .kp-table .kp-id {
+    white-space: nowrap;
+}
+
+.ky-gauges {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+    gap: var(--kp-space-lg, 1rem);
+    align-items: start;
+}
+
+/* Policy and gauges stand side by side on a wide page, stacked on a narrow one. */
+.ky-top {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 28rem), 1fr));
+    gap: var(--kp-space-xl, 2rem);
+    align-items: start;
+}
+
+.ky-top > .ky-sec {
+    min-inline-size: 0;
+}
+
+.ky-gauge {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-sm, 0.5rem);
+    min-inline-size: 0;
+}
+
+.ky-gauge__title {
+    margin: 0;
+    font-size: var(--kp-text-base, 1rem);
+}
+
+.ky-readout {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+}
+
+.ky-gauge .kp-progress__wrap {
+    display: block;
+    min-inline-size: 0;
+}
+
+.ky-gauge .kp-progress__wrap > .kp-progressbar {
+    inline-size: 100%;
+    max-inline-size: var(--kp-progressbar-max-width, 48rem);
+}
+
+.ky-inspector-host {
+    min-block-size: 24rem;
+}
+
+.ky-gantt-host {
+    min-inline-size: 0;
+}
