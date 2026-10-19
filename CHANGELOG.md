@@ -11,6 +11,32 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Added
+- The dashboard is rebuilt on kp-themes 11.0.0, as Kenny approved it in
+  review on 2026-10-19: a command palette (Ctrl+K), keyboard shortcuts with
+  a help sheet, a first-visit tour, links to every heading and row, and a
+  "who reads what" map and hub graph on every page that fits.
+- Topics: key figures that filter the table, an attention band, a sortable
+  and searchable topics table with flow bars and live refresh, an hourly
+  heat map and 24-hour trend tiles.
+- Topic: the four commands with the token kept hidden (reveal with a
+  countdown, copy without showing), a filterable subscriptions table with a
+  row menu, archive with undo and delete by typing the name; dead letters
+  with their reason and remedy, readable payloads and bulk requeue or
+  delete; recent messages beside their payload, replay, and a publish box
+  that checks its JSON and can delay delivery.
+- Subscription: the policy, gauges against the lease and the attempts, the
+  backlog with bulk delete, every delivery attempt as a timeline and as
+  requests, and 90 days of delivered against dead.
+- Dashboard JSON routes behind the login for all of the above (bulk
+  requeue and delete, replay, attempts, daily, hourly, totals, retention);
+  the dashboard's form posts answer JSON when asked.
+- Store schema 7: delivery attempts and hourly, daily and sampled
+  statistics, each with its own cap and pruning.
+
+### Changed
+- chassis-rs `webapp` feature on, so the kit serves every kp-themes module.
+
 ## [4.2.9] - 2026-10-18
 
 ## [4.2.8] - 2026-10-16
