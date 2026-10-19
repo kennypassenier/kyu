@@ -15,7 +15,7 @@
 
 const KP = '/static/kp/js/';
 
-const [palette, shortcuts, anchors, keys, tour, overlays, components, heat] = await Promise.all([
+const [palette, shortcuts, anchors, keys, tour, overlays, components, heat, graph, segmented] = await Promise.all([
     import(`${KP}palette.js`),
     import(`${KP}shortcuts.js`),
     import(`${KP}anchors.js`),
@@ -24,6 +24,8 @@ const [palette, shortcuts, anchors, keys, tour, overlays, components, heat] = aw
     import(`${KP}overlays.js`),
     import(`${KP}components.js`),
     import(`${KP}heat.js`),
+    import(`${KP}graph.js`),
+    import(`${KP}segmented.js`),
 ]);
 
 const TOUR_NAME = 'kyu-topic-page';
@@ -334,8 +336,9 @@ function mountUses(section) {
         }
     };
     draw();
+    segmented.attachSegmented(section);
     section.addEventListener('click', (event) => {
-        const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kp-segmented] [data-value]'));
+        const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kyu-switch="view"] [data-value]'));
         if (!item) return;
         view = item.dataset.value === 'grid' ? 'grid' : 'lines';
         draw();
@@ -343,6 +346,70 @@ function mountUses(section) {
     // A view the person left on Grid last time is remembered by the matrix itself.
     if (match.getAttribute('data-kp-view') === 'grid') {
         view = 'grid';
-        for (const item of all('[data-kp-segmented] [data-value]', section)) item.setAttribute('aria-checked', String(item.dataset.value === 'grid'));
+        for (const item of all('[data-kyu-switch="view"] [data-value]', section)) item.setAttribute('aria-checked', String(item.dataset.value === 'grid'));
     }
+    mountGraph(section, subOptions);
+}
+
+/**
+ * The hub-and-ring picture of the same subscriptions: kyu in the middle, a node per subscription, the link
+ * kind = the subscription's state. Node size is the package's `weight`: unset (all the same) or the backlog.
+ * @param {HTMLElement} section @param {HTMLElement[]} subOptions the palette's subscription options
+ */
+function mountGraph(section, subOptions) {
+    const el = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-graph'));
+    const out = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-readout'));
+    const KINDS = [
+        { kind: 'active', label: 'Active', hint: 'The app is reading and acknowledging', style: 'solid', colour: 'var(--chart-1)' },
+        { kind: 'flagged', label: 'Flagged', hint: 'A message died or a lease ran out on this subscription', style: 'dash', colour: 'var(--destructive)' },
+        { kind: 'archived', label: 'Archived', hint: 'No longer reading; kept for its backlog', style: 'dot', colour: 'var(--muted-foreground)' },
+    ];
+    const subs = subOptions.map((o) => ({
+        id: `${o.dataset.kyuTopic}/${o.dataset.kyuSub}`,
+        topic: o.dataset.kyuTopic ?? '',
+        app: o.dataset.kyuSub ?? '',
+        kind: o.dataset.kyuTone === 'ok' ? 'active' : o.dataset.kyuTone === 'muted' ? 'archived' : 'flagged',
+        waiting: Number(o.dataset.kyuBacklog ?? 0),
+        note: o.dataset.kyuDetail ?? '',
+    }));
+    const most = Math.max(1, ...subs.map((s) => s.waiting));
+    let bySize = false;
+    graph.attachGraphs(section);
+    graph.setGraphState(el, 'loading', 'Reading the subscriptions from kyu.');
+    const draw = () => {
+        if (subs.length === 0) {
+            graph.setGraphState(el, 'empty', 'Nothing to draw yet: no topic has a subscription.');
+            return;
+        }
+        graph.setGraphData(el, {
+            hub: 'kyu',
+            kinds: KINDS,
+            nodes: [
+                { id: 'kyu', label: 'kyu', description: 'the message hub', weight: bySize ? 1 : null },
+                ...subs.map((s) => ({
+                    id: s.id,
+                    label: `${s.topic} / ${s.app}`,
+                    description: `${counted(s.waiting, 'message')} waiting, ${s.note}`,
+                    weight: bySize ? Math.max(0.12, s.waiting / most) : null,
+                    flag: null,
+                })),
+            ],
+            edges: subs.map((s) => ({ from: 'kyu', to: s.id, kind: s.kind, detail: `${counted(s.waiting, 'message')} waiting, ${s.note}` })),
+        });
+    };
+    // attachGraphs draws its loading state itself; the data follows once it has.
+    requestAnimationFrame(draw);
+    section.addEventListener('click', (event) => {
+        const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kyu-switch="size"] [data-value]'));
+        if (!item) return;
+        bySize = item.dataset.value === 'backlog';
+        draw();
+    });
+    el.addEventListener(graph.GRAPH_CHANGE_EVENT, (event) => {
+        const { selected, hiddenKinds } = /** @type {CustomEvent} */ (event).detail;
+        const name = (k) => KINDS.find((x) => x.kind === k)?.label ?? k;
+        out.textContent =
+            (selected.length ? `Picked: ${selected.join(', ')}.` : 'Nothing picked.') +
+            (hiddenKinds.length ? ` Hidden: ${hiddenKinds.map(name).join(', ')}.` : ' Every kind of link is shown.');
+    });
 }

@@ -927,6 +927,8 @@ struct ShellSubscription {
     state: String,
     tone: &'static str,
     detail: String,
+    /// Messages waiting for this subscription (the graph's optional node size).
+    backlog: i64,
 }
 
 fn counted(n: i64, noun: &str) -> String {
@@ -965,6 +967,7 @@ async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
                 };
                 for sub in queries::subscription_summaries(conn, topic_id)? {
                     let view = SubscriptionView::at(sub, now);
+                    let backlog = view.backlog;
                     let (tone, detail) = match view.state.as_str() {
                         "active" => ("ok", "active".to_string()),
                         "archived" => ("muted", "archived".to_string()),
@@ -980,6 +983,7 @@ async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
                         state: view.state,
                         tone,
                         detail,
+                        backlog,
                     });
                 }
             }
