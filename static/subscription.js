@@ -180,8 +180,25 @@ function initBacklog() {
     const handle = () => dataTable(wrap);
     /** @param {string[]} keys */
     const rowsOf = (keys) => keys.flatMap((k) => $$(`[data-kp-row-key="${CSS.escape(k)}"]`, wrap));
-    const show = (/** @type {HTMLElement[]} */ rows, on = true) => {
-        for (const row of rows) row.hidden = !on;
+    /** @type {Map<string, HTMLElement>} */
+    const byKey = new Map($$('[data-kp-row-key]', wrap).map((row) => [row.dataset.kpRowKey ?? '', row]));
+    /** Rows taken out of the table while an Undo window is open, with the row each stood before. @type {Map<HTMLElement, Element | null>} */
+    const parked = new Map();
+    const body = /** @type {HTMLElement} */ ($('tbody', wrap));
+    // The table repaints `hidden` on every refresh(), so a row that is gone for now is taken out of the DOM and put back on Undo.
+    const park = (/** @type {HTMLElement[]} */ rows) => {
+        for (const row of rows) {
+            parked.set(row, row.nextElementSibling);
+            row.remove();
+        }
+        handle()?.refresh();
+    };
+    const restore = (/** @type {HTMLElement[]} */ rows) => {
+        for (const row of rows) {
+            const before = parked.get(row) ?? null;
+            body.insertBefore(row, before && before.parentNode === body ? before : null);
+            parked.delete(row);
+        }
         handle()?.refresh();
     };
     /**
@@ -196,9 +213,8 @@ function initBacklog() {
                 box.checked = false;
                 box.dispatchEvent(new Event('change', { bubbles: true }));
             }
-            row.hidden = true;
         }
-        handle()?.refresh();
+        park(rows);
         const count = rows.length;
         undoToast(`${count} ${count === 1 ? 'message' : 'messages'} deleted from ${DATA.subscription}`, {
             ms,
@@ -212,21 +228,23 @@ function initBacklog() {
                 const refused = /** @type {{ id: string, reason: string }[]} */ (answer.refused ?? []);
                 const done = /** @type {string[]} */ (answer.done ?? []);
                 if (done.length === 0 && refused.length > 0) throw new Error(refused[0].reason);
-                show(rowsOf(refused.map((r) => r.id)));
-                for (const row of rowsOf(done)) row.remove();
-                for (const id of done) items.delete(id);
-                handle()?.refresh();
+                restore(refused.flatMap((r) => (byKey.get(r.id) ? [/** @type {HTMLElement} */ (byKey.get(r.id))] : [])));
+                for (const id of done) {
+                    const row = byKey.get(id);
+                    if (row) parked.delete(row);
+                    items.delete(id);
+                }
                 if (refused.length > 0) setSelectionResult(bar, { done: done.length, refused: refused.map((r) => ({ key: r.id, reason: r.reason })) });
                 drawCounts();
                 drawGauges();
             },
-            undo: () => show(rows),
+            undo: () => restore(rows),
         });
     };
     document.addEventListener('kp-selection-action', (event) => {
         const e = /** @type {CustomEvent<{ action: string, keys: string[], matching?: boolean, undoMs: number }>} */ (event);
         if (e.target !== bar || e.detail.action !== 'delete') return;
-        const keys = e.detail.matching ? $$('[data-kp-row-key]', wrap).filter((row) => !row.hidden).map((row) => row.dataset.kpRowKey ?? '') : e.detail.keys;
+        const keys = e.detail.matching ? $$('[data-kp-row-key]', wrap).map((row) => row.dataset.kpRowKey ?? '') : e.detail.keys;
         remove(keys, e.detail.undoMs);
     });
     // The form post is the no-script path; with a script the same button deletes with Undo.
