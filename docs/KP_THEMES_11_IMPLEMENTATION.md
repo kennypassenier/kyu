@@ -81,3 +81,9 @@ fallbacks with the components' own failed plates and Retry events:
 `setTrendData(figure, null | {points: []} | {error})` → `kp-chart-retry`,
 `setProgressFailed(bar, {title})` → `kp-progressbar-retry`. Heat, matrix and
 uptime need `attachFootprints()`, which auto.js already runs.
+
+Also with 11.1.0: a `data-kp-submit` form no longer wipes a flash button's
+stack (kp-themes c3c26699), so the Topic page's publish box gets its
+approved flash words back ("Published" / the refusal line under the
+button) next to the busy submit, instead of the toast and form summary
+kyu uses on 11.0.0.
