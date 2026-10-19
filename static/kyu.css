@@ -72,3 +72,39 @@ td.payload { max-width: 60rem; overflow-wrap: anywhere; }
    "Requeue" and "Delete" wrapped in the dead-letter table); the column
    takes the width the buttons need instead of the payload squeezing it. */
 .row-actions { white-space: nowrap; width: 1%; }
+
+/* ── Cross-page parts (command palette, keys, Help, who reads what) ──────────
+   Composed on grids: one column track that the content aligns to, the section
+   head and its view switch sharing a two-track row, never loose left/right
+   clutter. Every control itself is a kp-themes component. */
+
+/* The keys hint line sits in its own row under the page, aligned to the
+   content edge, wrapping on the package's own item gap. */
+.kyu-keys {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, max-content));
+    justify-content: start;
+    column-gap: var(--kp-space-lg, 1.5rem);
+    row-gap: var(--kp-space-xs, 0.25rem);
+    margin-block-start: var(--kp-space-xl, 2rem);
+}
+
+/* "Who reads what": a heading and explanation over a two-track bar (the view
+   switch in the second track), then the map across the full width. */
+.kyu-uses {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: var(--kp-space-lg, 1.5rem);
+    row-gap: var(--kp-space-sm, 0.5rem);
+    align-items: start;
+    margin-block-start: var(--kp-space-xl, 2rem);
+}
+.kyu-uses > h2 { grid-column: 1; grid-row: 1; margin: 0; }
+.kyu-uses > p { grid-column: 1; grid-row: 2; margin: 0; max-inline-size: 80ch; }
+.kyu-uses__bar { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.kyu-uses > .kp-matrix { grid-column: 1 / -1; grid-row: 3; }
+@media (max-width: 40rem) {
+    .kyu-uses { grid-template-columns: minmax(0, 1fr); }
+    .kyu-uses__bar { grid-column: 1; grid-row: 3; }
+    .kyu-uses > .kp-matrix { grid-row: 4; }
+}

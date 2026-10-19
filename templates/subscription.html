@@ -1,8 +1,8 @@
 {% extends "layout.html" %}
 {% block title %}{{ topic_name }} / {{ subscription.name }} · {{ app_name }}{% endblock %}
 {% block head %}
-{# The shared kp-themes boot for every page is the cross-page builder's: {% include "_kp.html" %} #}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+{% include "_kp.html" %}
 <link rel="stylesheet" href="/assets/subscription.css?v={{ kyu_assets }}">
 <script type="module" src="/static/kp/js/auto.js"></script>
 <script type="module" src="/assets/subscription.js?v={{ kyu_assets }}"></script>

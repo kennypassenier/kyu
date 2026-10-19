@@ -851,6 +851,11 @@ const DEAD_LETTERS_SHOWN: usize = 50;
 const TOPICS_HTML: &str = include_str!("../../templates/topics.html");
 const TOPIC_HTML: &str = include_str!("../../templates/topic.html");
 const SUBSCRIPTION_HTML: &str = include_str!("../../templates/subscription.html");
+/// The cross-page shell (command palette, keys, help, tour, anchors, uses-map).
+/// The kit renders a page from one source string, so an
+/// `{% include "_kp.html" %}` line is expanded here, before rendering.
+const KP_HTML: &str = include_str!("../../templates/_kp.html");
+const KP_INCLUDE: &str = "{% include \"_kp.html\" %}";
 
 fn page<C: serde::Serialize>(
     dash: &Dashboard,
@@ -858,7 +863,8 @@ fn page<C: serde::Serialize>(
     source: &str,
     ctx: C,
 ) -> Result<Html<String>, ApiError> {
-    dash.render_project(nav, source, ctx)
+    let expanded = source.replace(KP_INCLUDE, KP_HTML);
+    dash.render_project(nav, &expanded, ctx)
         .map_err(|error| internal(format!("cannot render the page: {error}")))
 }
 
@@ -901,6 +907,93 @@ fn topic_status(dead: i64, backlog: i64, last_published_ms: Option<i64>, now: i6
     } else {
         "Healthy"
     }
+}
+
+/// One topic as the shell lists it: a palette option and a node of the
+/// "who reads what" map.
+#[derive(serde::Serialize)]
+struct ShellTopic {
+    name: String,
+    messages: i64,
+    detail: String,
+}
+
+/// One subscription as the shell lists it: a palette option and a line of
+/// the map. `tone` is the map's word for its state.
+#[derive(serde::Serialize)]
+struct ShellSubscription {
+    topic: String,
+    name: String,
+    state: String,
+    tone: &'static str,
+    detail: String,
+}
+
+fn counted(n: i64, noun: &str) -> String {
+    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
+}
+
+/// What every page's command palette and the Topics page's uses-map are
+/// built from: every topic and every subscription, plus the hub's dead
+/// letter total (what "Prune dead letters" would delete).
+async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
+    let engine = state.engine.clone();
+    let built = tokio::task::spawn_blocking(move || {
+        engine.store().read(|conn| {
+            let now = engine.now_ms();
+            let mut topics = Vec::new();
+            let mut subscriptions = Vec::new();
+            let mut dead_total = 0;
+            for summary in queries::topic_summaries(conn)? {
+                dead_total += summary.dead;
+                let detail = if summary.dead > 0 {
+                    format!(
+                        "{}, {}",
+                        counted(summary.messages, "message"),
+                        counted(summary.dead, "dead letter")
+                    )
+                } else {
+                    counted(summary.messages, "message")
+                };
+                topics.push(ShellTopic {
+                    name: summary.name.clone(),
+                    messages: summary.messages,
+                    detail,
+                });
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &summary.name)? else {
+                    continue;
+                };
+                for sub in queries::subscription_summaries(conn, topic_id)? {
+                    let view = SubscriptionView::at(sub, now);
+                    let (tone, detail) = match view.state.as_str() {
+                        "active" => ("ok", "active".to_string()),
+                        "archived" => ("muted", "archived".to_string()),
+                        other if view.dead > 0 => (
+                            "bad",
+                            format!("{other}: {}", counted(view.dead, "dead letter")),
+                        ),
+                        other => ("warn", format!("{other}: lease expired")),
+                    };
+                    subscriptions.push(ShellSubscription {
+                        topic: summary.name.clone(),
+                        name: view.name,
+                        state: view.state,
+                        tone,
+                        detail,
+                    });
+                }
+            }
+            Ok(json!({
+                "topics": topics,
+                "subscriptions": subscriptions,
+                "dead_total": dead_total,
+            }))
+        })
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error: anyhow::Error| internal(format!("{error:#}")))?;
+    Ok(built)
 }
 
 /// K10 · `GET /topics` — every topic on this hub. Until step 2 this was `/`;
@@ -978,6 +1071,7 @@ pub async fn topics_page(
         json!({
             "topics": topics,
             "topics_json": topics_json,
+            "shell": shell_view(&state).await?,
             "kyu_assets": ASSET_VERSION.as_str(),
         }),
     )
@@ -1078,6 +1172,7 @@ pub async fn dashboard_topic(
                 "dead_letters": built.dead_letters,
                 "snippets": built.snippets,
                 "reveal_seconds": dash.reveal_seconds,
+                "shell": shell_view(&state).await?,
                 "kyu_assets": ASSET_VERSION.as_str(),
             }),
         ),
@@ -1212,6 +1307,7 @@ pub async fn dashboard_subscription(
                     "policy_rows": policy_rows,
                     "lease_words": lease_words,
                     "page_data": page_data,
+                    "shell": shell_view(&state).await?,
                     "kyu_assets": ASSET_VERSION.as_str(),
                 }),
             )

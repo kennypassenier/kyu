@@ -1,8 +1,8 @@
 {% extends "layout.html" %}
 {% block title %}Topics · {{ app_name }}{% endblock %}
 {% block head %}
-{# {% include "_kp.html" %} — the cross-page builder adds the real line here. #}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
+{% include "_kp.html" %}
 <link rel="stylesheet" href="/assets/topics.css?v={{ kyu_assets }}">
 <script type="module" src="/assets/topics.js?v={{ kyu_assets }}"></script>
 {% endblock %}
