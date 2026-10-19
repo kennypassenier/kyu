@@ -117,7 +117,7 @@
         <button type="button" class="kp-button kp-button--destructive" data-kp-selection-action="delete">Delete from {{ subscription.name }}</button>
       </div>
     </div>
-    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu id="ky-backlog-table" data-kp-key="kyu-backlog">
+    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu id="ky-backlog-table" data-kp-remember="kyu-backlog" data-kp-key="kyu-backlog">
       <div class="kp-datatable__bar">
         <input class="kp-datatable__search kp-field__input" data-kp-datatable-search type="search" aria-label="Search the backlog" placeholder="Search the backlog">
       </div>
@@ -192,8 +192,10 @@
   </div>
   <div id="ky-attempts" class="ky-comp">
     <p class="ky-label" id="ky-attempts-title" aria-live="polite"></p>
+    <div class="kp-card ky-statecard" data-kp-state="ready" data-ky-gantt-card data-kp-loading-words="Reading the attempts" aria-label="Delivery attempts on a timeline"><div class="kp-card__stage"><div class="kp-card__data">
     <section class="kp-gantt ky-gantt-host" data-kp-gantt data-kp-gantt-ranges="2m 5m 15m 1h 6h 1d" data-kp-gantt-range="5m"
              data-kp-gantt-ghosts="1 1 1 1 1" aria-label="Delivery attempts of one message" id="ky-gantt"></section>
+    </div></div></div>
     <div class="kp-card kp-inspector ky-inspector-host" data-kp-requests data-kp-requests-open="failed"
          data-kp-secrets-in-copy="masked" id="ky-requests" aria-label="Delivery attempts of one message, as requests"></div>
   </div>
@@ -205,7 +207,9 @@
     <p>One cell a day: how many messages were delivered and how many died. A day is judged by what was delivered.</p>
   </div>
   <div id="ky-uptime" class="ky-comp">
+    <div class="kp-card ky-statecard" data-kp-state="ready" data-ky-uptime-card data-kp-loading-words="Reading the daily counts" aria-label="Delivered and dead messages per day"><div class="kp-card__stage"><div class="kp-card__data">
     <div class="kp-uptime" data-kp-uptime data-kp-uptime-label="{{ subscription.name }}" data-kp-uptime-count="90" data-kp-uptime-open="info" id="ky-uptime-strip"></div>
+    </div></div></div>
   </div>
 </section>
 </div>
