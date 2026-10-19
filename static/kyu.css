@@ -82,13 +82,11 @@ td.payload { max-width: 60rem; overflow-wrap: anywhere; }
    content edge, wrapping on the package's own item gap. */
 .kyu-keys {
     display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
+    grid-template-columns: repeat(auto-fill, minmax(7.5rem, max-content));
     justify-content: start;
     column-gap: var(--kp-space-lg, 1.5rem);
     row-gap: var(--kp-space-xs, 0.25rem);
     margin-block-start: var(--kp-space-xl, 2rem);
-    overflow-x: auto;
 }
 
 /* "Who reads what": a heading and explanation over a two-track bar (the view

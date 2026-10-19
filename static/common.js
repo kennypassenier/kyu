@@ -85,12 +85,13 @@ if (dialog) {
 
     dialog.addEventListener('kp-palette-run', (event) => {
         const value = String(/** @type {CustomEvent} */ (event).detail?.value ?? '');
-        if (value === 'publish') {
-            // After the palette has closed and handed the focus back.
-            setTimeout(() => (publishField() ? goPublish() : location.assign('/topics')), 60);
-        } else if (value === 'prune') {
-            setTimeout(() => askPrune(dead), 60);
-        }
+        // After the palette has closed and handed the focus back to where it came from.
+        const after = (act) => {
+            if (!dialog.open) return act();
+            dialog.addEventListener('close', () => setTimeout(act, 0), { once: true });
+        };
+        if (value === 'publish') after(() => (publishField() ? goPublish() : location.assign('/topics')));
+        else if (value === 'prune') after(() => askPrune(dead));
     });
 }
 
