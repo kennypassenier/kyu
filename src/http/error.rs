@@ -78,7 +78,8 @@ impl From<EngineError> for ApiError {
             EngineError::ReservedTopic { .. } => StatusCode::FORBIDDEN,
             EngineError::UnknownTopic { .. }
             | EngineError::UnknownSubscription { .. }
-            | EngineError::NoSuchDelivery { .. } => StatusCode::NOT_FOUND,
+            | EngineError::NoSuchDelivery { .. }
+            | EngineError::NoSuchMessage { .. } => StatusCode::NOT_FOUND,
             EngineError::AlreadyAcked { .. }
             | EngineError::NotClaimed { .. }
             | EngineError::NotDead { .. } => StatusCode::CONFLICT,
