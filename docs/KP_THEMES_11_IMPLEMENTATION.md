@@ -19,7 +19,7 @@ look (formal). Every other option keeps the demo's default and stays a
 switchable option where the component offers one.
 
 kp-themes modules are served by the kit at `/static/kp/js/<name>.js`
-(chassis-rs 3.8.0, `dashboard` feature); a page loads
+(chassis-rs 3.8.0, `webapp` feature: `dashboard` alone serves only 7 modules); a page loads
 `/static/kp/js/auto.js` as a module and calls the module's own attach or
 set functions for data it fetches. kyu's own files are on
 `/assets/<file>?v={{ kyu_assets }}`.
