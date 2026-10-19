@@ -1095,6 +1095,37 @@ struct TopicPage {
     messages: Vec<MessageView>,
     dead_letters: Vec<DeadLetterView>,
     snippets: dashboard::Snippets,
+    /// Everything the page script draws from: the views above plus the raw
+    /// Unix-millisecond stamps the views turn into words, and the commands.
+    data: serde_json::Value,
+}
+
+/// The base URL the page's commands are built with; the page script swaps it
+/// for the address the browser used, which is the only one that is certainly
+/// reachable from where the command is pasted.
+const COMMAND_BASE: &str = "@@kyu-base@@";
+
+/// A view as JSON with extra fields added (the raw stamps the view hides).
+fn with_extra<T: serde::Serialize>(view: &T, extra: serde_json::Value) -> serde_json::Value {
+    let mut value = serde_json::to_value(view).unwrap_or(serde_json::Value::Null);
+    if let (Some(object), Some(more)) = (value.as_object_mut(), extra.as_object()) {
+        for (key, item) in more {
+            object.insert(key.clone(), item.clone());
+        }
+    }
+    value
+}
+
+/// The shown form of a command: the working one with the token swapped for
+/// `$KYU_TOKEN` (double-quoted, so a shell expands it).
+fn shown_command(working: &str, token: Option<&str>) -> String {
+    match token {
+        Some(token) if !token.is_empty() => working.replace(
+            &format!("-H 'authorization: Bearer {token}'"),
+            "-H \"authorization: Bearer $KYU_TOKEN\"",
+        ),
+        _ => working.to_string(),
+    }
 }
 
 /// K10 · `GET /t/{topic}/dashboard` — one topic in detail.
@@ -1121,43 +1152,86 @@ pub async fn dashboard_topic(
                 return Ok(None);
             };
             let now = engine.now_ms();
-            let subscriptions: Vec<SubscriptionView> =
-                queries::subscription_summaries(conn, topic_id)?
-                    .into_iter()
-                    .map(|summary| SubscriptionView::at(summary, now))
-                    .collect();
-            let messages: Vec<MessageView> =
-                queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?
-                    .into_iter()
-                    .map(|message| MessageView::at(message, now))
-                    .collect();
-            let dead_letters: Vec<DeadLetterView> =
-                queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?
-                    .into_iter()
-                    .map(|dead| DeadLetterView::at(dead, now))
-                    .collect();
+            let last_published_ms = summary.last_published_at;
+            let raw_subscriptions = queries::subscription_summaries(conn, topic_id)?;
+            let subscription_stamps: Vec<serde_json::Value> = raw_subscriptions
+                .iter()
+                .map(|s| json!({ "oldest_unacked_ms": s.oldest_unacked_at, "last_poll_ms": s.last_poll_at }))
+                .collect();
+            let subscriptions: Vec<SubscriptionView> = raw_subscriptions
+                .into_iter()
+                .map(|summary| SubscriptionView::at(summary, now))
+                .collect();
+            let raw_messages = queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?;
+            let message_stamps: Vec<serde_json::Value> = raw_messages
+                .iter()
+                .map(|m| json!({ "published_ms": m.published_at, "due_ms": m.due_at }))
+                .collect();
+            let messages: Vec<MessageView> = raw_messages
+                .into_iter()
+                .map(|message| MessageView::at(message, now))
+                .collect();
+            let raw_dead = queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?;
+            let dead_stamps: Vec<serde_json::Value> = raw_dead
+                .iter()
+                .map(|d| json!({ "published_ms": d.letter.published_at, "dead_ms": d.letter.dead_at }))
+                .collect();
+            let dead_letters: Vec<DeadLetterView> = raw_dead
+                .into_iter()
+                .map(|dead| DeadLetterView::at(dead, now))
+                .collect();
             // The snippets carry this topic's own most recent payload and a
             // subscription that genuinely exists, so what you copy is what
             // your hub actually answers to (S1).
             let example = messages.first();
+            let reader = subscriptions
+                .iter()
+                .find(|subscription| subscription.state != "archived")
+                .map(|subscription| subscription.name.as_str());
             let snippets = dashboard::Snippets::build(
-                "",
+                COMMAND_BASE,
                 &topic_name,
-                subscriptions
-                    .iter()
-                    .find(|subscription| subscription.state != "archived")
-                    .map(|subscription| subscription.name.as_str()),
+                reader,
                 example.map(|message| &message.payload),
                 example.and_then(|message| message.content_type.as_deref()),
                 token.as_deref(),
                 None,
             );
+            let topic_view = TopicView::at(summary, now);
+            let data = json!({
+                "now_ms": now,
+                "base": COMMAND_BASE,
+                "topic": with_extra(&topic_view, json!({ "last_published_ms": last_published_ms })),
+                "subscriptions": subscriptions.iter().zip(&subscription_stamps)
+                    .map(|(v, e)| with_extra(v, e.clone())).collect::<Vec<_>>(),
+                "messages": messages.iter().zip(&message_stamps)
+                    .map(|(v, e)| with_extra(v, e.clone())).collect::<Vec<_>>(),
+                "dead_letters": dead_letters.iter().zip(&dead_stamps)
+                    .map(|(v, e)| with_extra(v, e.clone())).collect::<Vec<_>>(),
+                "has_reader": reader.is_some(),
+                "commands": {
+                    "shown": {
+                        "publish": shown_command(&snippets.publish.full, token.as_deref()),
+                        "receive_raw": shown_command(&snippets.receive_raw.full, token.as_deref()),
+                        "receive_envelope": shown_command(&snippets.receive_envelope.full, token.as_deref()),
+                        "ack": shown_command(&snippets.ack.full, token.as_deref()),
+                    },
+                    "working": {
+                        "publish": snippets.publish.full,
+                        "receive_raw": snippets.receive_raw.full,
+                        "receive_envelope": snippets.receive_envelope.full,
+                        "ack": snippets.ack.full,
+                    },
+                    "has_token": token.as_deref().is_some_and(|t| !t.is_empty()),
+                },
+            });
             Ok(Some(TopicPage {
-                topic: TopicView::at(summary, now),
+                topic: topic_view,
                 subscriptions,
                 messages,
                 dead_letters,
                 snippets,
+                data,
             }))
         })
     })
@@ -1174,7 +1248,8 @@ pub async fn dashboard_topic(
                 "subscriptions": built.subscriptions,
                 "messages": built.messages,
                 "dead_letters": built.dead_letters,
-                "snippets": built.snippets,
+                "snippets": { "bootstrap_note": built.snippets.bootstrap_note },
+                "data": built.data,
                 "reveal_seconds": dash.reveal_seconds,
                 "shell": shell_view(&state).await?,
                 "kyu_assets": ASSET_VERSION.as_str(),
@@ -1387,14 +1462,39 @@ pub async fn dashboard_publish(
         .find_map(|pair| pair.strip_prefix("payload="))
         .map(urldecode)
         .unwrap_or_default();
+    // The optional "Deliver after (seconds)" field: the message is stored now
+    // and becomes deliverable that many seconds later (W4, at most a day).
+    let delay_seconds = form
+        .split('&')
+        .find_map(|pair| pair.strip_prefix("delay="))
+        .map(urldecode)
+        .map(|text| text.trim().to_string())
+        .filter(|text| !text.is_empty());
+    let due_at = match delay_seconds {
+        None => None,
+        Some(text) => match text.parse::<i64>() {
+            Ok(seconds) if (0..=86_400).contains(&seconds) => {
+                (seconds > 0).then(|| state.engine.now_ms().saturating_add(seconds * 1000))
+            }
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    format!("the delay {text:?} is not between 0 and 86400 seconds"),
+                    "type a whole number of seconds from 0 to 86400, or leave it empty to \
+                     deliver at once.",
+                ));
+            }
+        },
+    };
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
     let published = spawn_engine_write(move || {
-        engine.publish(
+        engine.publish_due(
             &topic_for_engine,
             payload.as_bytes(),
             Some("application/json"),
+            due_at,
         )
     })
     .await?;

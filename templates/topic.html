@@ -2,186 +2,304 @@
 {% block title %}{{ topic.name }} · {{ app_name }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
-<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+<link rel="stylesheet" href="/assets/topic.css?v={{ kyu_assets }}">
+{# The page script draws every region from the data block below and boots the
+   kp-themes modules itself, after its own markup exists. It stands BEFORE the
+   shared include so it runs first. #}
+<script type="module" src="/assets/topic.js?v={{ kyu_assets }}"></script>
 {% include "_kp.html" %}
 {% endblock %}
 
 {% block content %}
-{% macro snippet(id, caption, item) %}
-<p class="text-secondary" style="margin: 0.75rem 0 0.25rem">{{ caption }}</p>
-<div style="display: flex; align-items: flex-start; gap: 0.5rem">
-  <pre class="snippet" style="flex-grow: 1" id="{{ id }}" data-secret="{{ item.full }}"
-       data-masked="{{ item.shown }}" data-revealed="false">
-{{ item.shown }}</pre>
-  <div style="display: flex; flex-direction: column; gap: 0.25rem; flex-shrink: 0">
-    <button type="button" class="kp-button" data-reveal-target="{{ id }}" data-reveal-seconds="{{ reveal_seconds }}">Reveal</button>
-    <button type="button" class="kp-button" data-copy-target="{{ id }}">Copy</button>
-  </div>
-</div>
-{% endmacro %}
+<script type="application/json" id="kyu-topic-data">{{ data|tojson }}</script>
 
-<h1 style="margin-bottom: 0.25rem">{{ topic.name }}</h1>
-<p class="explain">
-  <a href="/topics">all topics</a> ·
-  {{ topic.messages }} message(s) retained ·
-  backlog {{ topic.backlog }}{% if topic.dead > 0 %} · <span class="kp-badge kp-badge--destructive">{{ topic.dead }} dead</span>{% endif %}
-</p>
+<div class="kt-page" data-kt-page data-kt-topic="{{ topic.name }}" data-kt-reveal-seconds="{{ reveal_seconds }}">
 
-<h2>Send and receive</h2>
-{% if snippets.bootstrap_note %}
-<div class="kp-alert kp-alert--warning" role="alert">{{ snippets.bootstrap_note }}</div>
-{% endif %}
-
-<p class="text-secondary" style="font-size: 0.875rem">
-  The commands carry this hub's login token, masked. <em>Copy</em> puts the whole
-  working command on your clipboard without showing it; <em>Reveal</em> shows it for
-  {{ reveal_seconds }} seconds. A command with an app's own token is on the
-  <a href="/clients">Apps</a> page (Copy command).
-</p>
-
-{{ snippet("snippet-publish", "Publish a message:", snippets.publish) }}
-{{ snippet("snippet-receive-raw", "Receive it — the payload is the body, the id comes back in a header:", snippets.receive_raw) }}
-{{ snippet("snippet-receive-envelope", "Or ask for one JSON document instead:", snippets.receive_envelope) }}
-{{ snippet("snippet-ack", "Then acknowledge it, so it is not delivered again:", snippets.ack) }}
-
-<h2>Subscriptions</h2>
-{% if subscriptions %}
-<div class="kp-table-wrap">
-<table class="kp-table">
-  <thead>
-    <tr>
-      <th>Name</th><th>State</th><th class="text-end">Backlog</th><th class="text-end">In flight</th>
-      <th class="text-end">Dead</th><th class="text-end">Lapsed</th><th>Oldest unacked</th><th>Policy</th><th></th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for subscription in subscriptions %}
-  <tr>
-    <td style="font-weight: 500"><a href="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}">{{ subscription.name }}</a></td>
-    <td>
-      {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
-      {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
-      {% else %}<span class="kp-badge">{{ subscription.state }}</span>{% endif %}
-    </td>
-    <td class="text-end">{{ subscription.backlog }}</td>
-    <td class="text-end">{{ subscription.claimed }}</td>
-    <td class="text-end">
-      {% if subscription.dead > 0 %}<span class="kp-badge kp-badge--destructive">{{ subscription.dead }}</span>{% else %}0{% endif %}
-    </td>
-    <td class="text-end">{{ subscription.lapsed }}</td>
-    <td>
-      {% if subscription.oldest_unacked_at %}{{ subscription.oldest_unacked_at }}{% else %}<span class="text-secondary italic">nothing waiting</span>{% endif %}
-    </td>
-    <td class="text-secondary" style="font-size: 0.875rem">
-      lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
-      {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
-      ttl {{ subscription.ttl_ms }}ms{% endif %}
-    </td>
-    <td class="text-end row-actions">
-      {% if subscription.state == "archived" %}
-      <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}/delete" style="margin: 0">
-        <button type="submit" class="kp-button kp-button--destructive"
-                data-kp-destructive data-kp-confirm="Delete subscription {{ subscription.name }} and its delivery history?">Delete</button>
-      </form>
-      {% else %}
-      <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ subscription.name }}/archive" style="margin: 0">
-        <button type="submit" class="kp-button">Archive</button>
-      </form>
-      {% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="text-secondary italic">Nothing has polled this topic yet.</p>
-{% endif %}
-
-<h2>Dead letters</h2>
-{% if dead_letters %}
-<p class="text-secondary">These gave up. Nothing is lost — each one waits here until you deal with it.</p>
-<div class="kp-table-wrap">
-<table class="kp-table">
-  <thead>
-    <tr><th>Subscription</th><th>Id</th><th>Died</th><th class="text-end">Attempts</th><th>Payload</th><th></th></tr>
-  </thead>
-  <tbody>
-  {% for dead in dead_letters %}
-  <tr>
-    <td>{{ dead.subscription }}</td>
-    <td><code>{{ dead.id }}</code></td>
-    <td style="font-size: 0.875rem">
-      {% if dead.dead_at %}{{ dead.dead_at }}{% else %}<span class="text-secondary italic">unknown</span>{% endif %}<br>
-      <span class="text-secondary">published {{ dead.published_at }}</span>
-    </td>
-    <td class="text-end">{{ dead.attempts }}</td>
-    <td class="payload">
-      {% if dead.payload.binary %}<span class="text-secondary italic">{{ dead.note }}</span>
-      {% else %}<code>{{ dead.payload.text }}</code>
-        {% if dead.note %}<br><span class="text-secondary italic">{{ dead.note }}</span>{% endif %}
-      {% endif %}
-    </td>
-    <td class="text-end row-actions">
-      <div style="display: flex; gap: 0.5rem; justify-content: flex-end">
-        <form method="post" action="/t/{{ topic.name }}/dashboard/requeue" style="margin: 0">
-          <input type="hidden" name="subscription" value="{{ dead.subscription }}">
-          <input type="hidden" name="id" value="{{ dead.id }}">
-          <button type="submit" class="kp-button kp-button--primary">Requeue</button>
-        </form>
-        <form method="post" action="/t/{{ topic.name }}/dashboard/delivery/delete" style="margin: 0">
-          <input type="hidden" name="subscription" value="{{ dead.subscription }}">
-          <input type="hidden" name="id" value="{{ dead.id }}">
-          <button type="submit" class="kp-button kp-button--destructive"
-                  data-kp-destructive data-kp-confirm="Really delete?">Delete</button>
-        </form>
+  <header class="kp-page-header" data-kp-idmark-set data-kt-header>
+    <div class="kp-page-header__inner">
+      <div class="kt-header__main">
+        <div class="kp-page-header__heading">
+          <span class="kp-page-header__lead"><span class="kp-idmark kp-idmark--lg" data-kp-idmark="{{ topic.name }}" aria-hidden="true"></span></span>
+          <div class="kp-page-header__line">
+            <h1 class="kp-page-header__title" data-kp-reveal="headline">{{ topic.name }}</h1>
+            <span class="kp-badge kp-badge--destructive" data-kt-dead-badge{% if topic.dead == 0 %} hidden{% endif %}>{{ topic.dead }} dead</span>
+            <time class="kp-ago kp-page-header__meta" data-kp-ago data-kp-ago-verb="last message" data-kp-stale-after="86400" data-kt-last hidden></time>
+          </div>
+        </div>
+        <p class="kp-lede">
+          Publishers send messages to this topic and every subscription reads its own copy. Here you copy the commands
+          that publish, receive and acknowledge, see who reads the topic and how far behind they are,
+          and archive or delete a subscription you no longer use.
+        </p>
+        <p class="kp-page-header__meta kt-facts" data-kt-facts>{{ topic.messages }} messages retained · backlog {{ topic.backlog }} · {{ topic.subscriptions }} subscriptions</p>
       </div>
-    </td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="text-secondary italic">Nothing has been dead-lettered on this topic.</p>
-{% endif %}
+      <div class="kp-page-header__actions kt-header__actions">
+        <code id="kt-topic-url" class="kp-sr-only" data-kt-topic-url></code>
+        <button type="button" class="kp-button kp-copyable__button kt-copy" data-kp-copy="kt-topic-url">Copy address</button>
+      </div>
+    </div>
+  </header>
 
-<h2>Recent messages</h2>
-{% if messages %}
-<div class="kp-table-wrap">
-<table class="kp-table">
-  <thead>
-    <tr><th>Id</th><th>Published</th><th>Type</th><th>Payload</th></tr>
-  </thead>
-  <tbody>
-  {% for message in messages %}
-  <tr>
-    <td><code>{{ message.id }}</code></td>
-    <td style="font-size: 0.875rem">
-      {{ message.published_at }}{% if message.due_at %}<br><span class="text-secondary">due {{ message.due_at }}</span>{% endif %}
-    </td>
-    <td style="font-size: 0.875rem">{{ message.content_type }}</td>
-    <td class="payload">
-      {% if message.payload.binary %}<span class="text-secondary italic">{{ message.note }}</span>
-      {% else %}<code>{{ message.payload.text }}</code>
-        {% if message.note %}<br><span class="text-secondary italic">{{ message.note }}</span>{% endif %}
-      {% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% else %}
-<p class="text-secondary italic">No messages retained on this topic.</p>
-{% endif %}
+  <section class="kp-card kt-send" data-kp-state="ready" aria-labelledby="kt-send-title" data-kp-loading-words="Building the commands" data-kt-send data-kyu-tour="snippets">
+    <div class="kp-card__header">
+      <h2 class="kp-card__title" id="kt-send-title">Commands for {{ topic.name }}</h2>
+      <div class="kp-card__actions"><button type="button" class="kp-button kp-button--sm" data-kt-start-over>Start over</button></div>
+    </div>
+    <p class="kp-card__body">
+      The commands carry this hub's login token, hidden. Reveal shows it <b data-kt-ttl-words>for {{ reveal_seconds }} seconds</b>.
+      A command with an app's own token is on the <a href="/clients">Apps</a> page (Copy command).
+    </p>
+    <div class="kp-card__stage">
+      <div class="kp-card__data">
+        <ol class="kp-steplist kp-steplist--journey" aria-label="From publishing to acknowledging" data-kt-journey>
+          <li class="kp-steplist__item" data-state="current" data-kp-step-id="publish" data-kp-tone="1">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">1. Publish</span><span class="kp-steplist__note">Send a message to the topic</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+          <li class="kp-steplist__item" data-state="pending" data-kp-step-id="receive" data-kp-tone="2">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">2. Receive</span><span class="kp-steplist__note">Ask for the next message</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+          <li class="kp-steplist__item" data-state="pending" data-kp-step-id="ack" data-kp-tone="3">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">3. Acknowledge</span><span class="kp-steplist__note">Say it arrived, so it is not sent again</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+        </ol>
+        <div class="kt-steps">
+          <div class="kt-step" data-kt-step="publish">
+            <p class="kt-caption">Publish a message:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that publishes" data-kt-command="publish"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: publish" data-kt-secret="publish"></div>
+          </div>
+          <div class="kt-step" data-kt-step="receive">
+            <p class="kt-caption">Receive it: the payload is the body, the id comes back in a header:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_raw"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the raw payload" data-kt-secret="receive_raw"></div>
+            <p class="kt-caption kt-caption--next">Or ask for one JSON document instead:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_envelope"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: receive the envelope" data-kt-secret="receive_envelope"></div>
+          </div>
+          <div class="kt-step" data-kt-step="ack">
+            <p class="kt-caption">Then acknowledge it, so it is not delivered again:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="ack"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-label="Working command with the token: acknowledge" data-kt-secret="ack"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-<h2>Publish a test message</h2>
-<form method="post" action="/t/{{ topic.name }}/dashboard/publish">
-  <div class="kp-field" style="max-width: none; margin-bottom: 0.5rem">
-    <textarea class="kp-field__input kp-field__input--multiline" name="payload" rows="3"
-              aria-label="payload">{% if messages %}{{ messages[0].payload.text }}{% else %}{"hello":"world"}{% endif %}</textarea>
-  </div>
-  <button type="submit" class="kp-button kp-button--primary">Publish to {{ topic.name }}</button>
-</form>
+  {% if not data.has_reader %}
+  <section class="kp-card kt-readers" data-kp-state="ready" aria-labelledby="kt-readers-title" data-kp-loading-words="Checking who reads the topic" data-kt-readers>
+    <div class="kp-card__header"><h2 class="kp-card__title" id="kt-readers-title">Readers of {{ topic.name }}</h2></div>
+    <p class="kp-card__body">Nothing is delivered to a reader that does not exist yet.</p>
+    <div class="kp-card__stage"><div class="kp-card__data"><div class="kp-problems" data-kp-problems data-kt-bootstrap></div></div></div>
+  </section>
+  {% endif %}
+
+  <section class="kp-card kt-subs" data-kp-state="ready" aria-labelledby="kt-subs-title" data-kp-loading-words="Reading the subscriptions" data-kt-subs data-kyu-tour="subs">
+    <div class="kp-card__header">
+      <h2 class="kp-card__title" id="kt-subs-title">Subscriptions of {{ topic.name }}</h2>
+      <div class="kp-card__actions"><span class="kp-timestamp" data-kt-sub-total></span></div>
+    </div>
+    <p class="kp-card__body">One row per reader. A subscription starts existing when it first polls.</p>
+    <div class="kp-card__stage">
+      <div class="kp-card__data">
+        <div class="kt-filterbar">
+          <div class="kp-segmented kp-segmented--chips" data-kp-segmented="multi" role="group" aria-label="Show subscriptions in state" data-kt-filter>
+            <button type="button" class="kp-segmented__item" data-value="all" data-kp-segmented-all aria-pressed="true"><span class="kp-segmented__label">All</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="active" aria-pressed="false"><span class="kp-segmented__label">Active</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="flagged" aria-pressed="false"><span class="kp-segmented__label">Flagged</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="archived" aria-pressed="false"><span class="kp-segmented__label">Archived</span><span class="kp-segmented__count">0</span></button>
+          </div>
+        </div>
+        <div class="kp-datatable kt-table-sticky" data-kp-datatable data-kp-cards data-kp-remember="kyu-topic-subs" data-kp-page-sizes="none" data-kp-sort-multi data-kp-fixed-columns="1" data-kt-subs-table>
+          <div class="kp-table-wrap">
+            <table class="kp-table">
+              <caption class="kp-sr-only">Subscriptions of {{ topic.name }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" data-kp-sort="text">Name</th>
+                  <th scope="col" data-kp-sort="text" data-kp-filter="choice">State</th>
+                  <th scope="col" data-kp-sort="number" data-kp-filter="range" class="kp-text-end">Backlog</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">In flight</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">Dead</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">Lapsed</th>
+                  <th scope="col" data-kp-sort="date">Oldest unacked</th>
+                  <th scope="col">Policy</th>
+                  <th scope="col" class="kt-col-actions"><span class="kp-sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody data-kt-subs-rows></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="kt-dead" aria-labelledby="kt-dead-title" data-kt-dead data-kyu-tour="dead">
+    <div class="kt-head">
+      <h2 class="kp-card__title" id="kt-dead-title">Dead letters</h2>
+      <p class="kt-lead">These gave up. Nothing is lost: each one waits here until you requeue or delete it.</p>
+    </div>
+    <div class="kt-stage" data-kt-stage="problems" hidden>
+      <div data-kt-filled><div class="kp-problems" data-kp-problems data-kp-problems-mode="each" data-kt-problems></div></div>
+      <div data-kt-plate hidden></div>
+    </div>
+    <div data-kp-anchors="rows" data-kp-anchor-show="hover" data-kp-anchor-copy="url" data-kp-anchor-target="highlight">
+      <div class="kp-selection" data-kp-selection data-kp-selection-for="kt-dead-table" data-kp-placement="sticky-top" data-kp-selection-names="names" data-kp-selection-max="6" data-kp-undo-ms="6000" aria-label="Selected dead letters" data-kt-selection>
+        <div class="kp-selection__actions">
+          <button type="button" class="kp-button" data-kp-selection-action="requeue">Requeue</button>
+          <button type="button" class="kp-button kp-button--destructive" data-kp-selection-action="delete">Delete</button>
+        </div>
+      </div>
+      <div class="kp-datatable" id="kt-dead-table" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu data-kp-remember="kyu-topic-dead" data-kp-page-size="25" data-kp-select-range="shift" data-kt-dead-table>
+        <div class="kp-datatable__bar">
+          <input class="kp-datatable__search" type="search" data-kp-datatable-search aria-label="Search dead letters" placeholder="Search dead letters" />
+        </div>
+        <div class="kp-table-wrap">
+          <table class="kp-table">
+            <caption class="kp-sr-only">Dead letters of {{ topic.name }}</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="kt-col-select"><input class="kp-field__check" type="checkbox" data-kp-select-all aria-label="Select all shown dead letters" /></th>
+                <th scope="col" data-kp-sort="date">Died</th>
+                <th scope="col" data-kp-sort="text" data-kp-filter="choice">Subscription</th>
+                <th scope="col" data-kp-sort="number" class="kp-text-end">Tries</th>
+                <th scope="col" data-kp-sort="text">Why it died</th>
+                <th scope="col" class="kt-col-payload">Payload</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody data-kt-dead-rows></tbody>
+          </table>
+        </div>
+        <div class="kp-empty" data-kp-datatable-empty hidden>
+          <div class="kp-empty" data-kp-art="done" data-kp-datatable-empty-none>
+            <p class="kp-empty__title">Nothing is dead</p>
+            <p class="kp-empty__body">Every message on {{ topic.name }} was delivered or is still waiting.</p>
+          </div>
+          <div class="kp-empty" data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden>
+            <p class="kp-empty__title">No dead letter matches</p>
+            <p class="kp-empty__body">Loosen the search or the filter.</p>
+            <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filter</button>
+          </div>
+        </div>
+        <div class="kp-datatable__bar">
+          <p class="kp-datatable__status" data-kp-datatable-status role="status" aria-live="polite"></p>
+          <div class="kp-datatable__pager" data-kp-datatable-pager></div>
+        </div>
+      </div>
+    </div>
+    <div data-kp-select-hint="kt-dead-table"></div>
+    <p class="kt-note" data-kt-dead-note></p>
+  </section>
+
+  <section class="kt-recent" aria-labelledby="kt-recent-title" data-kt-recent>
+    <div class="kt-head kt-head--live">
+      <h2 class="kp-card__title" id="kt-recent-title">Recent messages</h2>
+      <p class="kt-lead" data-kt-recent-count></p>
+      <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
+    </div>
+    <div class="kt-stage" data-kt-stage="recent" style="--kt-stage-min: 26rem">
+      <div data-kt-filled>
+        <div class="kp-split kp-split--panes kt-md" data-kp-master-detail data-kp-resizable data-kp-remember="kyu-topic-recent" data-kp-narrow="sheet" data-kp-pane-widths="20rem 1fr" data-kt-md>
+          <section data-kp-pane="list" aria-label="Recent messages" data-kp-newpill-host>
+            <ul class="kp-pane__list kt-live" role="listbox" aria-label="Recent messages" tabindex="0" data-kp-follow="head" data-kp-pill-unit="message,messages" data-kp-since-left="on" data-kt-items></ul>
+          </section>
+          <section data-kp-pane="detail" aria-label="Message">
+            <h3 data-kp-pane-heading tabindex="-1"></h3>
+            <div class="kp-pane__body" data-kt-md-body></div>
+          </section>
+        </div>
+      </div>
+      <div data-kt-plate hidden></div>
+    </div>
+  </section>
+
+  <section class="kt-publish" aria-labelledby="kt-publish-title">
+    <div class="kt-head">
+      <h2 class="kp-card__title" id="kt-publish-title">Publish a test message</h2>
+      <p class="kt-lead">One click puts a known message on {{ topic.name }}: it answers whether the producer or the consumer is broken.</p>
+    </div>
+    <form class="kt-form kp-form" id="kt-publish-form" data-kp-form novalidate method="post" action="/t/{{ topic.name }}/dashboard/publish">
+      <div class="kp-form__summary" data-kp-form-summary tabindex="-1" hidden></div>
+      <div class="kp-field">
+        <label class="kp-field__label" for="kt-publish-body">Message to {{ topic.name }} <span class="kp-field__required">required</span></label>
+        <textarea class="kp-field__input kp-field__input--multiline" id="kt-publish-body" name="payload" required rows="6" maxlength="4000"
+          placeholder='{"title":"hello","body":"world"}' data-kyu-publish
+          data-kp-json="strict" data-kp-json-check="input" data-kp-json-format="button" data-kp-json-indent="2"
+          data-kp-autosize data-kp-autosize-engine="js" data-kp-autosize-max="20" data-kp-counter="chars"
+          data-kp-submit-key="mod-enter" data-kp-remember="kyu-topic-publish-draft"></textarea>
+        <span class="kp-field__error" data-kp-field-error hidden></span>
+      </div>
+      <div class="kt-form__foot">
+        <div class="kp-field">
+          <label class="kp-field__label" for="kt-publish-delay">Deliver after (seconds)</label>
+          <input class="kp-field__input" id="kt-publish-delay" name="delay" type="number" inputmode="numeric" min="0" max="86400" step="1" placeholder="0" />
+          <span class="kp-field__error" data-kp-field-error hidden></span>
+        </div>
+        <div class="kt-submit">
+          <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-flash-button
+            data-kp-flash-words="Published,Refused,Failed" data-kp-flash-word="Published" data-kp-refusal="line">Publish test message</button>
+        </div>
+      </div>
+    </form>
+  </section>
+
+  <noscript>
+    <section class="kt-noscript">
+      <h2>Subscriptions</h2>
+      {% if subscriptions %}
+      <table class="kp-table">
+        <thead><tr><th>Name</th><th>State</th><th>Backlog</th><th>In flight</th><th>Dead</th><th>Lapsed</th><th>Oldest unacked</th><th></th></tr></thead>
+        <tbody>
+        {% for s in subscriptions %}
+        <tr>
+          <td><a href="/t/{{ topic.name }}/dashboard/subs/{{ s.name }}">{{ s.name }}</a></td><td>{{ s.state }}</td><td>{{ s.backlog }}</td><td>{{ s.claimed }}</td><td>{{ s.dead }}</td><td>{{ s.lapsed }}</td>
+          <td>{{ s.oldest_unacked_at or "nothing waiting" }}</td>
+          <td>
+            {% if s.state == "archived" %}
+            <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ s.name }}/delete"><button type="submit" class="kp-button kp-button--destructive">Delete</button></form>
+            {% else %}
+            <form method="post" action="/t/{{ topic.name }}/dashboard/subs/{{ s.name }}/archive"><button type="submit" class="kp-button">Archive</button></form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p>Nothing has polled this topic yet.</p>{% endif %}
+      <h2>Dead letters</h2>
+      {% if dead_letters %}
+      <table class="kp-table">
+        <thead><tr><th>Subscription</th><th>Id</th><th>Died</th><th>Attempts</th><th>Payload</th><th></th></tr></thead>
+        <tbody>
+        {% for d in dead_letters %}
+        <tr>
+          <td>{{ d.subscription }}</td><td><code>{{ d.id }}</code></td><td>{{ d.dead_at or "unknown" }}</td><td>{{ d.attempts }}</td>
+          <td>{% if d.payload.binary %}{{ d.note }}{% else %}<code>{{ d.payload.text }}</code>{% endif %}</td>
+          <td>
+            <form method="post" action="/t/{{ topic.name }}/dashboard/requeue"><input type="hidden" name="subscription" value="{{ d.subscription }}"><input type="hidden" name="id" value="{{ d.id }}"><button type="submit" class="kp-button kp-button--primary">Requeue</button></form>
+            <form method="post" action="/t/{{ topic.name }}/dashboard/delivery/delete"><input type="hidden" name="subscription" value="{{ d.subscription }}"><input type="hidden" name="id" value="{{ d.id }}"><button type="submit" class="kp-button kp-button--destructive">Delete</button></form>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p>Nothing has been dead-lettered on this topic.</p>{% endif %}
+      <h2>Recent messages</h2>
+      {% for m in messages %}<p><code>{{ m.id }}</code> {{ m.published_at }}: {% if m.payload.binary %}{{ m.note }}{% else %}<code>{{ m.payload.text }}</code>{% endif %}</p>{% else %}<p>No messages retained on this topic.</p>{% endfor %}
+      <h2>Publish a test message</h2>
+      <form method="post" action="/t/{{ topic.name }}/dashboard/publish">
+        <textarea class="kp-field__input kp-field__input--multiline" name="payload" rows="3" aria-label="payload">{"hello":"world"}</textarea>
+        <button type="submit" class="kp-button kp-button--primary">Publish to {{ topic.name }}</button>
+      </form>
+    </section>
+  </noscript>
+</div>
 {% endblock %}
