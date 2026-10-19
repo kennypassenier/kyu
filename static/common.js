@@ -15,7 +15,7 @@
 
 const KP = '/static/kp/js/';
 
-const [palette, shortcuts, anchors, keys, tour, overlays, components, heat, graph, segmented] = await Promise.all([
+const [palette, shortcuts, anchors, keys, tour, overlays, components, heat, graph, segmented, footprint] = await Promise.all([
     import(`${KP}palette.js`),
     import(`${KP}shortcuts.js`),
     import(`${KP}anchors.js`),
@@ -26,6 +26,7 @@ const [palette, shortcuts, anchors, keys, tour, overlays, components, heat, grap
     import(`${KP}heat.js`),
     import(`${KP}graph.js`),
     import(`${KP}segmented.js`),
+    import(`${KP}footprint.js`),
 ]);
 
 const TOUR_NAME = 'kyu-topic-page';
@@ -383,6 +384,8 @@ function mountUses(section) {
         for (const item of all('[data-kyu-switch="view"] [data-value]', section)) item.setAttribute('aria-checked', String(item.dataset.value === 'grid'));
     }
     const drawGraph = mountGraph(section, () => model);
+    // The section arrives after auto.js attached the page, so its own matrix is held by hand (js/footprint.js).
+    footprint.attachFootprints(section);
 
     /** Read the hub again: loading, then the matrix and the graph, or the failed plate of each. */
     const read = async () => {
