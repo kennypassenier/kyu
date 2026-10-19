@@ -2,67 +2,211 @@
 {% block title %}{{ topic_name }} / {{ subscription.name }} · {{ app_name }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
-<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+{% include "_kp.html" %}
+<link rel="stylesheet" href="/assets/subscription.css?v={{ kyu_assets }}">
+<script type="module" src="/static/kp/js/auto.js"></script>
+<script type="module" src="/assets/subscription.js?v={{ kyu_assets }}"></script>
 {% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom: 0.25rem">{{ subscription.name }}</h1>
-<p class="explain">
-  <a href="/t/{{ topic_name }}/dashboard">{{ topic_name }}</a> ·
-  {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
-  {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
-  {% else %}<span class="kp-badge">{{ subscription.state }}</span>{% endif %} ·
-  backlog {{ subscription.backlog }} · in flight {{ subscription.claimed }}
-  {% if subscription.dead > 0 %} · <span class="kp-badge kp-badge--destructive">{{ subscription.dead }} dead</span>{% endif %}
-</p>
-<p class="text-secondary" style="font-size: 0.875rem">
-  lease {{ subscription.lease_ms }}ms{% if not subscription.explicit.lease_ms %} (default){% endif %},
-  {{ subscription.max_attempts }} attempts{% if not subscription.explicit.max_attempts %} (default){% endif %}{% if subscription.ttl_ms %},
-  ttl {{ subscription.ttl_ms }}ms{% endif %}
-</p>
+<script type="application/json" id="ky-page-data">{{ page_data|safe }}</script>
 
-<h2>Backlog</h2>
-{% if backlog %}
-<p class="text-secondary">
-  What this subscription is still holding — pending or claimed, oldest first.
-  Deleting one here removes it from this subscription only; every other
-  subscription's copy of the same message is untouched.
-</p>
-<div class="kp-table-wrap">
-<table class="kp-table">
-  <thead>
-    <tr><th>Id</th><th>State</th><th>Published</th><th class="text-end">Attempts</th><th>Payload</th><th></th></tr>
-  </thead>
-  <tbody>
-  {% for item in backlog %}
-  <tr>
-    <td><code>{{ item.id }}</code></td>
-    <td>
-      {% if item.state == "claimed" %}<span class="kp-badge kp-badge--warning">claimed</span>
-      {% else %}<span class="kp-badge">{{ item.state }}</span>{% endif %}
-    </td>
-    <td style="font-size: 0.875rem">{{ item.published_at }}</td>
-    <td class="text-end">{{ item.attempts }}</td>
-    <td class="payload">
-      {% if item.payload.binary %}<span class="text-secondary italic">{{ item.note }}</span>
-      {% else %}<code>{{ item.payload.text }}</code>
-        {% if item.note %}<br><span class="text-secondary italic">{{ item.note }}</span>{% endif %}
-      {% endif %}
-    </td>
-    <td class="text-end row-actions">
-      <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" style="margin: 0">
-        <input type="hidden" name="subscription" value="{{ subscription.name }}">
-        <input type="hidden" name="id" value="{{ item.id }}">
-        <button type="submit" class="kp-button kp-button--destructive"
-                data-kp-destructive data-kp-confirm="Really delete?">Delete</button>
-      </form>
-    </td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<header class="kp-page-header ky-sub">
+  <nav class="ky-crumbs" aria-label="Breadcrumb">
+    <a href="/t/{{ topic_name }}/dashboard" class="kp-link"><span class="kp-idmark kp-idmark--xs" data-kp-idmark="{{ topic_name }}" data-ky-mark-topic aria-hidden="true"></span> {{ topic_name }}</a>
+    <span aria-hidden="true">/</span>
+    <span>Subscriptions</span>
+  </nav>
+  <div class="kp-page-header__inner">
+    <div>
+      <div class="kp-page-header__heading">
+        <span class="kp-page-header__lead"><span class="kp-idmark kp-idmark--lg" data-kp-idmark="{{ subscription.name }}" data-ky-mark aria-hidden="true"></span></span>
+        <div class="kp-page-header__line">
+          <h1 class="kp-page-header__title">{{ subscription.name }}</h1>
+          {% if subscription.state == "active" %}<span class="kp-badge kp-badge--success">active</span>
+          {% elif subscription.state == "flagged" %}<span class="kp-badge kp-badge--warning">flagged</span>
+          {% else %}<span class="kp-badge">{{ subscription.state }}</span>{% endif %}
+          <time class="kp-ago kp-page-header__meta" data-kp-ago data-kp-ago-verb="last read" data-kp-stale-after="86400" data-ky-ago>{% if subscription.last_poll_at %}last read {{ subscription.last_poll_at }}{% else %}never read{% endif %}</time>
+        </div>
+      </div>
+      <p class="kp-lede kp-page-header__description">
+        What <b>{{ subscription.name }}</b> reads from <b>{{ topic_name }}</b>. It holds a message for
+        {{ lease_words }} while it works on it, and gives up on a message after
+        {{ subscription.max_attempts }} attempts.
+      </p>
+      <p class="ky-counts">
+        <span class="kp-text-muted">backlog <b class="kp-numeric" data-ky-count="pending">{{ subscription.backlog }}</b></span>
+        <span class="kp-text-muted">in flight <b class="kp-numeric" data-ky-count="claimed">{{ subscription.claimed }}</b></span>
+        {% if subscription.dead > 0 %}<a class="kp-badge kp-badge--destructive" href="/t/{{ topic_name }}/dashboard">{{ subscription.dead }} dead</a>{% endif %}
+      </p>
+    </div>
+  </div>
+</header>
+
+<div class="ky-sections">
+<div class="ky-top">
+<section class="ky-sec" aria-labelledby="h-ky-section-policy">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-policy">Policy</h2>
+    <p>How this subscription treats a message. A quiet "(default)" marks every value kyu chose itself.</p>
+  </div>
+  <div id="ky-policy" class="kp-card" data-kp-state="ready" aria-labelledby="h-ky-policy">
+    <div class="kp-card__header">
+      <h3 class="kp-card__title" id="h-ky-policy">Policy of {{ subscription.name }}</h3>
+    </div>
+    <div class="kp-card__stage">
+      <div class="kp-card__data">
+        <dl class="kp-kv kp-kv--lines">
+          {% for row in policy_rows %}
+          <div class="kp-kv__row">
+            <dt>{{ row.label }}</dt>
+            <dd>
+              {% if row.created_ms %}<span class="kp-numeric" data-ky-moment="{{ row.created_ms }}"></span>
+              {% else %}<span class="kp-numeric">{{ row.value }}</span>{% if row.is_default %} <span class="kp-text-muted">(default)</span>{% endif %}{% endif %}
+            </dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="ky-sec" aria-labelledby="h-ky-section-gauges">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-gauges">Is it keeping up?</h2>
+    <p>The age of the oldest message against the lease, the attempts against the limit, and how much of today's work is delivered.</p>
+  </div>
+  <div id="ky-gauges" class="ky-gauges">
+    <div class="ky-gauge">
+      <h3 class="ky-gauge__title" id="h-ky-age">Oldest unacked message, against the {{ lease_words }} lease</h3>
+      <div class="kp-bullets" data-kp-bullets id="ky-bullets-age" aria-labelledby="h-ky-age"></div>
+    </div>
+    <div class="ky-gauge">
+      <h3 class="ky-gauge__title" id="h-ky-attempts">Attempts, against the {{ subscription.max_attempts }} a message gets</h3>
+      <div class="kp-bullets" data-kp-bullets id="ky-bullets-attempts" aria-labelledby="h-ky-attempts"></div>
+    </div>
+    <div class="ky-gauge">
+      <h3 class="ky-gauge__title" id="h-ky-drain">The backlog draining</h3>
+      <div class="kp-progress__wrap">
+        <div id="ky-drain" class="kp-progressbar kp-progressbar--md" role="progressbar" aria-label="Backlog delivered today"
+             aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="--kp-value: 0">
+          <span class="kp-progressbar__track" aria-hidden="true"><span class="kp-progressbar__fill"></span><span class="kp-progressbar__head"></span></span>
+        </div>
+      </div>
+      <p class="ky-readout" id="ky-drain-readout" aria-live="polite"></p>
+    </div>
+  </div>
+</section>
+
 </div>
-{% else %}
-<p class="text-secondary italic">Nothing pending or claimed for this subscription right now.</p>
-{% endif %}
+
+<section class="ky-sec" aria-labelledby="h-ky-section-backlog">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-backlog">Backlog</h2>
+    <p>
+      What this subscription still holds, pending or claimed, oldest first. Deleting a message here removes it from
+      this subscription only; every other subscription's copy is untouched.
+    </p>
+  </div>
+  <div id="ky-backlog" class="ky-comp">
+    <div class="kp-selection" data-kp-selection data-kp-selection-for="ky-backlog-table" data-kp-placement="sticky-top"
+         data-kp-selection-names="names"{% if backlog_total > 0 %} data-kp-select-matching="{{ backlog_total }}"{% endif %}
+         data-kp-undo-ms="6000" id="ky-bar" aria-label="Selected messages">
+      <div class="kp-selection__actions">
+        <button type="button" class="kp-button kp-button--destructive" data-kp-selection-action="delete">Delete from {{ subscription.name }}</button>
+      </div>
+    </div>
+    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu id="ky-backlog-table" data-kp-key="kyu-backlog">
+      <div class="kp-datatable__bar">
+        <input class="kp-datatable__search kp-field__input" data-kp-datatable-search type="search" aria-label="Search the backlog" placeholder="Search the backlog">
+      </div>
+      <div class="kp-table-wrap">
+        <table class="kp-table">
+          <caption class="kp-sr-only">Backlog of {{ subscription.name }}</caption>
+          <thead>
+            <tr>
+              <th scope="col" class="ky-col-select"><input class="kp-field__check" type="checkbox" data-kp-select-all aria-label="Select all messages shown"></th>
+              <th scope="col" data-kp-sort="text">Id</th>
+              <th scope="col" data-kp-sort="text" data-kp-filter="choice">State</th>
+              <th scope="col" data-kp-sort="date">Published</th>
+              <th scope="col" data-kp-sort="number" class="kp-text-end">Attempts</th>
+              <th scope="col" class="ky-col-payload">Payload</th>
+              <th scope="col" class="ky-col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for item in backlog %}
+            <tr data-kp-row-key="{{ item.id }}">
+              <td data-label=""><input class="kp-field__check" type="checkbox" data-kp-select-row aria-label="Select {{ item.id }}"></td>
+              <td data-label="Id"><code class="kp-id">{{ item.id }}</code></td>
+              <td data-label="State">{% if item.state == "claimed" %}<span class="kp-badge kp-badge--warning">claimed</span>{% else %}<span class="kp-badge">{{ item.state }}</span>{% endif %}</td>
+              <td data-label="Published" data-kp-sort-value="{{ item.published_ms }}">
+                <div class="ky-cell-when"><time class="kp-ago" data-kp-ago="{{ item.published_ms }}" data-kp-ago-verb="published">{{ item.published_at }}</time><span class="kp-numeric" data-ky-moment="{{ item.published_ms }}"></span></div>
+              </td>
+              <td data-label="Attempts" class="kp-text-end kp-numeric" data-kp-sort-value="{{ item.attempts }}">{{ item.attempts }} of {{ subscription.max_attempts }}</td>
+              <td data-label="Payload" class="ky-col-payload">
+                <figure class="kp-code kp-code--cell" data-kp-code data-kp-code-language="auto"
+                  {% if item.payload.binary %}data-kp-binary-size="{{ item.payload.bytes }}"{% elif item.payload.truncated %}data-kp-truncated="{{ item.payload.text|length }}/{{ item.payload.bytes }}"{% endif %}><pre><code>{% if not item.payload.binary %}{{ item.payload.text }}{% endif %}</code></pre></figure>
+              </td>
+              <td data-label="Actions" class="ky-col-actions">
+                <div class="ky-row-actions">
+                  <button type="button" class="kp-button kp-button--sm" data-ky-attempts="{{ item.id }}" aria-label="Show the attempts of {{ item.id }}">Attempts</button>
+                  <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" class="ky-row-form">
+                    <input type="hidden" name="subscription" value="{{ subscription.name }}">
+                    <input type="hidden" name="id" value="{{ item.id }}">
+                    <button type="submit" class="kp-button kp-button--sm kp-button--destructive" data-ky-delete-one aria-label="Delete {{ item.id }}">Delete</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="kp-empty" data-kp-datatable-empty data-kp-art="done" hidden>
+        <div data-kp-datatable-empty-none>
+          <p class="kp-empty__title">Nothing pending or claimed</p>
+          <p>{{ subscription.name }} has read and acknowledged everything. A new message appears here the moment it is published.</p>
+        </div>
+        <div data-kp-datatable-empty-nomatch hidden>
+          <p class="kp-empty__title">No message matches</p>
+          <button type="button" class="kp-button kp-button--secondary" data-kp-datatable-clear>Clear the search and filters</button>
+        </div>
+      </div>
+      <div class="kp-datatable__bar">
+        <p class="kp-datatable__status" data-kp-datatable-status role="status" aria-live="polite"></p>
+        <div class="kp-datatable__pager" data-kp-datatable-pager></div>
+      </div>
+    </div>
+    {% if subscription.backlog + subscription.claimed > backlog_total %}
+    <p class="ky-label">Showing the oldest {{ backlog_total }} of {{ subscription.backlog + subscription.claimed }} messages.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="ky-sec" aria-labelledby="h-ky-section-attempts">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-attempts">Why did a message take this long? Its delivery attempts</h2>
+    <p>Every try on one message, on a timeline and as a list of what the app said. Press Attempts on a row of the backlog to look at another message.</p>
+  </div>
+  <div id="ky-attempts" class="ky-comp">
+    <p class="ky-label" id="ky-attempts-title" aria-live="polite"></p>
+    <section class="kp-gantt ky-gantt-host" data-kp-gantt data-kp-gantt-ranges="2m 5m 15m 1h 6h 1d" data-kp-gantt-range="5m"
+             data-kp-gantt-ghosts="1 1 1 1 1" aria-label="Delivery attempts of one message" id="ky-gantt"></section>
+    <div class="kp-card kp-inspector ky-inspector-host" data-kp-requests data-kp-requests-open="failed"
+         data-kp-secrets-in-copy="masked" id="ky-requests" aria-label="Delivery attempts of one message, as requests"></div>
+  </div>
+</section>
+
+<section class="ky-sec" aria-labelledby="h-ky-section-uptime">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-uptime">The last 90 days</h2>
+    <p>One cell a day: how many messages were delivered and how many died. A day is judged by what was delivered.</p>
+  </div>
+  <div id="ky-uptime" class="ky-comp">
+    <div class="kp-uptime" data-kp-uptime data-kp-uptime-label="{{ subscription.name }}" data-kp-uptime-count="90" data-kp-uptime-open="info" id="ky-uptime-strip"></div>
+  </div>
+</section>
+</div>
 {% endblock %}

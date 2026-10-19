@@ -851,6 +851,11 @@ const DEAD_LETTERS_SHOWN: usize = 50;
 const TOPICS_HTML: &str = include_str!("../../templates/topics.html");
 const TOPIC_HTML: &str = include_str!("../../templates/topic.html");
 const SUBSCRIPTION_HTML: &str = include_str!("../../templates/subscription.html");
+/// The cross-page shell (command palette, keys, help, tour, anchors, uses-map).
+/// The kit renders a page from one source string, so an
+/// `{% include "_kp.html" %}` line is expanded here, before rendering.
+const KP_HTML: &str = include_str!("../../templates/_kp.html");
+const KP_INCLUDE: &str = "{% include \"_kp.html\" %}";
 
 fn page<C: serde::Serialize>(
     dash: &Dashboard,
@@ -858,34 +863,217 @@ fn page<C: serde::Serialize>(
     source: &str,
     ctx: C,
 ) -> Result<Html<String>, ApiError> {
-    dash.render_project(nav, source, ctx)
+    let expanded = source.replace(KP_INCLUDE, KP_HTML);
+    dash.render_project(nav, &expanded, ctx)
         .map_err(|error| internal(format!("cannot render the page: {error}")))
+}
+
+/// A topic is "Backlog" on the Topics page from this many waiting messages.
+const BACKLOG_STATUS_AT: i64 = 50;
+
+/// A topic is "Quiet" on the Topics page after this long without a publish.
+const QUIET_AFTER_MS: i64 = 24 * 3_600_000;
+
+/// The longest dead-letter excerpt the Topics page keeps for its hover card.
+const DEAD_NOTE_CHARS: usize = 80;
+
+/// One row of the Topics page as the page's script reads it: the counts the
+/// flow bar and the key figures are drawn from, the subscriptions behind the
+/// "who reads this" card and the attention band, and the status word the
+/// table sorts and filters by. Times are Unix milliseconds.
+#[derive(serde::Serialize)]
+struct TopicRowView {
+    name: String,
+    status: &'static str,
+    messages: i64,
+    subscriptions: Vec<String>,
+    flagged: Vec<String>,
+    backlog: i64,
+    in_flight: i64,
+    dead: i64,
+    lapsed: i64,
+    last_published_ms: Option<i64>,
+    dead_note: Option<String>,
+}
+
+/// The status word of a topic: the worst thing true of it.
+fn topic_status(dead: i64, backlog: i64, last_published_ms: Option<i64>, now: i64) -> &'static str {
+    if dead > 0 {
+        "Dead letters"
+    } else if backlog >= BACKLOG_STATUS_AT {
+        "Backlog"
+    } else if last_published_ms.is_some_and(|at| now - at > QUIET_AFTER_MS) {
+        "Quiet"
+    } else {
+        "Healthy"
+    }
+}
+
+/// One topic as the shell lists it: a palette option and a node of the
+/// "who reads what" map.
+#[derive(serde::Serialize)]
+struct ShellTopic {
+    name: String,
+    messages: i64,
+    detail: String,
+}
+
+/// One subscription as the shell lists it: a palette option and a line of
+/// the map. `tone` is the map's word for its state.
+#[derive(serde::Serialize)]
+struct ShellSubscription {
+    topic: String,
+    name: String,
+    state: String,
+    tone: &'static str,
+    detail: String,
+}
+
+fn counted(n: i64, noun: &str) -> String {
+    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
+}
+
+/// What every page's command palette and the Topics page's uses-map are
+/// built from: every topic and every subscription, plus the hub's dead
+/// letter total (what "Prune dead letters" would delete).
+async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
+    let engine = state.engine.clone();
+    let built = tokio::task::spawn_blocking(move || {
+        engine.store().read(|conn| {
+            let now = engine.now_ms();
+            let mut topics = Vec::new();
+            let mut subscriptions = Vec::new();
+            let mut dead_total = 0;
+            for summary in queries::topic_summaries(conn)? {
+                dead_total += summary.dead;
+                let detail = if summary.dead > 0 {
+                    format!(
+                        "{}, {}",
+                        counted(summary.messages, "message"),
+                        counted(summary.dead, "dead letter")
+                    )
+                } else {
+                    counted(summary.messages, "message")
+                };
+                topics.push(ShellTopic {
+                    name: summary.name.clone(),
+                    messages: summary.messages,
+                    detail,
+                });
+                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &summary.name)? else {
+                    continue;
+                };
+                for sub in queries::subscription_summaries(conn, topic_id)? {
+                    let view = SubscriptionView::at(sub, now);
+                    let (tone, detail) = match view.state.as_str() {
+                        "active" => ("ok", "active".to_string()),
+                        "archived" => ("muted", "archived".to_string()),
+                        other if view.dead > 0 => (
+                            "bad",
+                            format!("{other}: {}", counted(view.dead, "dead letter")),
+                        ),
+                        other => ("warn", format!("{other}: lease expired")),
+                    };
+                    subscriptions.push(ShellSubscription {
+                        topic: summary.name.clone(),
+                        name: view.name,
+                        state: view.state,
+                        tone,
+                        detail,
+                    });
+                }
+            }
+            Ok(json!({
+                "topics": topics,
+                "subscriptions": subscriptions,
+                "dead_total": dead_total,
+            }))
+        })
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error: anyhow::Error| internal(format!("{error:#}")))?;
+    Ok(built)
 }
 
 /// K10 · `GET /topics` — every topic on this hub. Until step 2 this was `/`;
 /// the kit's status page owns `/` now and carries a Topics section.
+///
+/// The page's script reads the rows from one JSON block (`topics_json`), so
+/// the automatic refresh, which fetches this same URL and swaps one region,
+/// carries fresh numbers with it.
 pub async fn topics_page(
     Extension(dash): Extension<Dashboard>,
     State(state): State<AppState>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
-    let topics = tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<TopicView>> {
+    let built = tokio::task::spawn_blocking(move || -> anyhow::Result<(i64, Vec<TopicRowView>)> {
         let now = engine.now_ms();
-        Ok(engine
-            .store()
-            .read(queries::topic_summaries)?
-            .into_iter()
-            .map(|summary| TopicView::at(summary, now))
-            .collect())
+        let rows = engine.store().read(|conn| {
+            let mut rows = Vec::new();
+            for summary in queries::topic_summaries(conn)? {
+                let topic_id = queries::topic_id_by_name_conn(conn, &summary.name)?;
+                let subscriptions = match topic_id {
+                    Some(id) => queries::subscription_summaries(conn, id)?,
+                    None => Vec::new(),
+                };
+                let dead_note = match topic_id {
+                    Some(id) if summary.dead > 0 => queries::dead_letters_for_topic(conn, id, 1)?
+                        .into_iter()
+                        .next()
+                        .map(|dead| {
+                            let text = String::from_utf8_lossy(&dead.letter.payload);
+                            let excerpt: String = text.chars().take(DEAD_NOTE_CHARS).collect();
+                            format!("{}: {excerpt}", dead.subscription)
+                        }),
+                    _ => None,
+                };
+                rows.push(TopicRowView {
+                    status: topic_status(
+                        summary.dead,
+                        summary.backlog,
+                        summary.last_published_at,
+                        now,
+                    ),
+                    name: summary.name,
+                    messages: summary.messages,
+                    flagged: subscriptions
+                        .iter()
+                        .filter(|sub| sub.state == "flagged")
+                        .map(|sub| sub.name.clone())
+                        .collect(),
+                    in_flight: subscriptions.iter().map(|sub| sub.claimed).sum(),
+                    lapsed: subscriptions.iter().map(|sub| sub.lapsed).sum(),
+                    subscriptions: subscriptions.into_iter().map(|sub| sub.name).collect(),
+                    backlog: summary.backlog,
+                    dead: summary.dead,
+                    last_published_ms: summary.last_published_at,
+                    dead_note,
+                });
+            }
+            Ok(rows)
+        })?;
+        Ok((now, rows))
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
     .map_err(|error| internal(format!("{error:#}")))?;
+    let (now, topics) = built;
+    // The block sits inside a <script type="application/json">: `<` is
+    // escaped so a payload excerpt can never close the element.
+    let topics_json = serde_json::to_string(&json!({ "now_ms": now, "topics": topics }))
+        .map_err(|error| internal(format!("cannot encode the topics: {error}")))?
+        .replace('<', "\\u003c");
     page(
         &dash,
         "/topics",
         TOPICS_HTML,
-        json!({ "topics": topics, "kyu_assets": ASSET_VERSION.as_str() }),
+        json!({
+            "topics": topics,
+            "topics_json": topics_json,
+            "shell": shell_view(&state).await?,
+            "kyu_assets": ASSET_VERSION.as_str(),
+        }),
     )
 }
 
@@ -1059,6 +1247,7 @@ pub async fn dashboard_topic(
                 "snippets": { "bootstrap_note": built.snippets.bootstrap_note },
                 "data": built.data,
                 "reveal_seconds": dash.reveal_seconds,
+                "shell": shell_view(&state).await?,
                 "kyu_assets": ASSET_VERSION.as_str(),
             }),
         ),
@@ -1073,7 +1262,16 @@ pub async fn dashboard_topic(
 
 /// How many backlog items a subscription page shows (W16). Bounded for the
 /// same reason `DEAD_LETTERS_SHOWN` is.
-const BACKLOG_SHOWN: usize = 50;
+const BACKLOG_SHOWN: usize = 200;
+
+/// What the Subscription page reads from the store in one transaction.
+struct SubscriptionPageRows {
+    view: SubscriptionView,
+    backlog: Vec<queries::BacklogItem>,
+    created_at: i64,
+    last_poll_ms: Option<i64>,
+    oldest_ms: Option<i64>,
+}
 
 /// [W16] `GET /t/{topic}/dashboard/subs/{subscription}` — one subscription's
 /// live backlog, individually rather than as a count.
@@ -1085,8 +1283,8 @@ pub async fn dashboard_subscription(
     let engine = state.engine.clone();
     let topic_name = topic.clone();
     let subscription_name = subscription.clone();
-    let built = tokio::task::spawn_blocking(
-        move || -> anyhow::Result<Option<(SubscriptionView, Vec<dashboard::BacklogItemView>)>> {
+    let built =
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Option<SubscriptionPageRows>> {
             engine.store().read(|conn| {
                 let Some(topic_id) = queries::topic_id_by_name_conn(conn, &topic_name)? else {
                     return Ok(None);
@@ -1103,31 +1301,92 @@ pub async fn dashboard_subscription(
                     return Ok(None);
                 };
                 let now = engine.now_ms();
+                let raw_last_poll = summary.last_poll_at;
+                let raw_oldest = summary.oldest_unacked_at;
                 let view = dashboard::SubscriptionView::at(summary, now);
-                let backlog: Vec<dashboard::BacklogItemView> =
-                    queries::backlog_for_subscription(conn, sub_id, BACKLOG_SHOWN)?
-                        .into_iter()
-                        .map(|item| dashboard::BacklogItemView::at(item, now))
-                        .collect();
-                Ok(Some((view, backlog)))
+                let backlog = queries::backlog_for_subscription(conn, sub_id, BACKLOG_SHOWN)?;
+                let created_at: i64 = conn.query_row(
+                    "SELECT created_at FROM subscriptions WHERE id = ?1",
+                    [sub_id],
+                    |row| row.get(0),
+                )?;
+                Ok(Some(SubscriptionPageRows {
+                    view,
+                    backlog,
+                    created_at,
+                    last_poll_ms: raw_last_poll,
+                    oldest_ms: raw_oldest,
+                }))
             })
-        },
-    )
-    .await
-    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-    .map_err(|error| internal(format!("{error:#}")))?;
+        })
+        .await
+        .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+        .map_err(|error| internal(format!("{error:#}")))?;
     match built {
-        Some((view, backlog)) => page(
-            &dash,
-            "/topics",
-            SUBSCRIPTION_HTML,
-            json!({
-                "topic_name": topic,
-                "subscription": view,
-                "backlog": backlog,
-                "kyu_assets": ASSET_VERSION.as_str(),
-            }),
-        ),
+        Some(SubscriptionPageRows {
+            view,
+            backlog: items,
+            created_at,
+            last_poll_ms,
+            oldest_ms,
+        }) => {
+            let now = state.engine.now_ms();
+            let rows: Vec<serde_json::Value> = items
+                .into_iter()
+                .map(|item| {
+                    let published_ms = item.published_at;
+                    let view = dashboard::BacklogItemView::at(item, now);
+                    let mut row = serde_json::to_value(&view).unwrap_or_default();
+                    row["published_ms"] = json!(published_ms);
+                    row
+                })
+                .collect();
+            let policy_rows = subscription_policy_rows(&view, created_at);
+            // What the page's script reads: raw milliseconds and counts, so it
+            // formats every time itself (dd/mm/yyyy HH:mm, Europe/Brussels).
+            let page_data = json!({
+                "topic": topic,
+                "subscription": view.name,
+                "state": view.state,
+                "now_ms": now,
+                "last_poll_ms": last_poll_ms,
+                "oldest_unacked_ms": oldest_ms,
+                "pending": view.backlog,
+                "claimed": view.claimed,
+                "dead": view.dead,
+                "lease_ms": view.lease_ms,
+                "max_attempts": view.max_attempts,
+                "shown": rows.len(),
+                "items": rows.iter().map(|row| json!({
+                    "id": row["id"],
+                    "state": row["state"],
+                    "published_ms": row["published_ms"],
+                    "attempts": row["attempts"],
+                })).collect::<Vec<_>>(),
+            });
+            let page_data = page_data
+                .to_string()
+                .replace('<', "\\u003c")
+                .replace('>', "\\u003e")
+                .replace('&', "\\u0026");
+            let lease_words = format_duration_ms(view.lease_ms);
+            page(
+                &dash,
+                "/topics",
+                SUBSCRIPTION_HTML,
+                json!({
+                    "topic_name": topic,
+                    "subscription": view,
+                    "backlog": rows,
+                    "backlog_total": rows.len(),
+                    "policy_rows": policy_rows,
+                    "lease_words": lease_words,
+                    "page_data": page_data,
+                    "shell": shell_view(&state).await?,
+                    "kyu_assets": ASSET_VERSION.as_str(),
+                }),
+            )
+        }
         None => Err(ApiError::new(
             StatusCode::NOT_FOUND,
             format!("subscription {subscription:?} on topic {topic:?} does not exist"),
@@ -1136,6 +1395,50 @@ pub async fn dashboard_subscription(
              subscriptions it has.",
         )),
     }
+}
+
+/// A duration in words a person reads: `30 s`, `2 min`, `7 days`.
+fn format_duration_ms(ms: i64) -> String {
+    let trim = |value: f64| {
+        let text = format!("{value:.1}");
+        text.strip_suffix(".0").map_or(text.clone(), str::to_string)
+    };
+    match ms {
+        i64::MIN..=-1 => "0 s".to_string(),
+        0..=999 => format!("{ms} ms"),
+        1_000..=59_999 => format!("{} s", trim(ms as f64 / 1_000.0)),
+        60_000..=3_599_999 => format!("{} min", trim(ms as f64 / 60_000.0)),
+        3_600_000..=86_399_999 => format!("{} h", trim(ms as f64 / 3_600_000.0)),
+        _ => {
+            let days = trim(ms as f64 / 86_400_000.0);
+            format!("{days} {}", if days == "1" { "day" } else { "days" })
+        }
+    }
+}
+
+/// The policy card's rows: label, value, and whether kyu chose the value
+/// itself (the page prints a quiet "(default)" beside those).
+fn subscription_policy_rows(view: &SubscriptionView, created_at: i64) -> Vec<serde_json::Value> {
+    let wait = if view.backoff_ms == 0 {
+        "No wait".to_string()
+    } else {
+        format!(
+            "{}, times the attempt number",
+            format_duration_ms(view.backoff_ms)
+        )
+    };
+    vec![
+        json!({ "label": "Lease", "value": format_duration_ms(view.lease_ms),
+                "is_default": view.explicit.lease_ms.is_none() }),
+        json!({ "label": "Attempts before a message is dead", "value": view.max_attempts.to_string(),
+                "is_default": view.explicit.max_attempts.is_none() }),
+        json!({ "label": "Wait between attempts", "value": wait,
+                "is_default": view.explicit.backoff_ms.is_none() }),
+        json!({ "label": "Time to live",
+                "value": view.ttl_ms.map_or("No limit".to_string(), format_duration_ms),
+                "is_default": view.explicit.ttl_ms.is_none() }),
+        json!({ "label": "Created", "created_ms": created_at, "value": "", "is_default": false }),
+    ]
 }
 
 /// W9 · `POST /t/{topic}/dashboard/publish` — the test-publish form.

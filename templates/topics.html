@@ -2,52 +2,122 @@
 {% block title %}Topics · {{ app_name }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
-<script src="/assets/app.js?v={{ kyu_assets }}" defer></script>
+{% include "_kp.html" %}
+<link rel="stylesheet" href="/assets/topics.css?v={{ kyu_assets }}">
+<script type="module" src="/assets/topics.js?v={{ kyu_assets }}"></script>
 {% endblock %}
 {% block content %}
-<h1>Topics</h1>
-<p class="explain">Every topic on this hub. A topic exists once something publishes to it; open one for its subscriptions, dead letters and the commands that work against it.</p>
+<header class="kp-page-header">
+  <div class="kp-page-header__inner">
+    <div class="tp-header">
+      <h1 class="kp-page-header__title" data-kp-reveal="headline">Topics</h1>
+      <p class="kp-lede">Every topic on this hub. A topic exists once something publishes to it; open one for its subscriptions, dead letters and the commands that work against it.</p>
+      <p class="tp-meta" data-tp-meta aria-live="polite"></p>
+    </div>
+  </div>
+</header>
 
-{% if topics %}
-<div class="kp-table-wrap">
-<table class="kp-table">
-  <thead>
-    <tr>
-      <th>Topic</th>
-      <th class="text-end">Messages</th>
-      <th class="text-end">Subscriptions</th>
-      <th class="text-end">Backlog</th>
-      <th class="text-end">Dead</th>
-      <th>Last published</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for topic in topics %}
-  <tr>
-    <td><a href="/t/{{ topic.name }}/dashboard">{{ topic.name }}</a></td>
-    <td class="text-end">{{ topic.messages }}</td>
-    <td class="text-end">{{ topic.subscriptions }}</td>
-    <td class="text-end">{{ topic.backlog }}</td>
-    <td class="text-end">
-      {% if topic.dead > 0 %}<span class="kp-badge kp-badge--destructive">{{ topic.dead }}</span>{% else %}0{% endif %}
-    </td>
-    <td>
-      {% if topic.last_published_at %}{{ topic.last_published_at }}{% else %}<span class="text-secondary italic">never</span>{% endif %}
-    </td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="tp-stage" data-tp-stage data-kp-anchors="rows" data-kp-anchor-show="hover">
+  <div class="tp-live-bar">
+    <div class="kp-refresh" data-kp-refresh="0" data-kp-refresh-mode="region" data-kp-refresh-region="#tp-kpis"
+         data-kp-refresh-hover="pause" data-kp-refresh-choices="0,15,30,60,300" data-kp-remember="kyu-topics-refresh"
+         data-tp-refresh></div>
+  </div>
+  <div class="kp-attention kp-attention--soft" role="region" aria-label="Needs attention" data-tp-attention></div>
+  {# The refresh swaps the children of this group. The rows ride along as one JSON block that the script reads and removes. #}
+  <div class="kp-kpis" id="tp-kpis" role="group" aria-label="The hub right now" data-kp-kpis-columns="all 2 1" data-tp-kpis>
+    <script type="application/json" data-tp-data>{{ topics_json | safe }}</script>
+  </div>
+  <figure class="kp-stackbar tp-hubbar" data-kp-stackbar data-tp-hubbar></figure>
+
+  <div class="tp-table" data-tp-table-host>
+    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu
+         data-kp-page-sizes="none" data-kp-remember="kyu-topics" data-tp-datatable>
+      <div class="kp-datatable__bar">
+        <input class="kp-field__input kp-datatable__search" type="search" data-kp-datatable-search
+               aria-label="Search topics" placeholder="Search topics">
+        <select class="kp-field__input kp-datatable__select" data-kp-datatable-scope aria-label="Search in"></select>
+        <select class="kp-field__input kp-datatable__select" data-kp-datatable-density aria-label="Row density"></select>
+      </div>
+      <div class="kp-table-wrap">
+        <table class="kp-table">
+          <caption>Topics on this hub</caption>
+          <thead>
+            <tr>
+              <th scope="col" data-kp-sort="text" data-kp-column-locked>Topic</th>
+              <th scope="col" data-kp-sort="text" data-kp-sort-order="Dead letters,Backlog,Quiet,Healthy"
+                  data-kp-filter="choice" data-kp-filter-options="Dead letters,Backlog,Quiet,Healthy">Status</th>
+              <th scope="col" data-kp-sort="number" class="kp-text-end">Messages</th>
+              <th scope="col" data-kp-sort="number" data-kp-filter="range" class="kp-text-end">Backlog</th>
+              <th scope="col" data-kp-sort="number" data-kp-filter="range" class="kp-text-end">Dead</th>
+              <th scope="col" data-kp-sort="number">Flow</th>
+              <th scope="col" data-kp-sort="number">Last published</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody data-tp-rows></tbody>
+        </table>
+      </div>
+      <div class="kp-empty" data-kp-datatable-empty data-kp-art="nomatch" hidden>
+        <p class="kp-empty__title" data-tp-empty-title>No topic matches</p>
+        <p class="kp-empty__body" data-tp-empty-body>Loosen the search or remove a filter.</p>
+        <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filters</button>
+      </div>
+      <div class="kp-datatable__bar">
+        <p class="kp-datatable__status" data-kp-datatable-status role="status" aria-live="polite"></p>
+        <div class="kp-datatable__pager" data-kp-datatable-pager></div>
+      </div>
+    </div>
+    <div class="kp-empty tp-none" data-kp-art="none" data-tp-none hidden>
+      <p class="kp-empty__title">No topics yet</p>
+      <p class="kp-empty__body">A topic exists as soon as something publishes to it. Run the command under &ldquo;Start a topic&rdquo; and it appears here.</p>
+    </div>
+  </div>
 </div>
-{% else %}
-<p class="text-secondary italic">No topics yet.</p>
-{% endif %}
 
-<h2>Start a topic</h2>
-<p class="text-secondary">A topic exists as soon as something publishes to it:</p>
-<pre class="snippet">curl -s -H 'content-type: application/json' -d '{"hello":"world"}' /t/notify.kenny</pre>
-<p class="text-secondary" style="margin-top: 0.5rem">
-  Then open the topic to see the receive and acknowledge commands, filled in
-  with its own data and a working token.
-</p>
+<section class="tp-section tp-start" aria-labelledby="start-a-topic" data-kp-anchors="headings" data-kp-anchor-levels="2">
+  <h2 id="start-a-topic">Start a topic</h2>
+  <p class="kp-lede">A topic exists as soon as something publishes to it.</p>
+  <div class="kp-command" data-kp-command="bash" data-kp-command-where="any machine that can reach kyu">
+    <pre class="kp-command__code"><code>curl -s -H 'content-type: application/json' \
+  -d '{"hello":"world"}' \
+  "$KYU_URL/t/notify.kenny"</code></pre>
+  </div>
+  <p class="tp-then">Then open the topic to see the receive and acknowledge commands, filled in with its own data and a working token.</p>
+</section>
+
+<section class="tp-section" aria-labelledby="topics-heat-title">
+  <div class="tp-section__head">
+    <h2 id="topics-heat-title">Heat map: topic by hour</h2>
+    <p class="tp-then">When each topic is busy and when messages die, over the last 24 hours.</p>
+  </div>
+  <div class="tp-heat-stage" data-tp-heat-stage>
+    <div class="tp-heat-controls" role="group" aria-label="What the cells count">
+      <b>Counts:</b>
+      <button type="button" class="kp-button kp-button--sm" aria-pressed="true" data-tp-heat-metric="published">Published</button>
+      <button type="button" class="kp-button kp-button--sm" aria-pressed="false" data-tp-heat-metric="dead">Dead letters</button>
+    </div>
+    <div class="kp-heat" data-kp-heat data-kp-heat-toggle data-tp-heat></div>
+    <ul class="kp-heat__legend" aria-label="Legend" data-tp-heat-legend></ul>
+    <div class="tp-readout-row">
+      <p class="tp-readout" data-tp-heat-readout aria-live="polite">No hour pinned. Press a cell to pin its hour.</p>
+      <button type="button" class="kp-button" data-tp-heat-retry hidden>Retry</button>
+    </div>
+  </div>
+</section>
+
+<section class="tp-section" aria-labelledby="topics-trends-title">
+  <div class="tp-section__head">
+    <h2 id="topics-trends-title">The last 24 hours</h2>
+    <p class="tp-then">How each key figure got to where it is now.</p>
+  </div>
+  <div class="tp-trend-stage">
+    <div class="kp-kpis" role="group" aria-label="The hub with its last 24 hours" data-kp-kpis-columns="all 2 1" data-tp-trends></div>
+    <div class="kp-empty tp-trend-plate" data-kp-art="error" data-tp-trend-plate hidden>
+      <p class="kp-empty__title">Could not read the hourly history</p>
+      <p class="kp-empty__body">The hub did not answer. The numbers on the Topics page are still current.</p>
+      <button type="button" class="kp-button" data-tp-trend-retry>Retry</button>
+    </div>
+  </div>
+</section>
 {% endblock %}

@@ -7,7 +7,7 @@
    kp-themes modules itself, after its own markup exists. It stands BEFORE the
    shared include so it runs first. #}
 <script type="module" src="/assets/topic.js?v={{ kyu_assets }}"></script>
-{# {% include "_kp.html" %} : placeholder for the cross-page builder #}
+{% include "_kp.html" %}
 {% endblock %}
 
 {% block content %}
