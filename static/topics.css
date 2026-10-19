@@ -11,6 +11,13 @@
     align-content: start;
 }
 
+.tp-heat-stage .kp-card__data,
+.tp-trend-stage .kp-card__data {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+    min-inline-size: 0;
+}
+
 .tp-section {
     display: grid;
     gap: var(--kp-space-md, 1rem);
@@ -40,15 +47,6 @@
 
 .tp-table > [hidden] {
     display: none;
-}
-
-/* The empty hub: a plate as tall as the table was, its content centred in it. */
-.tp-none {
-    display: grid;
-    align-content: center;
-    justify-items: center;
-    text-align: center;
-    min-block-size: 18rem;
 }
 
 /* Header. */
@@ -122,10 +120,6 @@
     margin: 0;
 }
 
-.tp-trend-plate {
-    min-block-size: 14rem;
-}
-
 .tp-heat-controls {
     display: grid;
     grid-template-columns: max-content repeat(2, minmax(8rem, max-content));
@@ -145,14 +139,6 @@
 /* The heat grid's own knob: its empty and failed states are as tall as the grid. */
 .tp-heat-stage [data-tp-heat] {
     --kp-heat-state-height: 13.5rem;
-}
-
-.tp-readout-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) max-content;
-    gap: var(--kp-space-sm, 0.5rem) var(--kp-space-md, 1rem);
-    align-items: center;
-    min-block-size: 2.5rem;
 }
 
 /* The narrow table as cards: the package spreads label and value to the two
