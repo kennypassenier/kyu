@@ -16,19 +16,29 @@ use std::process::Command;
 use common::{KEY, KitHub, body_json, header, spawn_kit, spawn_kit_in, unescape};
 use kyu::events::EVENTS_TOPIC;
 
-/// The visible text of one command snippet on a topic page, as a reader
-/// would copy it: unescaped, the shell continuations joined.
-fn snippet(page: &str, id: &str) -> String {
+/// The data block the topic page draws every region from: escaped JSON in
+/// a `<script type="application/json">` element.
+fn topic_data(page: &str) -> serde_json::Value {
     let start = page
-        .find(&format!("id=\"{id}\""))
-        .unwrap_or_else(|| panic!("no snippet {id} on the page"));
-    let rest = &page[start..];
-    let text_start = rest
-        .find("data-revealed=\"false\">")
-        .expect("the snippet's text")
-        + "data-revealed=\"false\">".len();
-    let text_end = rest.find("</pre>").expect("the snippet closes");
-    unescape(&rest[text_start..text_end])
+        .find("id=\"kyu-topic-data\">")
+        .expect("the topic page carries its data block")
+        + "id=\"kyu-topic-data\">".len();
+    let end = start + page[start..].find("</script>").expect("the block closes");
+    serde_json::from_str(&page[start..end]).expect("the data block is JSON")
+}
+
+/// One command of a topic page as a reader copies it, joined onto one line.
+/// `shown` is the on-screen form (token masked as `$KYU_TOKEN`), `working`
+/// the form the Copy button puts on the clipboard. The page script swaps the
+/// base placeholder for the address the browser used, so this does too.
+fn snippet(page: &str, form: &str, name: &str) -> String {
+    let data = topic_data(page);
+    let command = data["commands"][form][name]
+        .as_str()
+        .unwrap_or_else(|| panic!("no {form} command {name} in the page data"));
+    let base = data["base"].as_str().expect("the command base");
+    command
+        .replace(base, "")
         .replace("\\\n", " ")
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -279,7 +289,7 @@ async fn k2_the_topics_page_lists_every_topic_and_the_status_page_counts_them() 
         "and links to it"
     );
     assert!(
-        body.contains("class=\"explain\""),
+        body.contains("class=\"kp-lede\""),
         "every page opens by saying what it is"
     );
     assert!(body.contains("kp-nav"), "inside the kit's layout");
@@ -323,15 +333,39 @@ async fn k2_the_topic_page_shows_subscriptions_backlogs_and_policy() {
     let body = topic_page(&hub, "notify.kenny").await;
     assert!(body.contains("printer") && body.contains("ha-forwarder"));
     assert!(body.contains("active"), "states are shown");
-    assert!(body.contains("(default)"), "a default value says so");
-    assert!(body.contains("ttl 600000ms"), "an explicit policy is shown");
+    // Policy rows are drawn from the data block: an explicit value is
+    // carried as explicit, an unset one is null so the row says "(default)".
+    let data = topic_data(&body);
+    let subs = data["subscriptions"].as_array().expect("subscriptions");
+    let sub = |name: &str| subs.iter().find(|s| s["name"] == name).expect(name);
+    assert!(
+        sub("printer")["explicit"]["lease_ms"].is_null(),
+        "a default value is marked as one"
+    );
+    assert_eq!(
+        sub("ha-forwarder")["ttl_ms"],
+        600000,
+        "an explicit policy is shown"
+    );
+    let script = hub
+        .get_anon("/assets/topic.js")
+        .await
+        .text()
+        .await
+        .expect("the script");
+    assert!(
+        script.contains("(default)") && script.contains("ttl ${"),
+        "and the page script words both"
+    );
     assert!(body.contains("Backup klaar"), "recent payloads are visible");
     assert!(
         body.contains("Lapsed"),
         "AR3: lapsed is counted and visible"
     );
     assert!(
-        body.contains("Reveal") && body.contains("snippet-publish"),
+        body.contains("Reveal")
+            && body.contains("data-kt-secret=\"publish\"")
+            && snippet(&body, "shown", "publish").contains("$KYU_TOKEN"),
         "the commands are there, masked"
     );
     hub.shutdown().await;
@@ -395,7 +429,23 @@ async fn k2_a_topic_nobody_polls_explains_the_bootstrap_order() {
         body.contains("first polls"),
         "the G7 trap is the one thing a newcomer must be told"
     );
-    assert!(body.contains("from=beginning"));
+    // The warning is drawn by the page script when the data block says no
+    // reader exists; the script must carry the from=beginning remedy.
+    assert_eq!(
+        topic_data(&body)["has_reader"],
+        false,
+        "the page knows nobody polls"
+    );
+    let script = hub
+        .get_anon("/assets/topic.js")
+        .await
+        .text()
+        .await
+        .expect("the script");
+    assert!(
+        script.contains("Nobody has polled") && script.contains("&from=beginning"),
+        "the warning tells the reader to poll with from=beginning"
+    );
     hub.shutdown().await;
 }
 
@@ -469,7 +519,8 @@ async fn k2_the_snippets_the_dashboard_prints_actually_work() {
     // Read the page the way a browser shows it, then run what it printed
     // (S1: the example is the hub describing itself).
     let body = topic_page(&hub, "notify.kenny").await;
-    let receive = snippet(&body, "snippet-receive-envelope");
+    let shown = snippet(&body, "shown", "receive_envelope");
+    let receive = snippet(&body, "working", "receive_envelope");
     assert!(
         receive.starts_with("curl") && receive.contains("envelope=json"),
         "{receive}"
@@ -479,8 +530,12 @@ async fn k2_the_snippets_the_dashboard_prints_actually_work() {
         "the snippet names a subscription that exists: {receive}"
     );
     assert!(
-        receive.contains("authorization: Bearer ••••"),
-        "the token is masked on screen: {receive}"
+        shown.contains("authorization: Bearer $KYU_TOKEN") && !shown.contains(hub.token()),
+        "the token is hidden on screen: {shown}"
+    );
+    assert!(
+        receive.contains(hub.token()),
+        "and the copied command carries it: {receive}"
     );
     let path = receive
         .split('"')
@@ -512,15 +567,19 @@ async fn k2_a_hostile_content_type_cannot_escape_the_dashboard_snippet() {
             .await,
         201
     );
-    let publish = snippet(&topic_page(&hub, "notify.kenny").await, "snippet-publish");
-    assert!(
-        !publish.contains("evil.lan"),
-        "an injection reached the clipboard: {publish}"
-    );
-    assert!(
-        publish.contains("content-type: application/json"),
-        "and the snippet still shows a usable content type: {publish}"
-    );
+    let page = topic_page(&hub, "notify.kenny").await;
+    // Both the on-screen form and the copied one are pasted into a shell.
+    for form in ["shown", "working"] {
+        let publish = snippet(&page, form, "publish");
+        assert!(
+            !publish.contains("evil.lan"),
+            "an injection reached the {form} command: {publish}"
+        );
+        assert!(
+            publish.contains("content-type: application/json"),
+            "and the {form} command still has a usable content type: {publish}"
+        );
+    }
     hub.shutdown().await;
 }
 
@@ -807,7 +866,13 @@ async fn k2_the_hub_assets_are_served_open_and_fingerprinted() {
     assert_eq!(js.status(), 200);
     assert_eq!(hub.get_anon("/assets/nope.js").await.status(), 404);
     let page = hub.page("/topics").await;
-    assert!(page.contains("/assets/app.js?v=") && page.contains("/assets/kyu.css?v="));
+    // kp-themes 11 pages load the shared common.js instead of app.js.
+    assert!(page.contains("/assets/common.js?v=") && page.contains("/assets/kyu.css?v="));
+    assert_eq!(
+        hub.get_anon("/assets/common.js").await.status(),
+        200,
+        "the script the pages load is served open"
+    );
     // The kit's own assets are there too: the pages depend on them.
     // kp-themes 5.0.0 ships one bundle rather than themes.css/components.css
     // separately (chassis-rs 1.8.0).
@@ -906,9 +971,25 @@ async fn the_subscriptions_table_archives_a_live_subscription_and_deletes_an_arc
         page.contains("/t/print.receipt/dashboard/subs/printer/delete"),
         "an archived subscription offers Delete"
     );
+    let data = topic_data(&page);
+    assert_eq!(
+        data["subscriptions"]
+            .as_array()
+            .and_then(|subs| subs.iter().find(|s| s["name"] == "printer"))
+            .map(|s| s["state"].clone()),
+        Some(serde_json::json!("archived")),
+        "the page data says printer is archived"
+    );
+    let script = hub
+        .get_anon("/assets/topic.js")
+        .await
+        .text()
+        .await
+        .expect("the script");
     assert!(
-        page.contains("data-kp-confirm=\"Delete subscription printer"),
-        "which names what goes before it acts"
+        script.contains("data-kp-confirm=\"Delete subscription ${n}")
+            && script.contains("data-kp-confirm-type=\"${n}\""),
+        "the Delete button names what goes, and its name must be typed, before it acts"
     );
     assert_eq!(
         hub.receive("print.receipt", "as=printer&wait=0")
