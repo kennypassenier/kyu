@@ -30,6 +30,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_4_APPS,
     MIGRATION_5_EXPIRY_ANNOUNCEMENTS,
     MIGRATION_6_REMOVED_DELIVERIES,
+    MIGRATION_7_ATTEMPTS_AND_STATS,
 ];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
@@ -177,6 +178,73 @@ CREATE INDEX deliveries_claimable
     ON deliveries (sub_id, state, next_attempt_at, msg_seq);
 CREATE INDEX deliveries_by_state
     ON deliveries (state, lease_expires_at);
+"#;
+
+/// The dashboard's history (kp-themes 11.0.0, 2026-10-19): what happened to
+/// a delivery attempt by attempt, and how much moved per hour and per day.
+/// Purely additive: no existing table changes, so the migration keeps every
+/// message, subscription and delivery exactly as it was.
+///
+/// Every table here grows with traffic and therefore has its cap from the
+/// start:
+///
+/// - `attempts` follows the message it belongs to (the cascade removes a
+///   row with its message or its subscription) and the sweeper also drops
+///   rows older than 30 days, so a topic kept forever cannot grow it
+///   without bound.
+/// - `stats_hourly` is kept 30 days, `stats_daily` 400 days and
+///   `stats_samples` 48 hours, all pruned by the sweeper.
+///
+/// The stats tables name topics and subscriptions by text, not by id: a
+/// counter is history, and deleting an archived subscription must not erase
+/// the days it was alive. `hour` is the Unix millisecond at the start of the
+/// UTC hour; `day` is a Europe/Brussels calendar day as days since
+/// 1970-01-01 (the dashboard shows Brussels time).
+const MIGRATION_7_ATTEMPTS_AND_STATS: &str = r#"
+CREATE TABLE attempts (
+    id         INTEGER PRIMARY KEY,
+    msg_seq    INTEGER NOT NULL REFERENCES messages(seq) ON DELETE CASCADE,
+    sub_id     INTEGER NOT NULL REFERENCES subscriptions(id) ON DELETE CASCADE,
+    n          INTEGER NOT NULL,
+    claimed_at INTEGER NOT NULL,
+    ended_at   INTEGER,
+    outcome    TEXT    NOT NULL CHECK (outcome IN
+                   ('in_flight', 'acked', 'nacked', 'expired', 'dead')),
+    app        TEXT,
+    reason     TEXT
+) STRICT;
+
+CREATE INDEX attempts_by_delivery ON attempts (msg_seq, sub_id, id);
+CREATE INDEX attempts_by_age ON attempts (claimed_at);
+
+CREATE TABLE stats_hourly (
+    topic     TEXT    NOT NULL,
+    hour      INTEGER NOT NULL,
+    published INTEGER NOT NULL DEFAULT 0,
+    dead      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (topic, hour)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX stats_hourly_by_hour ON stats_hourly (hour);
+
+CREATE TABLE stats_daily (
+    topic        TEXT    NOT NULL,
+    subscription TEXT    NOT NULL,
+    day          INTEGER NOT NULL,
+    delivered    INTEGER NOT NULL DEFAULT 0,
+    dead         INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (topic, subscription, day)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX stats_daily_by_day ON stats_daily (day);
+
+CREATE TABLE stats_samples (
+    at        INTEGER PRIMARY KEY,
+    messages  INTEGER NOT NULL,
+    backlog   INTEGER NOT NULL,
+    dead      INTEGER NOT NULL,
+    in_flight INTEGER NOT NULL
+) STRICT;
 "#;
 
 /// Where a store stands against this binary: its schema version and the
