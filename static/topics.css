@@ -75,9 +75,11 @@
 
 /* The topic cell: the mark and the name side by side. */
 .tp-topic {
-    display: inline-flex;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
     gap: var(--kp-space-sm, 0.5rem);
     align-items: center;
+    justify-items: start;
     min-inline-size: 0;
 }
 
@@ -151,4 +153,28 @@
     gap: var(--kp-space-sm, 0.5rem) var(--kp-space-md, 1rem);
     align-items: center;
     min-block-size: 2.5rem;
+}
+
+/* The narrow table as cards: the package spreads label and value to the two
+   edges, so the values sit wherever their width leaves them. Here every card
+   line is a two-track grid, the label track as wide as the longest label
+   ("Last published"), the value track left-aligned, so the values of every card start on
+   one x. */
+@container kp-table (max-width: 40rem) {
+    .tp-table .kp-table td {
+        display: grid;
+        grid-template-columns: 7.5rem minmax(0, 1fr);
+        justify-content: stretch;
+        justify-items: start;
+        align-items: center;
+        text-align: start;
+    }
+
+    .tp-table .kp-table td[data-label=""] {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tp-table .kp-table td[data-label=""]::before {
+        display: none;
+    }
 }
