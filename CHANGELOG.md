@@ -11,6 +11,11 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Every table, chart, timeline and pane on the dashboard shows its
+  component's own loading, empty and failed states (with Try again), and
+  the backlog table remembers its sort and columns.
+
 ## [4.3.0] - 2026-10-19
 
 ### Added
