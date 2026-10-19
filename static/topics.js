@@ -18,9 +18,8 @@ import { setAttention } from '/static/kp/js/attention.js';
 import { dataTable, VIEW_EVENT } from '/static/kp/js/datatable.js';
 import { tickTo } from '/static/kp/js/tick.js';
 import { update } from '/static/kp/js/update.js';
-import { setHeat, HEAT_PICK_EVENT } from '/static/kp/js/heat.js';
-import { setTrendData } from '/static/kp/js/chart.js';
-import { setCardState, CARD_RETRY_EVENT } from '/static/kp/js/card-state.js';
+import { setHeat, HEAT_PICK_EVENT, HEAT_RETRY_EVENT } from '/static/kp/js/heat.js';
+import { setTrendData, CHART_RETRY_EVENT } from '/static/kp/js/chart.js';
 import { toast } from '/static/kp/js/overlays.js';
 import { attachAll } from '/static/kp/js/auto.js';
 
@@ -658,14 +657,9 @@ function drawHeat() {
         ...heatSpec(),
         state: /** @type {any} */ (heat.state),
         skeleton: { rows: Math.max(model.topics.length, 3), columns: 24 },
-        message: heat.state === 'empty' ? 'No history yet. kyu has not counted a full hour.' : 'The hourly counts could not be read.',
+        message: heat.state === 'empty' ? 'No history yet. kyu has not counted a full hour.' : 'Could not read the hourly counts',
+        text: heat.state === 'error' ? 'The hub did not answer.' : undefined,
     });
-    // The heat map has no Retry of its own: a failed read is the card's own failed state with Try again.
-    const card = $('[data-tp-heat-stage]');
-    if (card) {
-        if (heat.state === 'error') setCardState(card, 'error', { title: 'Could not read the hourly counts', text: 'The hub did not answer.' });
-        else setCardState(card, 'ready');
-    }
     const legend = $('[data-tp-heat-legend]');
     if (legend) {
         const item = (/** @type {string} */ tone, /** @type {string} */ text, /** @type {string} */ level = '') =>
@@ -714,7 +708,7 @@ for (const b of $$('[data-tp-heat-metric]')) {
         drawHeat();
     });
 }
-$('[data-tp-heat-stage]')?.addEventListener(CARD_RETRY_EVENT, () => void loadHeat());
+$('[data-tp-heat]')?.addEventListener(HEAT_RETRY_EVENT, () => void loadHeat());
 
 /* ---- the key figures with their last 24 hours */
 
@@ -736,15 +730,6 @@ const trend = {
 function drawTrends() {
     const strip = $('[data-tp-trends]');
     if (!strip) return;
-    // The trend chart has no failed state of its own: a failed read is the card's own failed state with Try again.
-    const card = $('[data-tp-trend-card]');
-    if (card) {
-        if (trend.state === 'error') {
-            setCardState(card, 'error', { title: 'Could not read the hourly history', text: 'The hub did not answer. The numbers on the Topics page are still current.' });
-            return;
-        }
-        setCardState(card, 'ready');
-    }
     if (strip.children.length === 0) {
         strip.replaceChildren(
             ...TRENDS.map((tr, i) =>
@@ -775,6 +760,12 @@ function drawTrends() {
         const figure = /** @type {HTMLElement} */ ($('.kp-kpi__chart', tile));
         const skeleton = (/** @type {HTMLElement} */ el, /** @type {string} */ width) =>
             el.replaceChildren(Object.assign(h('span', { class: 'kp-skeleton' }), { style: `inline-size: ${width}` }));
+        if (trend.state === 'error') {
+            value.textContent = number(totalsNow(tr.key));
+            words.textContent = '';
+            setTrendData(figure, { error: 'Could not read the hourly history', text: 'The hub did not answer. The numbers on the Topics page are still current.' });
+            continue;
+        }
         if (trend.state === 'loading') {
             skeleton(value, '4ch');
             skeleton(words, '80%');
@@ -827,7 +818,7 @@ async function loadTrends() {
     }
     drawTrends();
 }
-$('[data-tp-trend-card]')?.addEventListener(CARD_RETRY_EVENT, () => void loadTrends());
+$('[data-tp-trends]')?.addEventListener(CHART_RETRY_EVENT, () => void loadTrends());
 
 /* ------------------------------------------------------------------------------------------ first render */
 

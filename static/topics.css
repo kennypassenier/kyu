@@ -140,27 +140,3 @@
 .tp-heat-stage [data-tp-heat] {
     --kp-heat-state-height: 13.5rem;
 }
-
-/* The narrow table as cards: the package spreads label and value to the two
-   edges, so the values sit wherever their width leaves them. Here every card
-   line is a two-track grid, the label track as wide as the longest label
-   ("Last published"), the value track left-aligned, so the values of every card start on
-   one x. */
-@container kp-table (max-width: 40rem) {
-    .tp-table .kp-table td {
-        display: grid;
-        grid-template-columns: 7.5rem minmax(0, 1fr);
-        justify-content: stretch;
-        justify-items: start;
-        align-items: center;
-        text-align: start;
-    }
-
-    .tp-table .kp-table td[data-label=""] {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .tp-table .kp-table td[data-label=""]::before {
-        display: none;
-    }
-}
