@@ -32,7 +32,7 @@
 
   <div class="tp-table" data-tp-table-host>
     <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu
-         data-kp-page-sizes="none" data-kp-remember="kyu-topics" data-tp-datatable>
+         data-kp-page-sizes="none" data-kp-remember="kyu-topics" data-tp-datatable data-kp-busy-overlay>
       <div class="kp-datatable__bar">
         <input class="kp-field__input kp-datatable__search" type="search" data-kp-datatable-search
                aria-label="Search topics" placeholder="Search topics">
@@ -58,19 +58,21 @@
           <tbody data-tp-rows></tbody>
         </table>
       </div>
-      <div class="kp-empty" data-kp-datatable-empty data-kp-art="nomatch" hidden>
-        <p class="kp-empty__title" data-tp-empty-title>No topic matches</p>
-        <p class="kp-empty__body" data-tp-empty-body>Loosen the search or remove a filter.</p>
-        <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filters</button>
+      <div class="kp-empty" data-kp-datatable-empty hidden>
+        <div class="kp-empty" data-kp-art="none" data-kp-datatable-empty-none>
+          <p class="kp-empty__title">No topics yet</p>
+          <p class="kp-empty__body">A topic exists as soon as something publishes to it. Run the command under &ldquo;Start a topic&rdquo; and it appears here.</p>
+        </div>
+        <div class="kp-empty" data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden data-tp-nomatch>
+          <p class="kp-empty__title" data-tp-empty-title>No topic matches</p>
+          <p class="kp-empty__body" data-tp-empty-body>Loosen the search or remove a filter.</p>
+          <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filters</button>
+        </div>
       </div>
       <div class="kp-datatable__bar">
         <p class="kp-datatable__status" data-kp-datatable-status role="status" aria-live="polite"></p>
         <div class="kp-datatable__pager" data-kp-datatable-pager></div>
       </div>
-    </div>
-    <div class="kp-empty tp-none" data-kp-art="none" data-tp-none hidden>
-      <p class="kp-empty__title">No topics yet</p>
-      <p class="kp-empty__body">A topic exists as soon as something publishes to it. Run the command under &ldquo;Start a topic&rdquo; and it appears here.</p>
     </div>
   </div>
 </div>
@@ -91,7 +93,8 @@
     <h2 id="topics-heat-title">Heat map: topic by hour</h2>
     <p class="tp-then">When each topic is busy and when messages die, over the last 24 hours.</p>
   </div>
-  <div class="tp-heat-stage" data-tp-heat-stage>
+  <div class="kp-card tp-heat-stage" data-kp-state="ready" data-tp-heat-stage data-kp-loading-words="Reading the hourly counts" aria-label="Messages per topic per hour">
+   <div class="kp-card__stage"><div class="kp-card__data">
     <div class="tp-heat-controls" role="group" aria-label="What the cells count">
       <b>Counts:</b>
       <button type="button" class="kp-button kp-button--sm" aria-pressed="true" data-tp-heat-metric="published">Published</button>
@@ -99,10 +102,8 @@
     </div>
     <div class="kp-heat" data-kp-heat data-kp-heat-toggle data-tp-heat></div>
     <ul class="kp-heat__legend" aria-label="Legend" data-tp-heat-legend></ul>
-    <div class="tp-readout-row">
-      <p class="tp-readout" data-tp-heat-readout aria-live="polite">No hour pinned. Press a cell to pin its hour.</p>
-      <button type="button" class="kp-button" data-tp-heat-retry hidden>Retry</button>
-    </div>
+    <p class="tp-readout" data-tp-heat-readout aria-live="polite">No hour pinned. Press a cell to pin its hour.</p>
+   </div></div>
   </div>
 </section>
 
@@ -111,13 +112,10 @@
     <h2 id="topics-trends-title">The last 24 hours</h2>
     <p class="tp-then">How each key figure got to where it is now.</p>
   </div>
-  <div class="tp-trend-stage">
+  <div class="kp-card tp-trend-stage" data-kp-state="ready" data-tp-trend-card data-kp-loading-words="Reading the last 24 hours" aria-label="The last 24 hours">
+   <div class="kp-card__stage"><div class="kp-card__data">
     <div class="kp-kpis" role="group" aria-label="The hub with its last 24 hours" data-kp-kpis-columns="all 2 1" data-tp-trends></div>
-    <div class="kp-empty tp-trend-plate" data-kp-art="error" data-tp-trend-plate hidden>
-      <p class="kp-empty__title">Could not read the hourly history</p>
-      <p class="kp-empty__body">The hub did not answer. The numbers on the Topics page are still current.</p>
-      <button type="button" class="kp-button" data-tp-trend-retry>Retry</button>
-    </div>
+   </div></div>
   </div>
 </section>
 {% endblock %}

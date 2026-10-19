@@ -20,6 +20,7 @@ import { tickTo } from '/static/kp/js/tick.js';
 import { update } from '/static/kp/js/update.js';
 import { setHeat, HEAT_PICK_EVENT } from '/static/kp/js/heat.js';
 import { setTrendData } from '/static/kp/js/chart.js';
+import { setCardState, CARD_RETRY_EVENT } from '/static/kp/js/card-state.js';
 import { toast } from '/static/kp/js/overlays.js';
 import { attachAll } from '/static/kp/js/auto.js';
 
@@ -83,7 +84,6 @@ let model = { now_ms: Date.now(), topics: [] };
 const kpis = $('[data-tp-kpis]');
 const band = $('[data-tp-attention]');
 const host = $('[data-tp-table-host]');
-const noneEl = $('[data-tp-none]');
 
 const totals = () => ({
     topics: model.topics.length,
@@ -398,13 +398,6 @@ function drawMeta() {
     setAgo(time, model.now_ms);
 }
 
-/** The empty hub is one plate in place of the table. */
-function applyEmpty() {
-    const none = model.topics.length === 0;
-    const tbl = tableEl();
-    if (tbl) tbl.hidden = none;
-    if (noneEl) noneEl.hidden = !none;
-}
 
 /** Everything the data changes: the figures, the band, the bar and the rows. @param {boolean} [animate] */
 function paintAll(animate = false) {
@@ -412,7 +405,6 @@ function paintAll(animate = false) {
     drawBand();
     drawHubBar();
     drawMeta();
-    applyEmpty();
     for (const row of rowsOf()) {
         const t = model.topics.find((x) => x.name === row.getAttribute('data-tp-topic'));
         if (t) paintRow(row, t, animate);
@@ -457,7 +449,7 @@ document.addEventListener(VIEW_EVENT, (event) => {
     if (!(event.target instanceof Element) || !event.target.matches('[data-tp-datatable]')) return;
     const view = /** @type {CustomEvent} */ (event).detail;
     if (!applying) syncTiles(view);
-    const empty = $('[data-kp-datatable-empty]');
+    const empty = $('[data-tp-nomatch]');
     if (empty && view.total > 0 && view.shown === 0) {
         const deadOnly = ui.pressed.dead && !ui.pressed.backlog && Object.keys(view.filters ?? {}).length === 1 && !view.query;
         const allClear = deadOnly && totals().dead === 0;
@@ -550,8 +542,7 @@ if (kpis) {
         drawBand();
         drawHubBar();
         drawMeta();
-        applyEmpty();
-        syncRows();
+            syncRows();
         table()?.refresh();
         swapping = false;
     }).observe(kpis, { childList: true });
@@ -669,8 +660,12 @@ function drawHeat() {
         skeleton: { rows: Math.max(model.topics.length, 3), columns: 24 },
         message: heat.state === 'empty' ? 'No history yet. kyu has not counted a full hour.' : 'The hourly counts could not be read.',
     });
-    const retry = $('[data-tp-heat-retry]');
-    if (retry) retry.hidden = heat.state !== 'error';
+    // The heat map has no Retry of its own: a failed read is the card's own failed state with Try again.
+    const card = $('[data-tp-heat-stage]');
+    if (card) {
+        if (heat.state === 'error') setCardState(card, 'error', { title: 'Could not read the hourly counts', text: 'The hub did not answer.' });
+        else setCardState(card, 'ready');
+    }
     const legend = $('[data-tp-heat-legend]');
     if (legend) {
         const item = (/** @type {string} */ tone, /** @type {string} */ text, /** @type {string} */ level = '') =>
@@ -719,7 +714,7 @@ for (const b of $$('[data-tp-heat-metric]')) {
         drawHeat();
     });
 }
-$('[data-tp-heat-retry]')?.addEventListener('click', () => void loadHeat());
+$('[data-tp-heat-stage]')?.addEventListener(CARD_RETRY_EVENT, () => void loadHeat());
 
 /* ---- the key figures with their last 24 hours */
 
@@ -740,12 +735,16 @@ const trend = {
 
 function drawTrends() {
     const strip = $('[data-tp-trends]');
-    const plate = $('[data-tp-trend-plate]');
-    if (!strip || !plate) return;
-    const failed = trend.state === 'error';
-    strip.hidden = failed;
-    plate.hidden = !failed;
-    if (failed) return;
+    if (!strip) return;
+    // The trend chart has no failed state of its own: a failed read is the card's own failed state with Try again.
+    const card = $('[data-tp-trend-card]');
+    if (card) {
+        if (trend.state === 'error') {
+            setCardState(card, 'error', { title: 'Could not read the hourly history', text: 'The hub did not answer. The numbers on the Topics page are still current.' });
+            return;
+        }
+        setCardState(card, 'ready');
+    }
     if (strip.children.length === 0) {
         strip.replaceChildren(
             ...TRENDS.map((tr, i) =>
@@ -828,7 +827,7 @@ async function loadTrends() {
     }
     drawTrends();
 }
-$('[data-tp-trend-retry]')?.addEventListener('click', () => void loadTrends());
+$('[data-tp-trend-card]')?.addEventListener(CARD_RETRY_EVENT, () => void loadTrends());
 
 /* ------------------------------------------------------------------------------------------ first render */
 

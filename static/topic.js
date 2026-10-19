@@ -478,7 +478,7 @@ function archiveWithUndo(s) {
             const r = await call(`${T}/subs/${encodeURIComponent(s.name)}/archive`);
             settle();
             if (!r.ok) throw new Error(sentence(/** @type {any} */ (r)));
-            void load();
+            void reload();
         },
         undo: () => {
             settle();
@@ -504,7 +504,7 @@ async function deleteSub(s) {
     subsTable?.refresh();
     if (SUBS.size === 0) setCardState(subsCard, 'empty', { title: 'Nothing has polled this topic yet', text: `A subscription shows up here the first time something polls ${TOPIC}.` });
     toast(`${s.name} deleted`, { ms: 4000 });
-    void load();
+    void reload();
 }
 
 subsCard.addEventListener('click', (event) => {
@@ -724,7 +724,7 @@ problemsList.addEventListener('click', async (event) => {
         void done;
         return 'Requeued';
     });
-    void load();
+    void reload();
 });
 
 // Rows: requeue, delete with Undo.
@@ -746,7 +746,7 @@ deadBody.addEventListener('click', async (event) => {
             await new Promise((resolve) => setTimeout(resolve, 500));
             row.remove();
             deadTable?.refresh();
-            void load();
+            void reload();
         }
         return;
     }
@@ -770,7 +770,7 @@ deadBody.addEventListener('click', async (event) => {
             const r = await call(`${T}/delivery/delete`, { form: { subscription: sub, id } });
             settle();
             if (!r.ok) throw new Error(sentence(/** @type {any} */ (r)));
-            void load();
+            void reload();
         },
         undo: () => {
             settle();
@@ -829,7 +829,7 @@ selectionBar.addEventListener('kp-selection-action', (event) => {
                     restoreOnly = rows.filter((r) => gone.has(r.getAttribute('data-kp-row-key') ?? ''));
                     throw new Error(`${plural(refused.length, 'dead letter', 'dead letters')} could not be deleted: ${refused[0].reason}`);
                 }
-                void load();
+                void reload();
             },
             undo: () => {
                 settle();
@@ -849,7 +849,7 @@ selectionBar.addEventListener('kp-selection-action', (event) => {
         const gone = new Set(done.map((x) => keyOf(x)));
         for (const r of rows) if (gone.has(r.getAttribute('data-kp-row-key') ?? '')) r.remove();
         deadTable?.refresh();
-        void load();
+        void reload();
     });
 });
 
@@ -971,7 +971,7 @@ function fillDetail(id) {
                     ? { error: 'Replay is not available on this hub yet.', remedy: 'Update kyu, or publish the payload again from the box below.' }
                     : refusal(/** @type {any} */ (r));
             }
-            void load();
+            void reload();
             return { word: 'Replayed', line: `Published again as ${r.json?.id ?? 'a new message'}. Every active subscription will receive it.` };
         }),
     );
@@ -1033,7 +1033,7 @@ mdRoot.addEventListener('kp-pane-open', (event) => {
     fillDetail(String(key));
     setPaneState(mdRoot, 'ready');
 });
-mdRoot.addEventListener('kp-pane-retry', () => void load());
+mdRoot.addEventListener('kp-pane-retry', () => void reload(true));
 
 // ---------------------------------------------------------------- 7 · publish a test message
 
@@ -1046,7 +1046,7 @@ form.addEventListener('kp-form-valid', () => {
     void runFlashButton(sendButton, async () => {
         const r = await call(`${T}/publish`, { form: { payload: area.value, delay: delayField?.value ?? '' } });
         if (!r.ok) return refusal(/** @type {any} */ (r));
-        void load();
+        void reload();
         return { word: 'Published', line: r.json?.id ? `Published as ${r.json.id}.` : `Published to ${TOPIC}.` };
     });
 });
@@ -1077,6 +1077,36 @@ async function load() {
     DATA = JSON.parse(block.textContent ?? '{}');
     apply();
 }
+
+let readFailed = false;
+const READ_FAILED = 'kyu did not answer, so this page may be out of date.';
+/**
+ * Read the page again with the components' own states: `visible` lays the busy card over the tables and the
+ * detail pane while it reads (a Retry); a failure turns every table and the detail pane into their failed state
+ * with Try again. The automatic refresh does neither: it keeps the stale data and the refresh control says so.
+ * @param {boolean} [visible]
+ */
+async function reload(visible = false) {
+    const tables = [subsTable, deadTable];
+    if (visible) {
+        for (const t of tables) t?.state('loading');
+        setPaneState(mdRoot, 'loading');
+    }
+    try {
+        await load();
+    } catch {
+        readFailed = true;
+        for (const t of tables) t?.fail(READ_FAILED);
+        setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
+        return;
+    }
+    if (visible || readFailed) {
+        readFailed = false;
+        for (const t of tables) t?.state('ready');
+        setPaneState(mdRoot, 'ready');
+    }
+}
+for (const el of [subsTableEl, deadTableEl]) el.addEventListener('kp-datatable-retry', () => void reload(true));
 
 function apply() {
     renderHeader();

@@ -9,12 +9,13 @@
 import { setIdmark, idmarkColours } from '/static/kp/js/idmark.js';
 import { setAgo, agoMoment } from '/static/kp/js/freshness.js';
 import { setBullets } from '/static/kp/js/bullets.js';
-import { setProgress } from '/static/kp/js/progressbar.js';
+import { setProgress, setIndeterminate } from '/static/kp/js/progressbar.js';
 import { dataTable } from '/static/kp/js/datatable.js';
 import { undoToast } from '/static/kp/js/undo-toast.js';
 import { setSelectionResult } from '/static/kp/js/selection-bar.js';
 import { GANTT_STEPS, setGanttRuns, setGanttState, setGanttPoints, setGanttKinds, setGanttZones, setGanttWindow } from '/static/kp/js/gantt.js';
 import { setRequests, setRequestsState } from '/static/kp/js/request-inspector.js';
+import { setCardState, CARD_RETRY_EVENT } from '/static/kp/js/card-state.js';
 import { setUptime } from '/static/kp/js/uptime.js';
 import { setStrings } from '/static/kp/js/strings.js';
 
@@ -112,6 +113,8 @@ function counts() {
 
 /** Today's delivered count, once the daily statistics answered; null before and after a failure. @type {number | null} */
 let deliveredToday = null;
+/** Where the daily statistics are: the drain bar is indeterminate while they load. @type {'loading' | 'ready' | 'error'} */
+let dailyState = 'loading';
 
 function drawGauges() {
     const age = $('#ky-bullets-age');
@@ -151,6 +154,13 @@ function drawGauges() {
     const bar = $('#ky-drain');
     const readout = $('#ky-drain-readout');
     if (!bar || !readout) return;
+    if (dailyState === 'loading') {
+        // The package's own busy bar while the answer is on its way.
+        setIndeterminate(bar, true);
+        readout.textContent = '';
+        return;
+    }
+    setIndeterminate(bar, false);
     if (deliveredToday === null) {
         bar.setAttribute('aria-valuemax', '1');
         setProgress(bar, 0);
@@ -281,6 +291,7 @@ async function loadAttempts(id) {
     if (!gantt || !requests || !title) return;
     currentMessage = id;
     title.textContent = `Message ${id}`;
+    setCardState(/** @type {HTMLElement} */ ($('[data-ky-gantt-card]')), 'ready');
     setGanttState(gantt, 'loading', 'Reading the attempts');
     setRequestsState(requests, 'loading');
     let answer;
@@ -288,7 +299,8 @@ async function loadAttempts(id) {
         answer = await getJson(`${SUB}/attempts?id=${encodeURIComponent(id)}`);
     } catch {
         if (currentMessage !== id) return;
-        setGanttState(gantt, 'error', 'kyu could not read the attempts of this message.');
+        // The timeline has no failed plate or Retry of its own: the card around it carries the failed state.
+        setCardState(/** @type {HTMLElement} */ ($('[data-ky-gantt-card]')), 'error', { title: 'Could not read the attempts', text: 'kyu did not answer for this message.' });
         setRequestsState(requests, 'error', { message: 'kyu could not read the attempts of this message.' });
         return;
     }
@@ -365,6 +377,7 @@ function initAttempts() {
         { kind: 'ack', label: 'Acked', shape: 'diamond', tone: 'success' },
     ]);
     requests.addEventListener('kp-requests-retry', () => void loadAttempts(currentMessage));
+    $('[data-ky-gantt-card]')?.addEventListener(CARD_RETRY_EVENT, () => void loadAttempts(currentMessage));
     document.addEventListener('kp-bullets-pick', (event) => {
         const key = /** @type {CustomEvent<{ key: string }>} */ (event).detail?.key;
         if (key && items.has(key)) void loadAttempts(key);
@@ -389,28 +402,27 @@ function dayBefore(key, back) {
 }
 
 async function initUptime() {
+    dailyAnswer = undefined;
+    dailyState = 'loading';
+    drawGauges();
     const el = $('#ky-uptime-strip');
     if (!el) return;
+    setCardState(/** @type {HTMLElement} */ ($('[data-ky-uptime-card]')), 'ready');
     setUptime(el, { label: DATA.subscription, state: 'loading', count: 90, from: '90 days ago', to: 'Today' });
     let answer;
     try {
         answer = await daily();
     } catch {
-        setUptime(el, {
-            label: DATA.subscription,
-            from: '90 days ago',
-            to: 'Today',
-            state: 'error',
-            error: 'kyu could not read the daily statistics.',
-            periods: Array.from({ length: 90 }, (_, i) => ({ key: String(i), label: '', state: /** @type {any} */ ('none') })),
-            count: 90,
-        });
+        dailyState = 'error';
+        // The strip has no Retry of its own: the card around it carries the failed state with Try again.
+        setCardState(/** @type {HTMLElement} */ ($('[data-ky-uptime-card]')), 'error', { title: 'Could not read the daily statistics', text: 'kyu did not answer.' });
         drawGauges();
         return;
     }
     /** @type {Map<string, { delivered: number, dead: number }>} */
     const byDay = new Map(answer.days.map((/** @type {any} */ d) => [d.day, d]));
     const newest = answer.days.length > 0 ? answer.days[answer.days.length - 1].day : new Date().toISOString().slice(0, 10);
+    dailyState = 'ready';
     deliveredToday = byDay.get(newest)?.delivered ?? 0;
     const periods = Array.from({ length: 90 }, (_, i) => {
         const key = dayBefore(newest, 89 - i);
@@ -431,6 +443,8 @@ async function initUptime() {
     setUptime(el, { label: DATA.subscription, from: '90 days ago', to: 'Today', state: any ? 'ready' : 'empty', open: 'info', periods: any ? periods : [], count: 90 });
     drawGauges();
 }
+
+$('[data-ky-uptime-card]')?.addEventListener(CARD_RETRY_EVENT, () => void initUptime());
 
 onReady(() => {
     initHeader();
