@@ -26,7 +26,7 @@ import { setSelectionBusy, setSelectionResult } from '/static/kp/js/selection-ba
 import { statePlate } from '/static/kp/js/state-plate.js';
 import { openBusyCard } from '/static/kp/js/busy-card.js';
 import { attachArt } from '/static/kp/js/art.js';
-import { setSegmentedCounts } from '/static/kp/js/segmented.js';
+import { setSegmentedCounts, setSegmentedValues } from '/static/kp/js/segmented.js';
 import { setAgo } from '/static/kp/js/freshness.js';
 
 /** @param {string} sel @param {ParentNode} [root] @returns {HTMLElement | null} */
@@ -449,6 +449,13 @@ filterGroup.addEventListener('kp-segmented-change', (event) => {
     const { values } = /** @type {CustomEvent} */ (event).detail;
     subsTable?.filter(1, values.length ? values : null);
 });
+
+// The table's own "Clear the filter" empties its filters; the state chips
+// follow it back to All, without firing their change event a second time.
+filterGroup
+    .closest('section')
+    ?.querySelector('[data-kp-datatable-clear]')
+    ?.addEventListener('click', () => setSegmentedValues(filterGroup, []));
 
 /** @param {any} s @param {string} state */
 function setSubState(s, state) {
