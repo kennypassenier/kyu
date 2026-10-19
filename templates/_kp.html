@@ -83,27 +83,35 @@
           data-kp-destructive data-kp-confirm="Delete every dead letter on this hub? Nothing can bring them back."
           data-kp-confirm-type="prune" data-kp-confirm-label="Prune dead letters">Prune dead letters</button>
 
-  <section id="kyu-uses" class="kyu-uses" aria-labelledby="kyu-uses-title">
-    <h2 id="kyu-uses-title" class="kyu-uses__title">Who reads what</h2>
-    <p class="kyu-uses__lead text-secondary">Every topic and the apps that read it, a line for each subscription. A line is red when the subscription has a dead letter, amber when a lease ran out, muted when it is archived.</p>
+  <section id="kyu-uses" class="kyu-uses kp-formgrid" aria-labelledby="kyu-uses-title">
+    <h2 id="kyu-uses-title" class="kyu-uses__title" data-kp-formgrid-span="all">Who reads what</h2>
+    <p class="kyu-uses__lead text-secondary" data-kp-formgrid-span="all">Every topic and the apps that read it, a line for each subscription. A line is red when the subscription has a dead letter, amber when a lease ran out, muted when it is archived.</p>
 
-    <div class="kyu-uses__block" aria-labelledby="kyu-uses-map-title">
-      <h3 class="kyu-uses__name" id="kyu-uses-map-title">Topics and apps</h3>
-      <div class="kyu-uses__control kp-segmented" data-kp-segmented="single" data-kyu-switch="view" role="radiogroup" aria-label="View">
-        <button type="button" class="kp-segmented__item" data-value="lines" role="radio" aria-checked="true"><span class="kp-segmented__label">Map</span></button>
-        <button type="button" class="kp-segmented__item" data-value="grid" role="radio" aria-checked="false"><span class="kp-segmented__label">Grid</span></button>
+    <div class="kp-formgrid__group" aria-labelledby="kyu-uses-map-title">
+      <div class="kp-formgrid__row">
+        <h3 class="kp-formgrid__label" id="kyu-uses-map-title">Topics and apps</h3>
+        <div class="kp-formgrid__control">
+          <div class="kp-segmented" data-kp-segmented="single" data-kyu-switch="view" role="radiogroup" aria-label="View">
+            <button type="button" class="kp-segmented__item" data-value="lines" role="radio" aria-checked="true"><span class="kp-segmented__label">Map</span></button>
+            <button type="button" class="kp-segmented__item" data-value="grid" role="radio" aria-checked="false"><span class="kp-segmented__label">Grid</span></button>
+          </div>
+        </div>
       </div>
-      <div class="kyu-uses__body kp-matrix" data-kp-matrix data-kp-view="lines" data-kp-matrix-owned data-kp-remember="kyu-uses" aria-label="Which app reads which topic" id="kyu-uses-matrix"></div>
+      <div class="kyu-uses__body kp-matrix" data-kp-formgrid-span="all" data-kp-matrix data-kp-view="lines" data-kp-matrix-owned data-kp-remember="kyu-uses" aria-label="Which app reads which topic" id="kyu-uses-matrix"></div>
     </div>
 
-    <div class="kyu-uses__block" aria-labelledby="kyu-uses-graph-title">
-      <h3 class="kyu-uses__name" id="kyu-uses-graph-title">kyu as a hub</h3>
-      <div class="kyu-uses__control kp-segmented" data-kp-segmented="single" data-kyu-switch="size" role="radiogroup" aria-label="Node size">
-        <button type="button" class="kp-segmented__item" data-value="same" role="radio" aria-checked="true"><span class="kp-segmented__label">All the same size</span></button>
-        <button type="button" class="kp-segmented__item" data-value="backlog" role="radio" aria-checked="false"><span class="kp-segmented__label">By waiting messages</span></button>
+    <div class="kp-formgrid__group" aria-labelledby="kyu-uses-graph-title">
+      <div class="kp-formgrid__row">
+        <h3 class="kp-formgrid__label" id="kyu-uses-graph-title">kyu as a hub</h3>
+        <div class="kp-formgrid__control">
+          <div class="kp-segmented" data-kp-segmented="single" data-kyu-switch="size" role="radiogroup" aria-label="Node size">
+            <button type="button" class="kp-segmented__item" data-value="same" role="radio" aria-checked="true"><span class="kp-segmented__label">All the same size</span></button>
+            <button type="button" class="kp-segmented__item" data-value="backlog" role="radio" aria-checked="false"><span class="kp-segmented__label">By waiting messages</span></button>
+          </div>
+        </div>
       </div>
-      <figure class="kyu-uses__body kp-graph kyu-graph" data-kp-graph data-kp-key="kyu-readers" aria-label="Who reads what in kyu" id="kyu-uses-graph"></figure>
-      <p class="kyu-uses__readout text-secondary" id="kyu-uses-readout" role="status">Nothing picked: every link is shown.</p>
+      <figure class="kyu-uses__body kp-graph kyu-graph" data-kp-formgrid-span="all" data-kp-graph data-kp-key="kyu-readers" aria-label="Who reads what in kyu" id="kyu-uses-graph"></figure>
+      <p class="kyu-uses__readout text-secondary" data-kp-formgrid-span="all" id="kyu-uses-readout" role="status">Nothing picked: every link is shown.</p>
     </div>
   </section>
 </template>

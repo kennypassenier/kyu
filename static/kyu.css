@@ -89,38 +89,13 @@ td.payload { max-width: 60rem; overflow-wrap: anywhere; }
     margin-block-start: var(--kp-space-xl, 2rem);
 }
 
-/* "Who reads what": ONE pair of grid tracks (a text track and a control track)
-   shared by the section head and both blocks through subgrid, so every title
-   starts on one edge, every switch ends on one edge, and every picture spans
-   both tracks. Nothing is a left-aligned flex row. */
-.kyu-uses {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    column-gap: var(--kp-space-lg, 1.5rem);
-    row-gap: var(--kp-space-md, 1rem);
-    align-items: center;
-    margin-block-start: var(--kp-space-xl, 2rem);
-}
-.kyu-uses__title { grid-column: 1 / -1; margin: 0; }
-.kyu-uses__lead { grid-column: 1 / -1; margin: 0; max-inline-size: 80ch; }
-.kyu-uses__block {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: subgrid;
-    row-gap: var(--kp-space-sm, 0.5rem);
-    align-items: center;
-    margin-block-start: var(--kp-space-md, 1rem);
-}
-.kyu-uses__name { grid-column: 1; margin: 0; font-size: 1.05rem; }
-.kyu-uses__control { grid-column: 2; justify-self: end; }
-.kyu-uses__body { grid-column: 1 / -1; min-inline-size: 0; }
-.kyu-uses__readout { grid-column: 1 / -1; margin: 0; font-size: 0.85rem; }
+/* "Who reads what" stands on the package's form grid (.kp-formgrid): the title and sentence span the grid, each block
+   is a group whose name sits in the label track and whose switch sits on the control edge; the picture spans. */
+.kyu-uses { margin-block-start: var(--kp-space-xl, 2rem); }
+.kyu-uses__title, .kyu-uses__lead { margin: 0; }
+.kyu-uses__lead { max-inline-size: 80ch; }
+.kyu-uses__readout { margin: 0; font-size: 0.85rem; }
 .kyu-graph { min-block-size: 26rem; }
-@media (max-width: 40rem) {
-    .kyu-uses, .kyu-uses__block { grid-template-columns: minmax(0, 1fr); }
-    .kyu-uses__name, .kyu-uses__control, .kyu-uses__body, .kyu-uses__readout { grid-column: 1; }
-    .kyu-uses__control { justify-self: stretch; }
-}
 
 /* The nav keeps its brand, links, Help, theme and Log out on ONE row at every
    width (the Help button used to push "Apps" onto a second line at 390 px):
