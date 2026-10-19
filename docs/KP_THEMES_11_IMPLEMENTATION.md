@@ -61,3 +61,13 @@ Schema 7 adds, with a migration that keeps the store's existing data:
   sampled by the sweeper every 5 minutes, kept 48 hours.
 
 Every growing table has its cap from the start.
+
+## Next kp-themes version
+
+kp-themes main (860e46ec) adds `.kp-formgrid`, the required layout for
+label | value | control rows, and a 1 px alignment check. When chassis-rs
+ships a kp-themes release with it, move kyu's hand-made grids onto it:
+the phone card label | value grid in `topics.css` and `subscription.css`,
+the topic cell grid, the palette rows and the who-reads-what tracks in
+`kyu.css`, and the Topic page's command and publish grids in `topic.css`.
+The same release carries formal's graph loading (no kyu change needed).
