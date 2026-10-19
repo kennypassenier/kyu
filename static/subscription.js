@@ -9,7 +9,7 @@
 import { setIdmark, idmarkColours } from '/static/kp/js/idmark.js';
 import { setAgo, agoMoment } from '/static/kp/js/freshness.js';
 import { setBullets } from '/static/kp/js/bullets.js';
-import { setProgress, setIndeterminate } from '/static/kp/js/progressbar.js';
+import { setProgress, setIndeterminate, setProgressFailed } from '/static/kp/js/progressbar.js';
 import { dataTable } from '/static/kp/js/datatable.js';
 import { undoToast } from '/static/kp/js/undo-toast.js';
 import { setSelectionResult } from '/static/kp/js/selection-bar.js';
@@ -136,8 +136,9 @@ function drawGauges() {
         for (const el of [age, attempts]) setBullets(el, { ...common, state, message: 'Could not read the gauges', emptyText: 'kyu did not answer.', rows: [], threshold: 1, max: 2 });
         const bar = $('#ky-drain');
         const readout = $('#ky-drain-readout');
-        if (bar) setIndeterminate(bar, state === 'loading');
-        if (readout) readout.textContent = state === 'error' ? 'Delivery counts for today are not available.' : '';
+        if (bar && state === 'error') setProgressFailed(bar, { title: 'Delivery counts for today are not available' });
+        else if (bar) setIndeterminate(bar, true);
+        if (readout) readout.textContent = '';
         return;
     }
     setBullets(age, {
@@ -175,9 +176,8 @@ function drawGauges() {
     }
     setIndeterminate(bar, false);
     if (deliveredToday === null) {
-        bar.setAttribute('aria-valuemax', '1');
-        setProgress(bar, 0);
-        readout.textContent = 'Delivery counts for today are not available.';
+        setProgressFailed(bar, { title: 'Delivery counts for today are not available', text: 'kyu did not answer.' });
+        readout.textContent = '';
         return;
     }
     const total = deliveredToday + pending + claimed;
@@ -498,6 +498,7 @@ async function initUptime() {
 }
 
 $('#ky-uptime-strip')?.addEventListener('kp-uptime-retry', () => void initUptime());
+$('#ky-drain')?.addEventListener('kp-progressbar-retry', () => void (pageState === 'error' ? readPage() : initUptime()));
 
 // ---------------------------------------------------------------- reading the page itself
 const policyCard = () => /** @type {HTMLElement | null} */ ($('#ky-policy'));
