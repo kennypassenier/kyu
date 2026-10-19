@@ -17,6 +17,7 @@ import { GANTT_STEPS, setGanttRuns, setGanttState, setGanttPoints, setGanttKinds
 import { setRequests, setRequestsState } from '/static/kp/js/request-inspector.js';
 import { setCardState, CARD_RETRY_EVENT } from '/static/kp/js/card-state.js';
 import { setUptime } from '/static/kp/js/uptime.js';
+import { setCode } from '/static/kp/js/code.js';
 import { setStrings } from '/static/kp/js/strings.js';
 
 /** @param {string} sel @param {ParentNode} [root] @returns {HTMLElement | null} */
@@ -115,6 +116,8 @@ function counts() {
 let deliveredToday = null;
 /** Where the daily statistics are: the drain bar is indeterminate while they load. @type {'loading' | 'ready' | 'error'} */
 let dailyState = 'loading';
+/** Where the read of this page is (the policy, the gauges, the backlog): every one of them shows the same state. @type {'loading' | 'ready' | 'error'} */
+let pageState = 'loading';
 
 function drawGauges() {
     const age = $('#ky-bullets-age');
@@ -127,6 +130,16 @@ function drawGauges() {
     // Only the oldest message still on the page counts when the page lists fewer than exist.
     const oldest = held.length === 0 ? null : Math.min(...held.map((item) => item.published_ms));
     const common = { sort: /** @type {const} */ ('worst'), emptyTitle: 'Nothing is held', emptyText: `${DATA.subscription} has acknowledged everything it was handed.` };
+    if (pageState !== 'ready') {
+        // The page is being read, or kyu did not answer: both gauges say so with their own states (and Retry).
+        const state = /** @type {'loading' | 'error'} */ (pageState);
+        for (const el of [age, attempts]) setBullets(el, { ...common, state, message: 'Could not read the gauges', emptyText: 'kyu did not answer.', rows: [], threshold: 1, max: 2 });
+        const bar = $('#ky-drain');
+        const readout = $('#ky-drain-readout');
+        if (bar) setIndeterminate(bar, state === 'loading');
+        if (readout) readout.textContent = state === 'error' ? 'Delivery counts for today are not available.' : '';
+        return;
+    }
     setBullets(age, {
         ...common,
         state: oldest === null ? 'empty' : 'ready',
@@ -183,6 +196,8 @@ function drawCounts() {
 }
 
 // ---------------------------------------------------------------- the backlog
+/** Set by initBacklog: take the rows of a freshly read page. @type {(doc: Document) => void} */
+let swapRows = () => undefined;
 function initBacklog() {
     const wrap = $('#ky-backlog-table');
     const bar = $('#ky-bar');
@@ -265,6 +280,23 @@ function initBacklog() {
         const id = /** @type {HTMLInputElement | null} */ (form.querySelector('input[name="id"]'))?.value;
         if (id) remove([id], 6000);
     });
+    /**
+     * Put the rows of a freshly read page in the table (a read while an Undo window is open leaves them alone).
+     * @param {Document} doc
+     */
+    swapRows = (doc) => {
+        // Rows waiting out an Undo window stay out until it closes.
+        const waiting = new Set([...parked.keys()].map((row) => row.dataset.kpRowKey));
+        const fresh = $$('#ky-backlog-table tbody tr[data-kp-row-key]', doc)
+            .filter((row) => !waiting.has(row.dataset.kpRowKey))
+            .map((row) => /** @type {HTMLElement} */ (document.importNode(row, true)));
+        body.replaceChildren(...fresh);
+        byKey.clear();
+        for (const row of fresh) byKey.set(row.dataset.kpRowKey ?? '', row);
+        for (const el of $$('[data-ky-moment]', body)) el.textContent = agoMoment(Number(el.dataset.kyMoment));
+        void import('/static/kp/js/auto.js').then((auto) => auto.attachAll(body));
+        handle()?.refresh();
+    };
     wrap.addEventListener('click', (event) => {
         const button = event.target instanceof Element ? event.target.closest('[data-ky-attempts]') : null;
         const id = button?.getAttribute('data-ky-attempts');
@@ -291,7 +323,6 @@ async function loadAttempts(id) {
     if (!gantt || !requests || !title) return;
     currentMessage = id;
     title.textContent = `Message ${id}`;
-    setCardState(/** @type {HTMLElement} */ ($('[data-ky-gantt-card]')), 'ready');
     setGanttState(gantt, 'loading', 'Reading the attempts');
     setRequestsState(requests, 'loading');
     let answer;
@@ -299,8 +330,7 @@ async function loadAttempts(id) {
         answer = await getJson(`${SUB}/attempts?id=${encodeURIComponent(id)}`);
     } catch {
         if (currentMessage !== id) return;
-        // The timeline has no failed plate or Retry of its own: the card around it carries the failed state.
-        setCardState(/** @type {HTMLElement} */ ($('[data-ky-gantt-card]')), 'error', { title: 'Could not read the attempts', text: 'kyu did not answer for this message.' });
+        setGanttState(gantt, 'error', 'Could not read the attempts', { text: 'kyu did not answer for this message.' });
         setRequestsState(requests, 'error', { message: 'kyu could not read the attempts of this message.' });
         return;
     }
@@ -377,7 +407,7 @@ function initAttempts() {
         { kind: 'ack', label: 'Acked', shape: 'diamond', tone: 'success' },
     ]);
     requests.addEventListener('kp-requests-retry', () => void loadAttempts(currentMessage));
-    $('[data-ky-gantt-card]')?.addEventListener(CARD_RETRY_EVENT, () => void loadAttempts(currentMessage));
+    gantt.addEventListener('kp-gantt-retry', () => void loadAttempts(currentMessage));
     document.addEventListener('kp-bullets-pick', (event) => {
         const key = /** @type {CustomEvent<{ key: string }>} */ (event).detail?.key;
         if (key && items.has(key)) void loadAttempts(key);
@@ -407,15 +437,13 @@ async function initUptime() {
     drawGauges();
     const el = $('#ky-uptime-strip');
     if (!el) return;
-    setCardState(/** @type {HTMLElement} */ ($('[data-ky-uptime-card]')), 'ready');
     setUptime(el, { label: DATA.subscription, state: 'loading', count: 90, from: '90 days ago', to: 'Today' });
     let answer;
     try {
         answer = await daily();
     } catch {
         dailyState = 'error';
-        // The strip has no Retry of its own: the card around it carries the failed state with Try again.
-        setCardState(/** @type {HTMLElement} */ ($('[data-ky-uptime-card]')), 'error', { title: 'Could not read the daily statistics', text: 'kyu did not answer.' });
+        setUptime(el, { label: DATA.subscription, state: 'error', error: 'Could not read the daily statistics', text: 'kyu did not answer.', count: 90, from: '90 days ago', to: 'Today' });
         drawGauges();
         return;
     }
@@ -444,12 +472,72 @@ async function initUptime() {
     drawGauges();
 }
 
-$('[data-ky-uptime-card]')?.addEventListener(CARD_RETRY_EVENT, () => void initUptime());
+$('#ky-uptime-strip')?.addEventListener('kp-uptime-retry', () => void initUptime());
+
+// ---------------------------------------------------------------- reading the page itself
+const policyCard = () => /** @type {HTMLElement | null} */ ($('#ky-policy'));
+const backlogTable = () => {
+    const el = $('#ky-backlog-table');
+    return el ? dataTable(el) : null;
+};
+const PAGE_FAILED = 'kyu did not answer, so this page may be out of date.';
+
+/** The policy card, the gauges and the backlog table are one read of the page: they show its state together. @param {'loading' | 'ready' | 'error'} state */
+function showPageState(state) {
+    pageState = state;
+    const card = policyCard();
+    if (card) {
+        if (state === 'error') setCardState(card, 'error', { title: 'Could not read the policy', text: 'kyu did not answer.' });
+        else setCardState(card, state);
+    }
+    const table = backlogTable();
+    // The payload cells wait with the rows (a cell code view is skeleton while it loads).
+    if (state !== 'ready') for (const fig of $$('#ky-backlog-table [data-kp-code]')) setCode(fig, { cell: true, state, message: state === 'error' ? PAGE_FAILED : undefined });
+    if (state === 'loading') {
+        table?.state('loading');
+    } else if (state === 'error') table?.fail(PAGE_FAILED);
+    else table?.state('ready');
+    drawGauges();
+}
+
+/** Read this page again: its data block, the policy and the backlog rows. */
+async function readPage() {
+    showPageState('loading');
+    try {
+        const response = await fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+        if (!response.ok) throw new Error(`the page answered ${response.status}`);
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const block = doc.getElementById('ky-page-data');
+        if (!block) throw new Error('the page had no data');
+        const fresh = JSON.parse(block.textContent ?? '{}');
+        items.clear();
+        for (const item of fresh.items ?? []) items.set(item.id, item);
+        const policy = $('#ky-policy .kp-kv', doc);
+        const here = $('#ky-policy .kp-kv');
+        if (policy && here) {
+            here.replaceWith(document.importNode(policy, true));
+            for (const el of $$('#ky-policy [data-ky-moment]')) el.textContent = agoMoment(Number(el.dataset.kyMoment));
+        }
+        swapRows(doc);
+        drawCounts();
+    } catch {
+        showPageState('error');
+        return;
+    }
+    showPageState('ready');
+}
+for (const id of ['ky-bullets-age', 'ky-bullets-attempts']) document.getElementById(id)?.addEventListener('kp-bullets-retry', () => void readPage());
+policyCard()?.addEventListener(CARD_RETRY_EVENT, () => void readPage());
+$('#ky-backlog-table')?.addEventListener('kp-datatable-retry', () => void readPage());
 
 onReady(() => {
     initHeader();
+    pageState = 'loading';
     drawGauges();
     initBacklog();
     initAttempts();
     void initUptime();
+    // The first read is a real one with the components' own states: the server-drawn page stands behind the busy
+    // cards until kyu has answered.
+    void readPage();
 });

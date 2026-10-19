@@ -137,7 +137,11 @@
             </table>
           </div>
           <div class="kp-empty" data-kp-datatable-empty hidden>
-            <div class="kp-empty" data-kp-art="nomatch" data-kp-datatable-empty-nomatch>
+            <div data-kp-art="none" data-kp-datatable-empty-none>
+              <p class="kp-empty__title">Nothing has polled this topic yet</p>
+              <p class="kp-empty__body">A subscription shows up here the first time something polls {{ topic.name }}.</p>
+            </div>
+            <div data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden>
               <p class="kp-empty__title">No subscription matches</p>
               <p class="kp-empty__body">Loosen the filter above.</p>
               <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filter</button>
@@ -186,11 +190,11 @@
           </table>
         </div>
         <div class="kp-empty" data-kp-datatable-empty hidden>
-          <div class="kp-empty" data-kp-art="done" data-kp-datatable-empty-none>
+          <div data-kp-art="done" data-kp-datatable-empty-none>
             <p class="kp-empty__title">Nothing is dead</p>
             <p class="kp-empty__body">Every message on {{ topic.name }} was delivered or is still waiting.</p>
           </div>
-          <div class="kp-empty" data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden>
+          <div data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden>
             <p class="kp-empty__title">No dead letter matches</p>
             <p class="kp-empty__body">Loosen the search or the filter.</p>
             <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filter</button>
@@ -251,8 +255,7 @@
           <span class="kp-field__error" data-kp-field-error hidden></span>
         </div>
         <div class="kt-submit">
-          <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-flash-button
-            data-kp-flash-words="Published,Refused,Failed" data-kp-flash-word="Published" data-kp-refusal="line">Publish test message</button>
+          <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-submit data-kp-busy="Publishing">Publish test message</button>
         </div>
       </div>
     </form>

@@ -297,16 +297,13 @@ if (main) {
 
 // ── who reads what (Topics page) ────────────────────────────────────────────────────────────────
 
-/** @param {HTMLElement} section the section from the template; it goes below the topics table */
-function mountUses(section) {
-    const match = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-matrix'));
-    const topicOptions = all('#kyu-palette [data-kyu-topic]:not([data-kyu-sub])');
-    const subOptions = all('#kyu-palette [data-kyu-sub]');
-    const target = one('main .kp-datatable, main .kp-table-wrap, main table');
-    const host = one('main');
-    if (target) (target.closest('.kp-datatable') ?? target).after(section);
-    else host?.append(section);
-
+/**
+ * What the palette's options say about the hub: every topic, every subscription and its tone.
+ * @param {ParentNode} palette the palette dialog, the page's own or the one in a freshly read page
+ */
+function collectUses(palette) {
+    const topicOptions = all('[data-kyu-topic]:not([data-kyu-sub])', palette);
+    const subOptions = all('[data-kyu-sub]', palette);
     const topics = topicOptions.map((o) => ({
         key: o.dataset.kyuTopic ?? '',
         label: o.dataset.kyuTopic ?? '',
@@ -318,52 +315,6 @@ function mountUses(section) {
     const edges = new Map(
         subOptions.map((o) => [`${o.dataset.kyuTopic}|${o.dataset.kyuSub}`, { tone: o.dataset.kyuTone, label: o.dataset.kyuDetail }]),
     );
-    const spec = {
-        corner: 'Topic ↓ app →',
-        rows: topics,
-        columns: apps,
-        cell: (row, column) => edges.get(`${row}|${column}`) ?? null,
-        countLabel: (n) => counted(n, 'subscription'),
-        sourcesLabel: 'Topics',
-        usersLabel: 'Apps',
-    };
-    let view = 'lines';
-    const draw = () => {
-        if (topics.length === 0 || apps.length === 0) {
-            heat.setMatrix(match, { view: 'lines', rows: [], columns: [], state: 'empty', message: 'No topic has a subscription yet' });
-        } else {
-            heat.setMatrix(match, { ...spec, view });
-        }
-    };
-    draw();
-    segmented.attachSegmented(section);
-    section.addEventListener('click', (event) => {
-        const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kyu-switch="view"] [data-value]'));
-        if (!item) return;
-        view = item.dataset.value === 'grid' ? 'grid' : 'lines';
-        draw();
-    });
-    // A view the person left on Grid last time is remembered by the matrix itself.
-    if (match.getAttribute('data-kp-view') === 'grid') {
-        view = 'grid';
-        for (const item of all('[data-kyu-switch="view"] [data-value]', section)) item.setAttribute('aria-checked', String(item.dataset.value === 'grid'));
-    }
-    mountGraph(section, subOptions);
-}
-
-/**
- * The hub-and-ring picture of the same subscriptions: kyu in the middle, a node per subscription, the link
- * kind = the subscription's state. Node size is the package's `weight`: unset (all the same) or the backlog.
- * @param {HTMLElement} section @param {HTMLElement[]} subOptions the palette's subscription options
- */
-function mountGraph(section, subOptions) {
-    const el = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-graph'));
-    const out = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-readout'));
-    const KINDS = [
-        { kind: 'active', label: 'Active', hint: 'The app is reading and acknowledging', style: 'solid', colour: 'var(--chart-1)' },
-        { kind: 'flagged', label: 'Flagged', hint: 'A message died or a lease ran out on this subscription', style: 'dash', colour: 'var(--destructive)' },
-        { kind: 'archived', label: 'Archived', hint: 'No longer reading; kept for its backlog', style: 'dot', colour: 'var(--muted-foreground)' },
-    ];
     const subs = subOptions.map((o) => ({
         id: `${o.dataset.kyuTopic}/${o.dataset.kyuSub}`,
         topic: o.dataset.kyuTopic ?? '',
@@ -372,15 +323,121 @@ function mountGraph(section, subOptions) {
         waiting: Number(o.dataset.kyuBacklog ?? 0),
         note: o.dataset.kyuDetail ?? '',
     }));
-    const most = Math.max(1, ...subs.map((s) => s.waiting));
+    return { topics, apps, edges, subs };
+}
+
+/**
+ * Read the Topics page again and take the palette out of it: the same read the automatic refresh does, so the section
+ * is in its loading state while it runs and in its failed state, with Retry, when kyu does not answer.
+ * @returns {Promise<ReturnType<typeof collectUses>>}
+ */
+async function readUses() {
+    const res = await fetch(location.pathname, { headers: { Accept: 'text/html' }, credentials: 'same-origin' });
+    if (!res.ok) throw new Error(`the page answered ${res.status}`);
+    const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+    const template = /** @type {HTMLTemplateElement | null} */ (doc.getElementById('kyu-shell'));
+    const palette = template?.content.getElementById('kyu-palette');
+    if (!palette) throw new Error('the page had no palette');
+    return collectUses(palette);
+}
+
+/** @param {HTMLElement} section the section from the template; it goes below the topics table */
+function mountUses(section) {
+    const match = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-matrix'));
+    const target = one('main .kp-datatable, main .kp-table-wrap, main table');
+    const host = one('main');
+    if (target) (target.closest('.kp-datatable') ?? target).after(section);
+    else host?.append(section);
+
+    /** @type {ReturnType<typeof collectUses> | null} */
+    let model = null;
+    let view = 'lines';
+    const drawMatrix = () => {
+        if (!model) return;
+        if (model.topics.length === 0 || model.apps.length === 0) {
+            heat.setMatrix(match, { view: 'lines', rows: [], columns: [], state: 'empty', message: 'No topic has a subscription yet' });
+            return;
+        }
+        const { edges } = model;
+        heat.setMatrix(match, {
+            corner: 'Topic ↓ app →',
+            rows: model.topics,
+            columns: model.apps,
+            cell: (row, column) => edges.get(`${row}|${column}`) ?? null,
+            countLabel: (n) => counted(n, 'subscription'),
+            sourcesLabel: 'Topics',
+            usersLabel: 'Apps',
+            view,
+        });
+    };
+    segmented.attachSegmented(section);
+    section.addEventListener('click', (event) => {
+        const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kyu-switch="view"] [data-value]'));
+        if (!item) return;
+        view = item.dataset.value === 'grid' ? 'grid' : 'lines';
+        drawMatrix();
+    });
+    // A view the person left on Grid last time is remembered by the matrix itself.
+    if (match.getAttribute('data-kp-view') === 'grid') {
+        view = 'grid';
+        for (const item of all('[data-kyu-switch="view"] [data-value]', section)) item.setAttribute('aria-checked', String(item.dataset.value === 'grid'));
+    }
+    const drawGraph = mountGraph(section, () => model);
+
+    /** Read the hub again: loading, then the matrix and the graph, or the failed plate of each. */
+    const read = async () => {
+        heat.setMatrix(match, { view: 'lines', rows: [], columns: [], state: 'loading' });
+        drawGraph('loading');
+        try {
+            model = await readUses();
+        } catch {
+            model = null;
+            heat.setMatrix(match, { view: 'lines', rows: [], columns: [], state: 'error', message: 'Could not read who reads what' });
+            drawGraph('error');
+            return;
+        }
+        drawMatrix();
+        drawGraph('ready');
+    };
+    // The packages' own Retry buttons fire these (heat.js MATRIX_RETRY_EVENT, graph.js GRAPH_RETRY_EVENT).
+    match.addEventListener('kp-matrix-retry', () => void read());
+    section.querySelector('#kyu-uses-graph')?.addEventListener('kp-graph-retry', () => void read());
+    // attachGraphs draws its loading state itself; the first read follows once it has.
+    requestAnimationFrame(() => void read());
+}
+
+/**
+ * The hub-and-ring picture of the same subscriptions: kyu in the middle, a node per subscription, the link
+ * kind = the subscription's state. Node size is the package's `weight`: unset (all the same) or the backlog.
+ * @param {HTMLElement} section @param {() => ReturnType<typeof collectUses> | null} current the subscriptions last read
+ * @returns {(state: 'loading' | 'ready' | 'error') => void} draw the picture in that state
+ */
+function mountGraph(section, current) {
+    const el = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-graph'));
+    const out = /** @type {HTMLElement} */ (section.querySelector('#kyu-uses-readout'));
+    const KINDS = [
+        { kind: 'active', label: 'Active', hint: 'The app is reading and acknowledging', style: 'solid', colour: 'var(--chart-1)' },
+        { kind: 'flagged', label: 'Flagged', hint: 'A message died or a lease ran out on this subscription', style: 'dash', colour: 'var(--destructive)' },
+        { kind: 'archived', label: 'Archived', hint: 'No longer reading; kept for its backlog', style: 'dot', colour: 'var(--muted-foreground)' },
+    ];
     let bySize = false;
     graph.attachGraphs(section);
-    graph.setGraphState(el, 'loading', 'Reading the subscriptions from kyu.');
-    const draw = () => {
+    /** @param {'loading' | 'ready' | 'error'} state */
+    const draw = (state) => {
+        if (state === 'loading') {
+            graph.setGraphState(el, 'loading', 'Reading the subscriptions from kyu.');
+            return;
+        }
+        if (state === 'error') {
+            graph.setGraphState(el, 'error', 'Could not read who reads what', { text: 'kyu did not answer.' });
+            return;
+        }
+        const subs = current()?.subs ?? [];
         if (subs.length === 0) {
             graph.setGraphState(el, 'empty', 'Nothing to draw yet: no topic has a subscription.');
             return;
         }
+        const most = Math.max(1, ...subs.map((s) => s.waiting));
         graph.setGraphData(el, {
             hub: 'kyu',
             kinds: KINDS,
@@ -397,13 +454,11 @@ function mountGraph(section, subOptions) {
             edges: subs.map((s) => ({ from: 'kyu', to: s.id, kind: s.kind, detail: `${counted(s.waiting, 'message')} waiting, ${s.note}` })),
         });
     };
-    // attachGraphs draws its loading state itself; the data follows once it has.
-    requestAnimationFrame(draw);
     section.addEventListener('click', (event) => {
         const item = /** @type {HTMLElement | null} */ ((/** @type {Element} */ (event.target)).closest('[data-kyu-switch="size"] [data-value]'));
         if (!item) return;
         bySize = item.dataset.value === 'backlog';
-        draw();
+        draw('ready');
     });
     el.addEventListener(graph.GRAPH_CHANGE_EVENT, (event) => {
         const { selected, hiddenKinds } = /** @type {CustomEvent} */ (event).detail;
@@ -412,4 +467,5 @@ function mountGraph(section, subOptions) {
             (selected.length ? `Picked: ${selected.join(', ')}.` : 'Nothing picked.') +
             (hiddenKinds.length ? ` Hidden: ${hiddenKinds.map(name).join(', ')}.` : ' Every kind of link is shown.');
     });
+    return draw;
 }

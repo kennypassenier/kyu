@@ -22,6 +22,7 @@ import { setCode } from '/static/kp/js/code.js';
 import { masterDetail, setPaneState } from '/static/kp/js/master-detail.js';
 import { openViewer } from '/static/kp/js/viewer.js';
 import { runFlashButton } from '/static/kp/js/flash.js';
+import { form as formHandle } from '/static/kp/js/forms.js';
 import { setSelectionBusy, setSelectionResult } from '/static/kp/js/selection-bar.js';
 import { statePlate } from '/static/kp/js/state-plate.js';
 import { openBusyCard } from '/static/kp/js/busy-card.js';
@@ -941,6 +942,15 @@ function openPayload(m, opener = null) {
 }
 
 const detailBody = /** @type {HTMLElement} */ ($('[data-kt-md-body]', recent));
+/** The payload block of the open message and what it was drawn with, so a read can put it in loading, failed and back. @type {{ fig: HTMLElement, spec: any } | null} */
+let detailCode = null;
+/** @param {'loading' | 'error' | 'ready'} state @param {string} [message] */
+function setDetailCode(state, message) {
+    if (!detailCode) return;
+    const { fig, spec } = detailCode;
+    if (state === 'ready') setCode(fig, spec);
+    else setCode(fig, { ...spec, state, message });
+}
 /** @param {string} id */
 let filledId = '';
 function fillDetail(id) {
@@ -984,7 +994,7 @@ function fillDetail(id) {
     );
     actions.append(open, replay);
     detailBody.append(facts, fig, actions);
-    setCode(fig, {
+    const spec = {
         text: m.payload.text,
         title: 'Payload',
         language: 'JSON',
@@ -992,7 +1002,9 @@ function fillDetail(id) {
         maxLines: 12,
         size: bytesText(m.payload.bytes),
         state: m.payload.binary ? 'binary' : m.payload.text === '' ? 'empty' : 'ready',
-    });
+    };
+    detailCode = { fig, spec };
+    setCode(fig, spec);
     if (booted) attachAll?.(actions);
 }
 
@@ -1047,15 +1059,24 @@ mdRoot.addEventListener('kp-pane-retry', () => void reload(true));
 const form = /** @type {HTMLFormElement} */ (document.getElementById('kt-publish-form'));
 const area = /** @type {HTMLTextAreaElement} */ (document.getElementById('kt-publish-body'));
 const delayField = /** @type {HTMLInputElement | null} */ (document.getElementById('kt-publish-delay'));
-const sendButton = /** @type {HTMLElement} */ (document.getElementById('kt-publish-send'));
 form.addEventListener('submit', (event) => event.preventDefault());
-form.addEventListener('kp-form-valid', () => {
-    void runFlashButton(sendButton, async () => {
+// The package's own form: data-kp-submit shows the busy state while the message goes out, `done()` ends it, and a
+// refusal stands in the form's summary and under the field it is about (forms.js, form(el).errors).
+form.addEventListener('kp-form-valid', (event) => {
+    const { done } = /** @type {CustomEvent<{ done: () => void }>} */ (event).detail;
+    void (async () => {
         const r = await call(`${T}/publish`, { form: { payload: area.value, delay: delayField?.value ?? '' } });
-        if (!r.ok) return refusal(/** @type {any} */ (r));
+        done();
+        if (!r.ok) {
+            const message = sentence(/** @type {any} */ (r));
+            const handle = formHandle(form);
+            if (handle) handle.errors({ payload: message });
+            else toast(message, { sticky: true, live: 'assertive' });
+            return;
+        }
+        toast(r.json?.id ? `Published to ${TOPIC} as ${r.json.id}.` : `Published to ${TOPIC}.`);
         void reload();
-        return { word: 'Published', line: r.json?.id ? `Published as ${r.json.id}.` : `Published to ${TOPIC}.` };
-    });
+    })();
 });
 
 // ---------------------------------------------------------------- reading the page again
@@ -1098,6 +1119,7 @@ async function reload(visible = false) {
     if (visible) {
         for (const t of tables) t?.state('loading');
         setPaneState(mdRoot, 'loading');
+        setDetailCode('loading');
     }
     try {
         await load();
@@ -1105,12 +1127,14 @@ async function reload(visible = false) {
         readFailed = true;
         for (const t of tables) t?.fail(READ_FAILED);
         setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
+        setDetailCode('error', READ_FAILED);
         return;
     }
     if (visible || readFailed) {
         readFailed = false;
         for (const t of tables) t?.state('ready');
         setPaneState(mdRoot, 'ready');
+        setDetailCode('ready');
     }
 }
 for (const el of [subsTableEl, deadTableEl]) el.addEventListener('kp-datatable-retry', () => void reload(true));
@@ -1165,6 +1189,9 @@ updateCounts();
     }
 }
 
+// The first read is a real one, with the components' own loading and failed states: the page's server-drawn rows
+// stand behind the busy card until kyu has answered.
+void reload(true);
 await readRetention();
 renderProblems();
 
