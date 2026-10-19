@@ -154,6 +154,38 @@ pub fn pages(state: AppState) -> Router {
             post(handlers::dashboard_delete_delivery),
         )
         .route(
+            "/t/{topic}/dashboard/bulk/requeue",
+            post(handlers::dashboard_bulk_requeue),
+        )
+        .route(
+            "/t/{topic}/dashboard/bulk/delete",
+            post(handlers::dashboard_bulk_delete),
+        )
+        .route(
+            "/t/{topic}/dashboard/messages/{id}/replay",
+            post(handlers::dashboard_replay),
+        )
+        .route(
+            "/t/{topic}/dashboard/subs/{subscription}/attempts",
+            get(handlers::dashboard_attempts),
+        )
+        .route(
+            "/t/{topic}/dashboard/subs/{subscription}/daily",
+            get(handlers::dashboard_daily),
+        )
+        .route(
+            "/t/{topic}/dashboard/retention",
+            get(handlers::dashboard_retention),
+        )
+        .route(
+            "/dashboard/stats/hourly",
+            get(handlers::dashboard_stats_hourly),
+        )
+        .route(
+            "/dashboard/stats/totals",
+            get(handlers::dashboard_stats_totals),
+        )
+        .route(
             "/dashboard/dead-letters/prune",
             post(handlers::dashboard_prune_dead_letters),
         )
