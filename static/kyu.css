@@ -108,15 +108,3 @@ td.payload { max-width: 60rem; overflow-wrap: anywhere; }
     .kp-nav__links { gap: 0; }
     .kp-nav__link { padding-inline: var(--kp-space-xs, 0.35rem); }
 }
-
-/* The palette's rows sit on three shared tracks, so every label, every
-   description and every key cap starts on the same edge down the list instead
-   of floating where the previous text happened to end. */
-.kp-palette__option {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 2rem;
-    column-gap: var(--kp-space-md, 1rem);
-    align-items: center;
-}
-.kp-palette__option > .kp-palette__description { grid-column: 2; }
-.kp-palette__option > .kp-palette__keys { grid-column: 3; justify-self: end; }
