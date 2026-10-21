@@ -1113,6 +1113,21 @@ async function load() {
     apply();
 }
 
+/** Resolve once the payload block shows its failed plate (it draws after its loading card has closed), or after 1 s. */
+function codePlate() {
+    const fig = detailCode?.fig;
+    if (!fig || fig.getAttribute('data-kp-state') === 'error') return Promise.resolve();
+    return new Promise((resolve) => {
+        const watch = new MutationObserver(() => {
+            if (fig.getAttribute('data-kp-state') !== 'error') return;
+            watch.disconnect();
+            resolve(undefined);
+        });
+        watch.observe(fig, { attributes: true, attributeFilter: ['data-kp-state'] });
+        setTimeout(() => { watch.disconnect(); resolve(undefined); }, 1000);
+    });
+}
+
 let readFailed = false;
 const READ_FAILED = 'kyu did not answer, so this page may be out of date.';
 /**
@@ -1133,12 +1148,13 @@ async function reload(visible = false) {
     } catch {
         readFailed = true;
         for (const t of tables) t?.fail(READ_FAILED);
-        // With the payload block on screen its own failed plate (and Retry, kp-code-retry) says it; the pane's plate
-        // would cover it. Where the block is not on screen (a phone, nothing opened yet) the pane's plate says it.
-        const codeShown = detailCode !== null && detailCode.fig.getBoundingClientRect().width > 1;
-        if (codeShown) setPaneState(mdRoot, 'ready');
-        else setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
+        // The payload block draws its own failed plate first and the pane's plate yields to it (kp-themes 11.2.0).
+        // The block closes its loading card before it draws, so wait for its plate; where the block is not on screen
+        // (a phone, nothing opened yet) the pane's plate says it.
+        setPaneState(mdRoot, 'ready');
         setDetailCode('error', READ_FAILED);
+        await codePlate();
+        setPaneState(mdRoot, 'error', { title: 'Could not read the messages', text: READ_FAILED });
         return;
     }
     if (visible || readFailed) {
