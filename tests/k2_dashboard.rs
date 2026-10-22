@@ -243,16 +243,17 @@ async fn k2_app_tokens_issued_by_2x_keep_working_after_the_import() {
         !clients.contains(&old_token),
         "the token never appears in the page HTML"
     );
-    // The import happened once: the kit's file exists and a restart on the
-    // same directory does not duplicate anything.
+    // The import happened once: since chassis-rs 3.11.0 the kit keeps its
+    // clients in `kyu-kit.db` beside kyu's own store, so that file exists.
     assert!(
         hub.store
             .path()
             .unwrap()
             .parent()
             .unwrap()
-            .join("clients.json.enc")
-            .exists()
+            .join("kyu-kit.db")
+            .exists(),
+        "the kit's own database holds the imported apps"
     );
     hub.shutdown().await;
 }
