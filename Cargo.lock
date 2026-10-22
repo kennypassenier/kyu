@@ -287,8 +287,8 @@ dependencies = [
 
 [[package]]
 name = "chassis"
-version = "3.10.0"
-source = "git+https://github.com/kennypassenier/chassis-rs?tag=v3.10.0#83f4ca7d49d83618f7b3e9afbe514e24eabf953c"
+version = "3.13.0"
+source = "git+https://github.com/kennypassenier/chassis-rs?tag=v3.13.0#bea0848aac6940e9d2ce945738894e50e58cd00e"
 dependencies = [
  "axum",
  "axum-extra",
@@ -306,6 +306,7 @@ dependencies = [
  "minisign",
  "minisign-verify",
  "reqwest",
+ "rusqlite",
  "sd-notify",
  "secrecy",
  "serde",
