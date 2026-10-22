@@ -11,6 +11,20 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Added
+- chassis-rs 3.13.0 (kp-themes 11.2.0): kyu's messages, delivery attempts,
+  hourly statistics and backlog samples show on the kit's Storage page with
+  their size and a budget (`KYU_STORAGE_BUDGET_MB`, `KYU_STORAGE_WARN_MB`),
+  with the kit's preview and typed confirmation for a targeted delete.
+- Remembered dashboard choices (`kp-remember:` keys: sort, columns, widths,
+  the tour) follow the login across browsers.
+- `KYU_TRUSTED_ADMINS`: exact addresses that are the admin without a login.
+
+### Changed
+- The kit keeps its own data (apps, sessions, passkeys) in `kyu-kit.db`
+  beside `kyu.db`, and adds two small tables of its own to `kyu.db`.
+- webpki-roots and rustls-webpki updated (RUSTSEC-2026-0381, -0382).
+
 ## [4.3.3] - 2026-10-19
 
 ### Changed

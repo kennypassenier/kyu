@@ -107,3 +107,10 @@ stack (kp-themes c3c26699), so the Topic page's publish box gets its
 approved flash words back ("Published" / the refusal line under the
 button) next to the busy submit, instead of the toast and form summary
 kyu uses on 11.0.0.
+
+## Before the next release (Kenny, 2026-10-22)
+
+kyu shares its own `kyu.db` with the kit (`App::app_db` over kyu's file, two
+kit tables beside kyu's schema). Kenny kept that for 5.0.0 and asked to put
+the question again at the next release: rebuild kyu's store on the kit's
+storage layer, or keep sharing, with real arguments for and against.
