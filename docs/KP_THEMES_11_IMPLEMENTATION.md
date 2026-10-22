@@ -62,6 +62,26 @@ Schema 7 adds, with a migration that keeps the store's existing data:
 
 Every growing table has its cap from the start.
 
+## Chassis 3.11.0 - 3.13.0 adoption
+
+- **Storage page (3.11.0)**: `kyu::storage::declare` calls `App::app_db` on
+  the SAME `kyu.db` with kyu's own `MIGRATIONS` list as the kit's
+  migrations. `Store::open` migrates first (snapshot included), so the kit
+  finds the file at the current version and applies nothing; no table moves,
+  the schema and `/api/backup` (VACUUM INTO) are untouched, and kyu's
+  sweeper caps stay the only automatic pruning. Kinds: `messages`,
+  `attempts`, `stats_hourly`, `stats_samples` (no `finished_by_definition`).
+  `stats_daily` is not a kind: its `day` is a day number the kit cannot
+  compare. Cost to know: two openers share the file (WAL handles it) and the
+  kit adds `chassis_meta` and `chassis_prefs` outside the numbered schema.
+- **Preferences (3.12.0)**: `App::sync_browser_keys` declares the prefix
+  `kp-remember:` (every `data-kp-remember` choice, the tour-done flag
+  included). The theme key stays in the browser (read before login).
+- **Trusted admins (3.13.0)**: no code. The CT 109 environment needs
+  `KYU_TRUSTED_ADMINS=10.10.10.10` (Kenny's PC); that is the homelab's deploy
+  config, not kyu's code, and must not name the Traefik address that is
+  `KYU_TRUSTED_PROXIES` (10.10.10.4).
+
 ## Next kp-themes version
 
 kp-themes main (860e46ec) adds `.kp-formgrid`, the required layout for
