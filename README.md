@@ -208,6 +208,8 @@ consumer is an environment variable.
 | `KYU_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
 | `KYU_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
 | `KYU_EXPIRED_EVENT_WINDOW_MS` | `86400000` (1 day) | One `message.expired` event per subscription per window, carrying the count since the previous one; the first after a quiet spell goes out at once. `never` is refused. |
+| `KYU_STORAGE_BUDGET_MB` / `KYU_STORAGE_WARN_MB` | `50` / `40` | Chassis 3.11.0: the size the store may reach before the status page and `/metrics` warn (it never refuses a write); also settable on the Storage page unless the variable fixes it. The Storage page lists kyu's tables (messages, delivery attempts, hourly statistics, backlog samples) with sizes and a preview plus typed-confirm delete. |
+| `KYU_TRUSTED_ADMINS` | *(empty)* | Chassis 3.13.0: comma-separated exact IP addresses whose requests are the admin without a login (only the TCP peer counts, never a forwarded header; a bearer, when sent, still decides). A range, `0.0.0.0` and a trusted proxy address refuse to start. |
 
 The two idle thresholds are **defaults, not laws** — see below.
 

@@ -154,6 +154,13 @@ async fn main() -> ExitCode {
         config.auth.clone(),
     );
     mount(&mut app, state.clone(), engine.clone(), heartbeat.clone());
+    // chassis 3.11.0 / 3.12.0: kyu's tables as data kinds on the Storage
+    // page and the browser keys that follow the login. The kit opens the
+    // same `kyu.db` under the same migration list; nothing moves.
+    if let Err(e) = kyu::storage::declare(&mut app) {
+        eprintln!("kyu: {e}");
+        return ExitCode::FAILURE;
+    }
     // K2-1 (2026-09-06, amended 2026-09-20): the kit owns the clients now.
     // The app tokens 2.x issued keep working because every start copies the
     // ones whose name is not in the kit's store yet, unchanged — kyu-runner

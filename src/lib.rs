@@ -21,5 +21,6 @@ pub mod engine;
 pub mod events;
 pub mod http;
 pub mod kit;
+pub mod storage;
 pub mod store;
 pub mod sweeper;

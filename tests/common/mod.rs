@@ -284,6 +284,7 @@ fn configure_hub(app: &mut App, out: Arc<Mutex<Option<Configured>>>) {
     let key = config.auth.key().expect("a protected hub").clone();
     import_app_tokens(&state_dir, &engine, &key, &secret_key).expect("the import runs");
     mount(app, state.clone(), engine.clone(), heartbeat.clone());
+    kyu::storage::declare(app).expect("the storage declarations agree with the schema");
     let notifiers = state.notifiers.clone();
     let sweeper = sweeper::spawn(engine.clone(), heartbeat, move |woken| {
         for (topic, subscription) in woken {
