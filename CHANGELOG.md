@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [5.0.0] - 2026-10-22
+
 ### Added
 - chassis-rs 3.13.0 (kp-themes 11.2.0): kyu's messages, delivery attempts,
   hourly statistics and backlog samples show on the kit's Storage page with

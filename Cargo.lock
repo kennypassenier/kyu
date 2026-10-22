@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "kyu"
-version = "4.3.3"
+version = "5.0.0"
 dependencies = [
  "anyhow",
  "axum",
