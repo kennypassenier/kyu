@@ -203,7 +203,7 @@ async fn main() -> ExitCode {
     }
     // feat-backup-1 (chassis 3.1.0) · `<name> backup-pause` holds every
     // write wrapped in `chassis::shell::backup::writing_blocking()` (see
-    // `http::handlers::spawn_engine_write`), waits for the ones already in
+    // `http::handlers::engine_call::spawn_engine_write`), waits for the ones already in
     // flight, then runs this hook before answering the caller: the same
     // `wal_checkpoint(TRUNCATE)` W12 runs at shutdown, so a file-level
     // backup of the state root sees no WAL/SHM to miss. An error here falls
