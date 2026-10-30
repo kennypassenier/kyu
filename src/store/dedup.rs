@@ -59,8 +59,8 @@ pub fn remember(
     )
     .context("cannot remember the dedup key")?;
     tx.execute(
-        "DELETE FROM dedup_keys WHERE rowid IN (
-             SELECT rowid FROM dedup_keys ORDER BY published_at ASC
+        "DELETE FROM dedup_keys WHERE (topic_id, key) IN (
+             SELECT topic_id, key FROM dedup_keys ORDER BY published_at ASC
               LIMIT max(0, (SELECT count(*) FROM dedup_keys) - ?1))",
         [MAX_ROWS],
     )
@@ -85,15 +85,15 @@ pub fn count_suppressed(tx: &Transaction, topic: &str, now: Millis) -> Result<()
 pub fn prune(tx: &Transaction, now: Millis, limit: usize) -> Result<usize> {
     let expired = tx
         .execute(
-            "DELETE FROM dedup_keys WHERE rowid IN (
-                 SELECT rowid FROM dedup_keys WHERE expires_at <= ?1 LIMIT ?2)",
+            "DELETE FROM dedup_keys WHERE (topic_id, key) IN (
+                 SELECT topic_id, key FROM dedup_keys WHERE expires_at <= ?1 LIMIT ?2)",
             (now, limit as i64),
         )
         .context("cannot prune expired dedup keys")?;
     let orphaned = tx
         .execute(
-            "DELETE FROM dedup_keys WHERE rowid IN (
-                 SELECT rowid FROM dedup_keys
+            "DELETE FROM dedup_keys WHERE (topic_id, key) IN (
+                 SELECT topic_id, key FROM dedup_keys
                   WHERE topic_id NOT IN (SELECT id FROM topics) LIMIT ?1)",
             [limit as i64],
         )
