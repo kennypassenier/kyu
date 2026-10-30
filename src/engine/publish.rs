@@ -4,6 +4,7 @@ use crate::store::dedup as store_dedup;
 use crate::store::queries;
 
 use super::clock::Millis;
+use super::error::check_name;
 use super::{Engine, EngineError, Published, Result, dedup, names};
 impl Engine {
     /// K1. Stores the payload verbatim and creates one delivery row per
@@ -42,12 +43,7 @@ impl Engine {
         due_at: Option<Millis>,
         dedup: Option<&dedup::Dedup>,
     ) -> Result<Published> {
-        if !names::is_valid(topic) {
-            return Err(EngineError::InvalidName {
-                kind: "topic",
-                name: topic.to_string(),
-            });
-        }
+        check_name("topic", topic)?;
         if names::is_reserved(topic) {
             return Err(EngineError::ReservedTopic {
                 topic: topic.to_string(),

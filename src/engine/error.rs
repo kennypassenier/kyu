@@ -175,3 +175,15 @@ fn describe_existing(what: &str, existing: &[String]) -> String {
 }
 
 pub(super) type Result<T> = std::result::Result<T, EngineError>;
+
+/// Refuses a topic, subscription or app name the hub cannot store.
+pub(super) fn check_name(kind: &'static str, name: &str) -> Result<()> {
+    if names::is_valid(name) {
+        Ok(())
+    } else {
+        Err(EngineError::InvalidName {
+            kind,
+            name: name.to_string(),
+        })
+    }
+}

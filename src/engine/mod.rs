@@ -26,7 +26,7 @@ mod sweep;
 
 pub use apps::App;
 pub use error::EngineError;
-use error::Result;
+use error::{Result, check_name};
 pub use settle::Settled;
 pub use sweep::SweepReport;
 
@@ -171,18 +171,8 @@ impl Engine {
         topic: &str,
         subscription: &str,
     ) -> Result<i64> {
-        if !names::is_valid(topic) {
-            return Err(EngineError::InvalidName {
-                kind: "topic",
-                name: topic.to_string(),
-            });
-        }
-        if !names::is_valid(subscription) {
-            return Err(EngineError::InvalidName {
-                kind: "subscription",
-                name: subscription.to_string(),
-            });
-        }
+        check_name("topic", topic)?;
+        check_name("subscription", subscription)?;
         let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
             return Err(EngineError::UnknownTopic {
                 topic: topic.to_string(),

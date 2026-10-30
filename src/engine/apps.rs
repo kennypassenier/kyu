@@ -4,7 +4,8 @@ use crate::crypto::SecretKey;
 use crate::store::queries;
 
 use super::clock::Millis;
-use super::{Engine, EngineError, Result, names};
+use super::error::check_name;
+use super::{Engine, EngineError, Result};
 
 /// W2 · a registered app as the dashboard shows it, token in the clear.
 ///
@@ -35,12 +36,7 @@ impl Engine {
     /// The token is generated here rather than accepted from the caller:
     /// a token someone chose is a token someone can guess.
     pub fn register_app(&self, name: &str, key: &SecretKey) -> Result<App> {
-        if !names::is_valid(name) {
-            return Err(EngineError::InvalidName {
-                kind: "app",
-                name: name.to_string(),
-            });
-        }
+        check_name("app", name)?;
         let token = crate::crypto::generate_token();
         let sealed = key.seal(&token).map_err(EngineError::Internal)?;
         let now = self.now_ms();
