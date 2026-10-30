@@ -50,8 +50,38 @@ const ASSETS: &[(&str, &str, &str)] = &[
         "text/css; charset=utf-8",
     ),
     (
-        "topic.css",
-        include_str!("../../../static/topic.css"),
+        "topic-layout.css",
+        include_str!("../../../static/topic-layout.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-send.css",
+        include_str!("../../../static/topic-send.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-subs.css",
+        include_str!("../../../static/topic-subs.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-dead.css",
+        include_str!("../../../static/topic-dead.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-recent.css",
+        include_str!("../../../static/topic-recent.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-publish.css",
+        include_str!("../../../static/topic-publish.css"),
+        "text/css; charset=utf-8",
+    ),
+    (
+        "topic-actions.css",
+        include_str!("../../../static/topic-actions.css"),
         "text/css; charset=utf-8",
     ),
     (

@@ -10,7 +10,7 @@ implemented exactly: `~/Projects/kp-themes/research/kyu-11-<part>/`.
 |---|---|---|---|---|
 | 1 across every page | kyu-11-overview | every page | `templates/_kp.html` (new, included by every page) | `static/common.js`, `static/kyu.css` |
 | 2 Topics | kyu-11-topics | `/topics` | `templates/topics.html` | `static/topics.js`, `static/topics.css` |
-| 3+4 Topic | kyu-11-topic-subs, kyu-11-topic-messages | `/t/{topic}/dashboard` | `templates/topic.html` | `static/topic.js`, `static/topic.css` |
+| 3+4 Topic | kyu-11-topic-subs, kyu-11-topic-messages | `/t/{topic}/dashboard` | `templates/topic.html` | `static/topic.js`, `static/topic-*.css` |
 | 5 Subscription | kyu-11-subscription | `/t/{topic}/dashboard/subs/{name}` | `templates/subscription.html` | `static/subscription.js`, `static/subscription.css` |
 
 Defaults Kenny changed: the replay refusal is explained in a toast (every
@@ -89,7 +89,7 @@ label | value | control rows, and a 1 px alignment check. When chassis-rs
 ships a kp-themes release with it, move kyu's hand-made grids onto it:
 the phone card label | value grid in `topics.css` and `subscription.css`,
 the topic cell grid, the palette rows and the who-reads-what tracks in
-`kyu.css`, and the Topic page's command and publish grids in `topic.css`.
+`kyu.css`, and the Topic page's command and publish grids in `topic-send.css` and `topic-publish.css`.
 The same release carries formal's graph loading (no kyu change needed).
 
 With kp-themes 11.1.0 (kp-themes main 612cf357), replace kyu's card-failed

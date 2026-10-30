@@ -1,0 +1,11 @@
+/* kyu: topic-publish.css, the Topic page on kp-themes 11.0.0: the publish form.
+   Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
+
+/* 7 · publish: the section head in a narrow column, the form beside it. */
+@media (min-width: 64rem) {
+    .kt-publish {
+        grid-template-columns: minmax(14rem, 1fr) minmax(0, 3fr);
+        column-gap: var(--kp-space-xl, 2rem);
+        align-items: start;
+    }
+}

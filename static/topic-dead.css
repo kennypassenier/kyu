@@ -1,0 +1,25 @@
+/* kyu: topic-dead.css, the Topic page on kp-themes 11.0.0: the dead letters.
+   Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
+
+/* 5 · dead letters. */
+.kt-col-select {
+    inline-size: 3rem;
+}
+
+.kt-dead td[data-label='Why it died'] {
+    min-inline-size: 12rem;
+}
+
+.kt-col-payload {
+    inline-size: 24rem;
+}
+
+.kt-when {
+    display: grid;
+    gap: 0.125rem;
+}
+
+.kt-when small {
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}

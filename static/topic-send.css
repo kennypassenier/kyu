@@ -1,0 +1,48 @@
+/* kyu: topic-send.css, the Topic page on kp-themes 11.0.0: the commands to send and receive.
+   Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
+
+/* 2 · send and receive: the journey on top, the three steps in three columns beneath it. */
+.kt-send .kp-card__data {
+    display: grid;
+    gap: var(--kp-space-lg, 1.5rem);
+}
+
+.kt-steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: var(--kp-space-lg, 1.5rem);
+    align-items: start;
+}
+
+/* Each step takes the same six rows (caption, command, secret, twice), so the commands and the secret fields
+   of the three columns line up on one baseline. */
+.kt-step {
+    display: grid;
+    grid-row: span 6;
+    grid-template-rows: subgrid;
+    row-gap: var(--kp-space-sm, 0.5rem);
+    min-inline-size: 0;
+}
+
+.kt-caption {
+    margin: 0;
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-caption--next {
+    margin-block-start: var(--kp-space-sm, 0.5rem);
+}
+
+@media (max-width: 64rem) {
+    .kt-steps {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: var(--kp-space-lg, 1.5rem);
+    }
+
+    .kt-step {
+        grid-row: auto;
+        grid-template-rows: none;
+        align-content: start;
+    }
+}

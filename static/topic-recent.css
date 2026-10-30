@@ -1,0 +1,90 @@
+/* kyu: topic-recent.css, the Topic page on kp-themes 11.0.0: the recent messages.
+   Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
+
+/* 6 · recent messages: the list and the payload on one grid. */
+.kt-md {
+    min-block-size: 26rem;
+}
+
+.kt-live {
+    max-block-size: 26rem;
+    margin: 0;
+    overflow-y: auto;
+}
+
+.kt-live > li[data-new] {
+    background: var(--muted);
+}
+
+.kt-msg {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.125rem;
+    min-inline-size: 0;
+}
+
+.kt-msg b {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: var(--kp-text-sm, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+}
+
+.kt-msg small {
+    color: var(--muted-foreground);
+    font-size: var(--kp-text-sm, 0.8125rem);
+    font-variant-numeric: tabular-nums;
+}
+
+.kt-msg code {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: clip;
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-detail-actions {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: var(--kp-space-sm, 0.5rem);
+    justify-content: start;
+    margin-block-start: var(--kp-space-md, 0.75rem);
+}
+
+@media (max-width: 30rem) {
+    .kt-detail-actions {
+        grid-auto-flow: row;
+        grid-auto-columns: minmax(0, 1fr);
+    }
+}
+
+/* The recent messages head: title and sentence on the left, the refresh control on the right, on one grid. */
+.kt-head--live {
+    grid-template-columns: minmax(max-content, 1fr) auto;
+    grid-template-areas: "title refresh" "lead lead";
+    column-gap: var(--kp-space-lg, 1.5rem);
+    align-items: start;
+}
+
+.kt-head--live > h2 {
+    grid-area: title;
+}
+
+.kt-head--live > .kt-lead {
+    grid-area: lead;
+}
+
+.kt-head--live > .kp-refresh {
+    grid-area: refresh;
+    align-self: center;
+}
+
+@media (max-width: 40rem) {
+    .kt-head--live {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "title" "lead" "refresh";
+        row-gap: var(--kp-space-sm, 0.5rem);
+    }
+}

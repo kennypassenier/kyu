@@ -2,7 +2,13 @@
 {% block title %}{{ topic.name }} · {{ app_name }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="/assets/kyu.css?v={{ kyu_assets }}">
-<link rel="stylesheet" href="/assets/topic.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-layout.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-send.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-subs.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-dead.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-recent.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-publish.css?v={{ kyu_assets }}">
+<link rel="stylesheet" href="/assets/topic-actions.css?v={{ kyu_assets }}">
 {# The page script draws every region from the data block below and boots the
    kp-themes modules itself, after its own markup exists. It stands BEFORE the
    shared include so it runs first. #}

@@ -1,0 +1,61 @@
+/* kyu: topic-subs.css, the Topic page on kp-themes 11.0.0: the subscriptions table.
+   Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
+
+/* 4 · the subscriptions table. */
+.kt-subs .kp-card__data {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+}
+
+.kt-filterbar {
+    display: grid;
+    grid-template-columns: minmax(0, max-content);
+    min-inline-size: 0;
+}
+
+.kt-name {
+    display: inline-grid;
+    grid-auto-flow: column;
+    gap: var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    justify-content: start;
+    min-inline-size: 0;
+}
+
+.kt-quiet,
+.kt-policy i {
+    color: var(--muted-foreground);
+    font-style: italic;
+}
+
+.kt-policy i {
+    font-style: normal;
+}
+
+.kt-policy {
+    font-size: var(--kp-text-sm, 0.8125rem);
+}
+
+.kt-col-actions {
+    inline-size: 1%;
+    white-space: nowrap;
+}
+
+/* The action columns stay at the table's end while the rest scrolls under them. */
+.kt-table-sticky .kt-col-actions {
+    position: sticky;
+    inset-inline-end: 0;
+    z-index: 1;
+    background: var(--card);
+    box-shadow: -1px 0 0 var(--border);
+}
+
+.kt-table-sticky :is(th, td) {
+    padding-inline: 0.375rem;
+}
+
+@media (min-width: 48rem) {
+    .kt-table-sticky td.kt-policy {
+        min-inline-size: 8rem;
+    }
+}

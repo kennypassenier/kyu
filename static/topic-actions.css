@@ -1,0 +1,69 @@
+/* kyu: topic-actions.css, the Topic page on kp-themes 11.0.0: the buttons and action cells of every region.
+   Loaded last, because these rules settle what the region files set before them. */
+
+/* Buttons stand on shared grid tracks: equal columns, so the same button sits at the same place in every row and
+   every step, and its edges meet the box above it. */
+.kt-step .kp-secret__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--kp-space-sm, 0.5rem);
+    justify-items: stretch;
+    justify-self: stretch;
+    inline-size: 100%;
+}
+
+@media (min-width: 48rem) {
+.kt-subs .kp-row-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(max-content, 1fr));
+    gap: var(--kp-space-xs, 0.25rem);
+    align-items: center;
+    justify-items: stretch;
+}
+
+.kt-dead .kp-row-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+    gap: var(--kp-space-xs, 0.25rem);
+    align-items: center;
+    justify-items: stretch;
+}
+}
+
+.kt-subs .kp-row-actions > * ,
+.kt-dead .kp-row-actions > * {
+    min-inline-size: 0;
+}
+
+.kt-subs .kp-row-actions .kp-menu-button > .kp-button {
+    inline-size: 100%;
+}
+
+.kt-detail-actions {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+    grid-auto-columns: auto;
+}
+
+/* On a phone the actions cell is a card row: as wide as the card, so the kit's stacked buttons meet one edge. */
+@media (max-width: 47.99rem) {
+    .kt-col-actions {
+        inline-size: auto;
+        white-space: normal;
+    }
+
+    .kt-subs .kp-row-actions,
+    .kt-dead .kp-row-actions {
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: stretch;
+        justify-content: stretch;
+        inline-size: 100%;
+    }
+
+    .kt-subs .kp-row-actions > *,
+    .kt-dead .kp-row-actions > *,
+    .kt-subs .kp-row-actions .kp-button,
+    .kt-dead .kp-row-actions .kp-button {
+        inline-size: 100%;
+    }
+}
