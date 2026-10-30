@@ -13,11 +13,11 @@ use crate::store::queries;
 use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
-use crate::http::handlers::dashboard::page::{SUBSCRIPTION_HTML, internal, page};
+use crate::http::handlers::dashboard::page::{SUBSCRIPTION_HTML, internal, page, to_json};
+use crate::http::handlers::dashboard::shell::shell_view;
 use crate::http::handlers::dashboard::subscription_rows::{
     format_duration_ms, subscription_policy_rows,
 };
-use crate::http::handlers::dashboard::topics::shell_view;
 
 /// How many backlog items a subscription page shows (W16). Bounded for the
 /// same reason `DEAD_LETTERS_SHOWN` is.
@@ -78,7 +78,7 @@ fn backlog_rows(items: Vec<queries::BacklogItem>, now: i64) -> Vec<serde_json::V
         .map(|item| {
             let published_ms = item.published_at;
             let view = dashboard::BacklogItemView::at(item, now);
-            let mut row = serde_json::to_value(&view).unwrap_or_default();
+            let mut row = to_json(&view);
             row["published_ms"] = json!(published_ms);
             row
         })

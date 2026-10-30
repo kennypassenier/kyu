@@ -18,6 +18,10 @@ pub struct DeadQuery {
     pub limit: Option<usize>,
 }
 
+/// How many dead letters a listing returns by default, and at most.
+const DEFAULT_DEAD_LIMIT: usize = 100;
+const MAX_DEAD_LIMIT: usize = 1000;
+
 /// How much of a payload the dead-letter list shows. Enough to recognise a
 /// message, bounded so listing a queue of megabyte payloads stays cheap; the
 /// full byte count travels with it, and truncation is always marked (AR11).
@@ -29,7 +33,10 @@ pub async fn list_dead(
     Path((topic, subscription)): Path<(String, String)>,
     Query(query): Query<DeadQuery>,
 ) -> Result<Response, ApiError> {
-    let limit = query.limit.unwrap_or(100).min(1000);
+    let limit = query
+        .limit
+        .unwrap_or(DEFAULT_DEAD_LIMIT)
+        .min(MAX_DEAD_LIMIT);
     let engine = state.engine.clone();
     let letters = spawn_engine(move || engine.dead_letters(&topic, &subscription, limit)).await?;
 

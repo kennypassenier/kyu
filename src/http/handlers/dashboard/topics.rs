@@ -6,13 +6,13 @@ use axum::response::{Html, Redirect};
 use chassis::Dashboard;
 use serde_json::json;
 
-use crate::dashboard::SubscriptionView;
 use crate::store::queries;
 
 use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
 use crate::http::handlers::dashboard::page::{TOPICS_HTML, internal, page};
+use crate::http::handlers::dashboard::shell::shell_view;
 
 /// A topic is "Backlog" on the Topics page from this many waiting messages.
 const BACKLOG_STATUS_AT: i64 = 50;
@@ -55,95 +55,63 @@ fn topic_status(dead: i64, backlog: i64, last_published_ms: Option<i64>, now: i6
     }
 }
 
-/// One topic as the shell lists it: a palette option and a node of the
-/// "who reads what" map.
-#[derive(serde::Serialize)]
-struct ShellTopic {
-    name: String,
-    messages: i64,
-    detail: String,
+/// The newest dead letter of a topic as a one-line excerpt for the hover card.
+fn dead_note(conn: &rusqlite::Connection, topic_id: i64) -> anyhow::Result<Option<String>> {
+    Ok(queries::dead_letters_for_topic(conn, topic_id, 1)?
+        .into_iter()
+        .next()
+        .map(|dead| {
+            let text = String::from_utf8_lossy(&dead.letter.payload);
+            let excerpt: String = text.chars().take(DEAD_NOTE_CHARS).collect();
+            format!("{}: {excerpt}", dead.subscription)
+        }))
 }
 
-/// One subscription as the shell lists it: a palette option and a line of
-/// the map. `tone` is the map's word for its state.
-#[derive(serde::Serialize)]
-struct ShellSubscription {
-    topic: String,
-    name: String,
-    state: String,
-    tone: &'static str,
-    detail: String,
-    /// Messages waiting for this subscription (the graph's optional node size).
-    backlog: i64,
-}
-
-fn counted(n: i64, noun: &str) -> String {
-    format!("{n} {noun}{}", if n == 1 { "" } else { "s" })
-}
-
-/// What every page's command palette and the Topics page's uses-map are
-/// built from: every topic and every subscription, plus the hub's dead
-/// letter total (what "Prune dead letters" would delete).
-pub(crate) async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
-    let engine = state.engine.clone();
-    let built = tokio::task::spawn_blocking(move || {
-        engine.store().read(|conn| {
-            let now = engine.now_ms();
-            let mut topics = Vec::new();
-            let mut subscriptions = Vec::new();
-            let mut dead_total = 0;
-            for summary in queries::topic_summaries(conn)? {
-                dead_total += summary.dead;
-                let detail = if summary.dead > 0 {
-                    format!(
-                        "{}, {}",
-                        counted(summary.messages, "message"),
-                        counted(summary.dead, "dead letter")
-                    )
-                } else {
-                    counted(summary.messages, "message")
-                };
-                topics.push(ShellTopic {
-                    name: summary.name.clone(),
-                    messages: summary.messages,
-                    detail,
-                });
-                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &summary.name)? else {
-                    continue;
-                };
-                for sub in queries::subscription_summaries(conn, topic_id)? {
-                    let view = SubscriptionView::at(sub, now);
-                    let backlog = view.backlog;
-                    let (tone, detail) = match view.state.as_str() {
-                        "active" => ("ok", "active".to_string()),
-                        "archived" => ("muted", "archived".to_string()),
-                        other if view.dead > 0 => (
-                            "bad",
-                            format!("{other}: {}", counted(view.dead, "dead letter")),
-                        ),
-                        other => ("warn", format!("{other}: lease expired")),
-                    };
-                    subscriptions.push(ShellSubscription {
-                        topic: summary.name.clone(),
-                        name: view.name,
-                        state: view.state,
-                        tone,
-                        detail,
-                        backlog,
-                    });
-                }
-            }
-            Ok(json!({
-                "topics": topics,
-                "subscriptions": subscriptions,
-                "dead_total": dead_total,
-            }))
-        })
+/// One topic's row: counts, the subscriptions behind it and its status word.
+fn topic_row(
+    conn: &rusqlite::Connection,
+    summary: queries::TopicSummary,
+    now: i64,
+) -> anyhow::Result<TopicRowView> {
+    let topic_id = queries::topic_id_by_name_conn(conn, &summary.name)?;
+    let subscriptions = match topic_id {
+        Some(id) => queries::subscription_summaries(conn, id)?,
+        None => Vec::new(),
+    };
+    let dead_note = match topic_id {
+        Some(id) if summary.dead > 0 => dead_note(conn, id)?,
+        _ => None,
+    };
+    Ok(TopicRowView {
+        status: topic_status(
+            summary.dead,
+            summary.backlog,
+            summary.last_published_at,
+            now,
+        ),
+        name: summary.name,
+        messages: summary.messages,
+        flagged: subscriptions
+            .iter()
+            .filter(|sub| sub.state == "flagged")
+            .map(|sub| sub.name.clone())
+            .collect(),
+        in_flight: subscriptions.iter().map(|sub| sub.claimed).sum(),
+        lapsed: subscriptions.iter().map(|sub| sub.lapsed).sum(),
+        subscriptions: subscriptions.into_iter().map(|sub| sub.name).collect(),
+        backlog: summary.backlog,
+        dead: summary.dead,
+        last_published_ms: summary.last_published_at,
+        dead_note,
     })
-    .await
-    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-    .map_err(|error: anyhow::Error| internal(format!("{error:#}")))?;
-    Ok(built)
+}
+
+/// Every topic's row, read in one store read.
+fn read_rows(conn: &rusqlite::Connection, now: i64) -> anyhow::Result<Vec<TopicRowView>> {
+    queries::topic_summaries(conn)?
+        .into_iter()
+        .map(|summary| topic_row(conn, summary, now))
+        .collect()
 }
 
 /// K10 · `GET /topics` — every topic on this hub. Until step 2 this was `/`;
@@ -159,50 +127,7 @@ pub async fn topics_page(
     let engine = state.engine.clone();
     let built = tokio::task::spawn_blocking(move || -> anyhow::Result<(i64, Vec<TopicRowView>)> {
         let now = engine.now_ms();
-        let rows = engine.store().read(|conn| {
-            let mut rows = Vec::new();
-            for summary in queries::topic_summaries(conn)? {
-                let topic_id = queries::topic_id_by_name_conn(conn, &summary.name)?;
-                let subscriptions = match topic_id {
-                    Some(id) => queries::subscription_summaries(conn, id)?,
-                    None => Vec::new(),
-                };
-                let dead_note = match topic_id {
-                    Some(id) if summary.dead > 0 => queries::dead_letters_for_topic(conn, id, 1)?
-                        .into_iter()
-                        .next()
-                        .map(|dead| {
-                            let text = String::from_utf8_lossy(&dead.letter.payload);
-                            let excerpt: String = text.chars().take(DEAD_NOTE_CHARS).collect();
-                            format!("{}: {excerpt}", dead.subscription)
-                        }),
-                    _ => None,
-                };
-                rows.push(TopicRowView {
-                    status: topic_status(
-                        summary.dead,
-                        summary.backlog,
-                        summary.last_published_at,
-                        now,
-                    ),
-                    name: summary.name,
-                    messages: summary.messages,
-                    flagged: subscriptions
-                        .iter()
-                        .filter(|sub| sub.state == "flagged")
-                        .map(|sub| sub.name.clone())
-                        .collect(),
-                    in_flight: subscriptions.iter().map(|sub| sub.claimed).sum(),
-                    lapsed: subscriptions.iter().map(|sub| sub.lapsed).sum(),
-                    subscriptions: subscriptions.into_iter().map(|sub| sub.name).collect(),
-                    backlog: summary.backlog,
-                    dead: summary.dead,
-                    last_published_ms: summary.last_published_at,
-                    dead_note,
-                });
-            }
-            Ok(rows)
-        })?;
+        let rows = engine.store().read(|conn| read_rows(conn, now))?;
         Ok((now, rows))
     })
     .await

@@ -31,6 +31,15 @@ pub(crate) fn page<C: serde::Serialize>(
         .map_err(|error| internal(format!("cannot render the page: {error}")))
 }
 
+/// A view as JSON. A serialisation failure is logged and becomes `null`
+/// rather than vanishing: a missing row in a page is then traceable.
+pub(crate) fn to_json<T: serde::Serialize>(view: &T) -> serde_json::Value {
+    serde_json::to_value(view).unwrap_or_else(|error| {
+        tracing::error!(%error, "a dashboard view could not be serialised");
+        serde_json::Value::Null
+    })
+}
+
 pub(crate) fn internal(message: String) -> ApiError {
     tracing::error!(error = %message, "dashboard failure");
     ApiError::new(

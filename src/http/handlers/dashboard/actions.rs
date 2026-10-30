@@ -11,6 +11,29 @@ use crate::http::error::ApiError;
 use crate::http::handlers::dashboard::form::{done, urldecode, wants_json};
 use crate::http::handlers::engine_call::spawn_engine_write;
 
+/// The longest "Deliver after" the test-publish form accepts: one day.
+const MAX_TEST_DELAY_SECONDS: i64 = 86_400;
+
+/// When the test message becomes deliverable: `None` for at once.
+fn test_due_at(delay_seconds: Option<String>, now: i64) -> Result<Option<i64>, ApiError> {
+    let Some(text) = delay_seconds else {
+        return Ok(None);
+    };
+    match text.parse::<i64>() {
+        Ok(seconds) if (0..=MAX_TEST_DELAY_SECONDS).contains(&seconds) => {
+            Ok((seconds > 0).then(|| now.saturating_add(seconds * 1000)))
+        }
+        _ => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("the delay {text:?} is not between 0 and {MAX_TEST_DELAY_SECONDS} seconds"),
+            format!(
+                "type a whole number of seconds from 0 to {MAX_TEST_DELAY_SECONDS}, or leave \
+                 it empty to deliver at once."
+            ),
+        )),
+    }
+}
+
 /// W9 · `POST /t/{topic}/dashboard/publish` — the test-publish form.
 ///
 /// Answers the question that costs the most time at 23:00: is the producer
@@ -36,22 +59,7 @@ pub async fn dashboard_publish(
         .map(urldecode)
         .map(|text| text.trim().to_string())
         .filter(|text| !text.is_empty());
-    let due_at = match delay_seconds {
-        None => None,
-        Some(text) => match text.parse::<i64>() {
-            Ok(seconds) if (0..=86_400).contains(&seconds) => {
-                (seconds > 0).then(|| state.engine.now_ms().saturating_add(seconds * 1000))
-            }
-            _ => {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("the delay {text:?} is not between 0 and 86400 seconds"),
-                    "type a whole number of seconds from 0 to 86400, or leave it empty to \
-                     deliver at once.",
-                ));
-            }
-        },
-    };
+    let due_at = test_due_at(delay_seconds, state.engine.now_ms())?;
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();

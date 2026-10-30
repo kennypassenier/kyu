@@ -13,6 +13,13 @@ use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::engine_call::spawn_engine;
 
+/// The window both stats endpoints show when `hours` is left out.
+const DEFAULT_HOURS: i64 = 24;
+/// The widest window per endpoint: hourly rows grow with it, and the totals
+/// sampler only keeps so much history.
+const MAX_HOURLY_HOURS: i64 = 720;
+const MAX_TOTALS_HOURS: i64 = 48;
+
 #[derive(Debug, Deserialize)]
 pub struct HoursQuery {
     pub hours: Option<i64>,
@@ -26,7 +33,10 @@ pub async fn dashboard_stats_hourly(
     Query(query): Query<HoursQuery>,
 ) -> Result<Response, ApiError> {
     use crate::engine::days;
-    let hours = query.hours.unwrap_or(24).clamp(1, 720);
+    let hours = query
+        .hours
+        .unwrap_or(DEFAULT_HOURS)
+        .clamp(1, MAX_HOURLY_HOURS);
     let engine = state.engine.clone();
     let (starts, names, rows) = spawn_engine(move || {
         let last = days::hour_of(engine.now_ms());
@@ -43,6 +53,19 @@ pub async fn dashboard_stats_hourly(
     .await?;
     let (first, last) = starts;
     let starts: Vec<i64> = (0..hours).map(|index| first + index * days::HOUR).collect();
+    let topics = hourly_topics(names, rows, (first, last), hours);
+    Ok(axum::Json(json!({ "hours": starts, "topics": topics })).into_response())
+}
+
+/// One entry per topic with its published and dead counts per hour, every
+/// array lined up with the hour starts (zero where nothing happened).
+fn hourly_topics(
+    names: Vec<String>,
+    rows: Vec<(String, i64, i64, i64)>,
+    (first, last): (i64, i64),
+    hours: i64,
+) -> Vec<serde_json::Value> {
+    use crate::engine::days;
     let mut table: std::collections::BTreeMap<String, (Vec<i64>, Vec<i64>)> = names
         .into_iter()
         .map(|name| (name, (vec![0; hours as usize], vec![0; hours as usize])))
@@ -57,11 +80,10 @@ pub async fn dashboard_stats_hourly(
             dead_row[index] = dead;
         }
     }
-    let topics: Vec<_> = table
+    table
         .into_iter()
         .map(|(topic, (published, dead))| json!({ "topic": topic, "published": published, "dead": dead }))
-        .collect();
-    Ok(axum::Json(json!({ "hours": starts, "topics": topics })).into_response())
+        .collect()
 }
 
 /// `GET /dashboard/stats/totals?hours=24` — the hub totals the sweeper
@@ -70,10 +92,13 @@ pub async fn dashboard_stats_totals(
     State(state): State<AppState>,
     Query(query): Query<HoursQuery>,
 ) -> Result<Response, ApiError> {
-    let hours = query.hours.unwrap_or(24).clamp(1, 48);
+    let hours = query
+        .hours
+        .unwrap_or(DEFAULT_HOURS)
+        .clamp(1, MAX_TOTALS_HOURS);
     let engine = state.engine.clone();
     let samples = spawn_engine(move || {
-        let from = engine.now_ms() - hours * 3_600_000;
+        let from = engine.now_ms() - hours * crate::engine::days::HOUR;
         engine
             .store()
             .read(|conn| queries::samples_since(conn, from))

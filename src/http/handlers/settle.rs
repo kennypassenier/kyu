@@ -46,6 +46,16 @@ pub struct NackQuery {
     pub dead: Option<bool>,
 }
 
+/// The word the nack answer uses for what happened to the message.
+fn outcome_name(settled: &Settled) -> &'static str {
+    match settled {
+        Settled::Redelivered => "redelivered",
+        Settled::DeadLettered => "dead_lettered",
+        Settled::Expired => "expired",
+        Settled::Unchanged => "unchanged",
+    }
+}
+
 /// W5 · `POST /t/{topic}/nack/{id}?as={subscription}[&dead=true]`
 pub async fn nack(
     State(state): State<AppState>,
@@ -72,12 +82,7 @@ pub async fn nack(
     })
     .await?;
 
-    let outcome = match settled {
-        Settled::Redelivered => "redelivered",
-        Settled::DeadLettered => "dead_lettered",
-        Settled::Expired => "expired",
-        Settled::Unchanged => "unchanged",
-    };
+    let outcome = outcome_name(&settled);
 
     // A redelivered message may be waiting behind a backoff, so waking the
     // subscription is a hint, not a promise that it is available now.

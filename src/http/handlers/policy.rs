@@ -45,6 +45,28 @@ pub struct PolicyBody {
     pub idle_archive_ms: Option<i64>,
 }
 
+/// Parsed by hand rather than with the Json extractor, so a malformed body
+/// still answers with a remedy (standing rule 11).
+fn parse_policy(body: &[u8]) -> Result<StoredPolicy, ApiError> {
+    let parsed: PolicyBody = serde_json::from_slice(body).map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("the policy body is not valid JSON: {error}"),
+            "send an object with any of lease_ms, max_attempts, backoff_ms and ttl_ms, \
+             for example {\"ttl_ms\": 600000}. Fields you leave out return to their \
+             defaults, and the response tells you what is in force.",
+        )
+    })?;
+    Ok(StoredPolicy {
+        lease_ms: parsed.lease_ms,
+        max_attempts: parsed.max_attempts,
+        backoff_ms: parsed.backoff_ms,
+        ttl_ms: parsed.ttl_ms,
+        idle_flag_ms: parsed.idle_flag_ms,
+        idle_archive_ms: parsed.idle_archive_ms,
+    })
+}
+
 /// K7 · `PUT /api/t/{topic}/subs/{sub}/policy`
 ///
 /// The body replaces the policy in full: a field left out goes back to its
@@ -54,26 +76,7 @@ pub async fn put_policy(
     Path((topic, subscription)): Path<(String, String)>,
     body: axum::body::Bytes,
 ) -> Result<Response, ApiError> {
-    // Parsed by hand rather than with the Json extractor, so a malformed
-    // body still answers with a remedy (standing rule 11).
-    let parsed: PolicyBody = serde_json::from_slice(&body).map_err(|error| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            format!("the policy body is not valid JSON: {error}"),
-            "send an object with any of lease_ms, max_attempts, backoff_ms and ttl_ms, \
-             for example {\"ttl_ms\": 600000}. Fields you leave out return to their \
-             defaults, and the response tells you what is in force.",
-        )
-    })?;
-
-    let stored = StoredPolicy {
-        lease_ms: parsed.lease_ms,
-        max_attempts: parsed.max_attempts,
-        backoff_ms: parsed.backoff_ms,
-        ttl_ms: parsed.ttl_ms,
-        idle_flag_ms: parsed.idle_flag_ms,
-        idle_archive_ms: parsed.idle_archive_ms,
-    };
+    let stored = parse_policy(&body)?;
 
     let engine = state.engine.clone();
     let defaults = engine.defaults();

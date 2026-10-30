@@ -14,10 +14,10 @@ use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
 use crate::http::handlers::dashboard::page::{TOPIC_HTML, internal, page};
+use crate::http::handlers::dashboard::shell::shell_view;
 use crate::http::handlers::dashboard::topic_data::{
     Stamps, build_snippets, first_live_reader, page_data,
 };
-use crate::http::handlers::dashboard::topics::shell_view;
 
 /// How many recent messages a topic page shows.
 const RECENT_MESSAGES: usize = 20;
@@ -40,6 +40,16 @@ struct TopicPage {
     data: serde_json::Value,
 }
 
+/// Turns raw rows into their views plus the raw stamps the views hide.
+fn stamped<R, V>(
+    raw: Vec<R>,
+    stamp: impl Fn(&R) -> serde_json::Value,
+    view: impl Fn(R) -> V,
+) -> (Vec<V>, Vec<serde_json::Value>) {
+    let stamps = raw.iter().map(stamp).collect();
+    (raw.into_iter().map(view).collect(), stamps)
+}
+
 /// The stamped views and counts the topic page is drawn from, in one read.
 fn load_topic_page(
     conn: &rusqlite::Connection,
@@ -57,35 +67,21 @@ fn load_topic_page(
         return Ok(None);
     };
     let last_published_ms = summary.last_published_at;
-    let raw_subscriptions = queries::subscription_summaries(conn, topic_id)?;
-    let subscription_stamps: Vec<serde_json::Value> = raw_subscriptions
-        .iter()
-        .map(
-            |s| json!({ "oldest_unacked_ms": s.oldest_unacked_at, "last_poll_ms": s.last_poll_at }),
-        )
-        .collect();
-    let subscriptions: Vec<SubscriptionView> = raw_subscriptions
-        .into_iter()
-        .map(|summary| SubscriptionView::at(summary, now))
-        .collect();
-    let raw_messages = queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?;
-    let message_stamps: Vec<serde_json::Value> = raw_messages
-        .iter()
-        .map(|m| json!({ "published_ms": m.published_at, "due_ms": m.due_at }))
-        .collect();
-    let messages: Vec<MessageView> = raw_messages
-        .into_iter()
-        .map(|message| MessageView::at(message, now))
-        .collect();
-    let raw_dead = queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?;
-    let dead_stamps: Vec<serde_json::Value> = raw_dead
-        .iter()
-        .map(|d| json!({ "published_ms": d.letter.published_at, "dead_ms": d.letter.dead_at }))
-        .collect();
-    let dead_letters: Vec<DeadLetterView> = raw_dead
-        .into_iter()
-        .map(|dead| DeadLetterView::at(dead, now))
-        .collect();
+    let (subscriptions, subscription_stamps) = stamped(
+        queries::subscription_summaries(conn, topic_id)?,
+        |s| json!({ "oldest_unacked_ms": s.oldest_unacked_at, "last_poll_ms": s.last_poll_at }),
+        |summary| SubscriptionView::at(summary, now),
+    );
+    let (messages, message_stamps) = stamped(
+        queries::recent_messages(conn, topic_id, RECENT_MESSAGES)?,
+        |m| json!({ "published_ms": m.published_at, "due_ms": m.due_at }),
+        |message| MessageView::at(message, now),
+    );
+    let (dead_letters, dead_stamps) = stamped(
+        queries::dead_letters_for_topic(conn, topic_id, DEAD_LETTERS_SHOWN)?,
+        |d| json!({ "published_ms": d.letter.published_at, "dead_ms": d.letter.dead_at }),
+        |dead| DeadLetterView::at(dead, now),
+    );
     let reader = first_live_reader(&subscriptions);
     let snippets = build_snippets(topic_name, reader, messages.first(), token);
     let topic_view = TopicView::at(summary, now);

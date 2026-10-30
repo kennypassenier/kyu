@@ -23,9 +23,41 @@ pub(crate) fn unknown_subscription(topic: &str, subscription: &str) -> ApiError 
     )
 }
 
+/// The window the daily chart shows when `days` is left out.
+const DEFAULT_DAILY_DAYS: i64 = 90;
+
 #[derive(Debug, Deserialize)]
 pub struct AttemptsQuery {
     pub id: Option<String>,
+}
+
+/// A message's attempts on one subscription: `None` when the topic or the
+/// subscription is unknown, `Some(None)` when the message was never
+/// delivered there.
+fn read_attempts(
+    conn: &rusqlite::Connection,
+    topic: &str,
+    subscription: &str,
+    id: &str,
+) -> anyhow::Result<Option<Option<Vec<queries::AttemptRow>>>> {
+    let Some(topic_id) = queries::topic_id_by_name_conn(conn, topic)? else {
+        return Ok(None);
+    };
+    let Some(sub_id) = queries::subscription_id_by_name_conn(conn, topic_id, subscription)? else {
+        return Ok(None);
+    };
+    Ok(Some(queries::attempts_for(conn, sub_id, id)?))
+}
+
+fn attempt_json(attempt: queries::AttemptRow) -> serde_json::Value {
+    json!({
+        "n": attempt.n,
+        "claimed_at": attempt.claimed_at,
+        "ended_at": attempt.ended_at,
+        "outcome": attempt.outcome,
+        "app": attempt.app,
+        "reason": attempt.reason.filter(|reason| !reason.is_empty()),
+    })
 }
 
 /// `GET /t/{topic}/dashboard/subs/{name}/attempts?id=…` — the delivery
@@ -47,16 +79,7 @@ pub async fn dashboard_attempts(
     let attempts = spawn_engine(move || {
         engine
             .store()
-            .read(|conn| {
-                let Some(topic_id) = queries::topic_id_by_name_conn(conn, &t)? else {
-                    return Ok(None);
-                };
-                let Some(sub_id) = queries::subscription_id_by_name_conn(conn, topic_id, &s)?
-                else {
-                    return Ok(None);
-                };
-                Ok(Some(queries::attempts_for(conn, sub_id, &i)?))
-            })
+            .read(|conn| read_attempts(conn, &t, &s, &i))
             .map_err(EngineError::Internal)
     })
     .await?;
@@ -67,19 +90,7 @@ pub async fn dashboard_attempts(
         }
         Some(Some(rows)) => rows,
     };
-    let rows: Vec<_> = attempts
-        .into_iter()
-        .map(|attempt| {
-            json!({
-                "n": attempt.n,
-                "claimed_at": attempt.claimed_at,
-                "ended_at": attempt.ended_at,
-                "outcome": attempt.outcome,
-                "app": attempt.app,
-                "reason": attempt.reason.filter(|reason| !reason.is_empty()),
-            })
-        })
-        .collect();
+    let rows: Vec<_> = attempts.into_iter().map(attempt_json).collect();
     Ok(axum::Json(json!({ "message": id, "attempts": rows })).into_response())
 }
 
@@ -95,7 +106,10 @@ pub async fn dashboard_daily(
     Path((topic, subscription)): Path<(String, String)>,
     Query(query): Query<DaysQuery>,
 ) -> Result<Response, ApiError> {
-    let days = query.days.unwrap_or(90).clamp(1, queries::DAILY_KEPT_DAYS);
+    let days = query
+        .days
+        .unwrap_or(DEFAULT_DAILY_DAYS)
+        .clamp(1, queries::DAILY_KEPT_DAYS);
     let engine = state.engine.clone();
     let (t, s) = (topic.clone(), subscription.clone());
     let found = spawn_engine(move || {

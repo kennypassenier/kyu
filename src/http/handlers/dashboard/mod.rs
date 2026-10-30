@@ -6,6 +6,7 @@ pub mod bulk;
 pub mod form;
 pub mod history;
 pub mod page;
+pub mod shell;
 pub mod stats;
 pub mod subscription;
 pub mod subscription_rows;

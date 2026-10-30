@@ -3,6 +3,8 @@
 
 use serde_json::json;
 
+use crate::http::handlers::dashboard::page::to_json;
+
 use crate::dashboard::{self, DeadLetterView, MessageView, SubscriptionView, TopicView};
 
 /// The base URL the page's commands are built with; the page script swaps it
@@ -15,7 +17,7 @@ pub(super) fn with_extra<T: serde::Serialize>(
     view: &T,
     extra: serde_json::Value,
 ) -> serde_json::Value {
-    let mut value = serde_json::to_value(view).unwrap_or(serde_json::Value::Null);
+    let mut value = to_json(view);
     if let (Some(object), Some(more)) = (value.as_object_mut(), extra.as_object()) {
         for (key, item) in more {
             object.insert(key.clone(), item.clone());

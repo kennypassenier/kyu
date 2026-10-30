@@ -10,7 +10,7 @@ use chassis::Caller;
 use serde::Deserialize;
 use tokio::time::Instant;
 
-use crate::engine::{EngineError, Received, names};
+use crate::engine::{EngineError, NewSubscription, Received, names};
 
 use crate::http::error::ApiError;
 use crate::http::handlers::engine_call::spawn_engine_write;
@@ -71,6 +71,26 @@ fn backfill_notice(count: usize, subscription: &str) -> String {
     format!("replayed {count} retained message(s) into subscription {subscription:?}")
 }
 
+/// The 204 answer, with a notice for what the poll did on the way: replayed
+/// retained messages, or created the subscription.
+fn empty_poll(
+    created: Option<&NewSubscription>,
+    backfilled: usize,
+    subscription: &str,
+) -> Response {
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    if backfilled > 0 {
+        insert_str(
+            response.headers_mut(),
+            HEADER_NOTICE,
+            &backfill_notice(backfilled, subscription),
+        );
+    } else if let Some(new) = created {
+        insert_str(response.headers_mut(), HEADER_NOTICE, &notice(new));
+    }
+    response
+}
+
 /// K2 · `GET /t/{topic}/next?as={subscription}`
 pub async fn receive(
     State(state): State<AppState>,
@@ -126,17 +146,7 @@ pub async fn receive(
         if remaining.is_zero() {
             // Nothing waiting. 204 rather than an error: an empty topic is
             // the normal state of a healthy queue.
-            let mut response = StatusCode::NO_CONTENT.into_response();
-            if backfilled > 0 {
-                insert_str(
-                    response.headers_mut(),
-                    HEADER_NOTICE,
-                    &backfill_notice(backfilled, &subscription),
-                );
-            } else if let Some(new) = &created {
-                insert_str(response.headers_mut(), HEADER_NOTICE, &notice(new));
-            }
-            return Ok(response);
+            return Ok(empty_poll(created.as_ref(), backfilled, &subscription));
         }
 
         let recheck = remaining.min(state.limits.recheck_interval);

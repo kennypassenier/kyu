@@ -45,48 +45,60 @@ pub(crate) fn render(
     envelope: bool,
     created: Option<&NewSubscription>,
 ) -> Response {
+    if envelope {
+        render_envelope(claimed, created)
+    } else {
+        render_raw(claimed)
+    }
+}
+
+/// The raw shape: payload bytes as the body, metadata in `kyu-*` headers.
+fn render_raw(claimed: Claimed) -> Response {
     let attempt = claimed.attempt();
     let message = claimed.message;
+    let content_type = message
+        .content_type
+        .clone()
+        .unwrap_or_else(|| "application/octet-stream".to_string());
 
-    if !envelope {
-        let content_type = message
-            .content_type
-            .clone()
-            .unwrap_or_else(|| "application/octet-stream".to_string());
-
-        let mut response = (StatusCode::OK, message.payload).into_response();
-        let headers = response.headers_mut();
-        if let Ok(value) = content_type.parse() {
-            headers.insert(header::CONTENT_TYPE, value);
-        }
-        // nosniff always: it costs nothing and stops a browser deciding that
-        // a text/plain payload is really HTML.
-        headers.insert(
-            axum::http::header::X_CONTENT_TYPE_OPTIONS,
-            axum::http::HeaderValue::from_static("nosniff"),
-        );
-        // attachment only for the types a browser would execute. A payload
-        // published as text/html would otherwise run in the hub's own origin
-        // for anyone opening this URL — an iframe on a hostile page is
-        // enough. Everything else still opens normally in a tab, which is
-        // what the AR2 mini-round settled on: protection without making the
-        // API unbrowsable.
-        if executes_in_a_browser(&content_type) {
-            headers.insert(
-                header::CONTENT_DISPOSITION,
-                axum::http::HeaderValue::from_static("attachment"),
-            );
-        }
-        insert_str(headers, HEADER_ID, &message.id);
-        insert_str(headers, HEADER_TOPIC, &claimed.topic);
-        insert_str(headers, HEADER_ATTEMPT, &attempt.to_string());
-        insert_str(
-            headers,
-            HEADER_PUBLISHED_AT,
-            &message.published_at.to_string(),
-        );
-        return response;
+    let mut response = (StatusCode::OK, message.payload).into_response();
+    let headers = response.headers_mut();
+    if let Ok(value) = content_type.parse() {
+        headers.insert(header::CONTENT_TYPE, value);
     }
+    // nosniff always: it costs nothing and stops a browser deciding that
+    // a text/plain payload is really HTML.
+    headers.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        axum::http::HeaderValue::from_static("nosniff"),
+    );
+    // attachment only for the types a browser would execute. A payload
+    // published as text/html would otherwise run in the hub's own origin
+    // for anyone opening this URL — an iframe on a hostile page is
+    // enough. Everything else still opens normally in a tab, which is
+    // what the AR2 mini-round settled on: protection without making the
+    // API unbrowsable.
+    if executes_in_a_browser(&content_type) {
+        headers.insert(
+            header::CONTENT_DISPOSITION,
+            axum::http::HeaderValue::from_static("attachment"),
+        );
+    }
+    insert_str(headers, HEADER_ID, &message.id);
+    insert_str(headers, HEADER_TOPIC, &claimed.topic);
+    insert_str(headers, HEADER_ATTEMPT, &attempt.to_string());
+    insert_str(
+        headers,
+        HEADER_PUBLISHED_AT,
+        &message.published_at.to_string(),
+    );
+    response
+}
+
+/// The envelope shape: one JSON object carrying the metadata and the payload.
+fn render_envelope(claimed: Claimed, created: Option<&NewSubscription>) -> Response {
+    let attempt = claimed.attempt();
+    let message = claimed.message;
 
     // Exactly one payload key is present, and which one says how the bytes
     // were understood — never a silent transformation (G8):
