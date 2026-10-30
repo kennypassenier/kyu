@@ -1,6 +1,7 @@
 //! The HTTP surface (AR2). Routes translate HTTP into engine calls and
 //! back; business logic stays in [`crate::engine`].
 
+pub mod dedup;
 pub mod error;
 pub mod handlers;
 pub mod notify;

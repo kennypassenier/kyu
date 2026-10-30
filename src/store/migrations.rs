@@ -31,6 +31,7 @@ pub const MIGRATIONS: &[&str] = &[
     MIGRATION_5_EXPIRY_ANNOUNCEMENTS,
     MIGRATION_6_REMOVED_DELIVERIES,
     MIGRATION_7_ATTEMPTS_AND_STATS,
+    MIGRATION_8_DEDUP_KEYS,
 ];
 
 /// AR3's four tables. Times are integer milliseconds since the Unix epoch
@@ -245,6 +246,32 @@ CREATE TABLE stats_samples (
     dead      INTEGER NOT NULL,
     in_flight INTEGER NOT NULL
 ) STRICT;
+"#;
+
+/// Damping of repeated notifications (see `crate::engine::dedup`): one row
+/// per (topic, key) remembers which message a publisher's dedup key last
+/// produced and until when a repeat is suppressed. Purely additive.
+///
+/// The table is capped from the start: the sweeper removes expired rows and
+/// rows of topics that no longer exist, and a publish evicts the oldest rows
+/// past `crate::store::dedup::MAX_ROWS`. `message_id` is the text id, not a
+/// foreign key: retention may collect the message while the window is still
+/// open, and a repeat inside the window must still be suppressed.
+/// `stats_hourly.deduplicated` counts the suppressed repeats per topic.
+const MIGRATION_8_DEDUP_KEYS: &str = r#"
+CREATE TABLE dedup_keys (
+    topic_id     INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    key          TEXT    NOT NULL,
+    message_id   TEXT    NOT NULL,
+    published_at INTEGER NOT NULL,
+    expires_at   INTEGER NOT NULL,
+    PRIMARY KEY (topic_id, key)
+) STRICT, WITHOUT ROWID;
+
+CREATE INDEX dedup_keys_by_expiry ON dedup_keys (expires_at);
+CREATE INDEX dedup_keys_by_age ON dedup_keys (published_at);
+
+ALTER TABLE stats_hourly ADD COLUMN deduplicated INTEGER NOT NULL DEFAULT 0;
 "#;
 
 /// Where a store stands against this binary: its schema version and the

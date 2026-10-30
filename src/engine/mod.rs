@@ -11,6 +11,7 @@
 
 pub mod clock;
 pub mod days;
+pub mod dedup;
 pub mod ids;
 pub mod names;
 pub mod policy;
@@ -20,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use crate::crypto::SecretKey;
 use crate::events::{self, Event};
 use crate::store::Store;
+use crate::store::dedup as store_dedup;
 use crate::store::queries::{
     self, AckOutcome, ClaimedMessage, DeadLetter, DeleteOutcome, NackOutcome, Overdue,
     RequeueOutcome, StoredPolicy,
@@ -215,6 +217,9 @@ pub struct Published {
     pub delivered_to: Vec<String>,
     /// `Some` when the message is scheduled rather than immediate (W4).
     pub due_at: Option<Millis>,
+    /// True when a dedup key suppressed this publish: nothing was stored and
+    /// `id` is the original message's.
+    pub duplicate: bool,
 }
 
 /// A subscription that this very poll brought into existence, with the
@@ -350,6 +355,18 @@ impl Engine {
         content_type: Option<&str>,
         due_at: Option<Millis>,
     ) -> Result<Published> {
+        self.publish_damped(topic, payload, content_type, due_at, None)
+    }
+
+    /// [`Self::publish_due`] with optional damping of repeats (`dedup`).
+    pub fn publish_damped(
+        &self,
+        topic: &str,
+        payload: &[u8],
+        content_type: Option<&str>,
+        due_at: Option<Millis>,
+        dedup: Option<&dedup::Dedup>,
+    ) -> Result<Published> {
         if !names::is_valid(topic) {
             return Err(EngineError::InvalidName {
                 kind: "topic",
@@ -370,11 +387,18 @@ impl Engine {
             .next(now)
             .to_string();
 
-        let delivered_to = self.write(|tx| -> Result<Vec<String>> {
+        let stored = self.write(|tx| -> Result<std::result::Result<Vec<String>, String>> {
             let topic_id = match queries::topic_id_by_name(tx, topic)? {
                 Some(id) => id,
                 None => queries::create_topic(tx, topic, now)?,
             };
+            if let Some(dedup) = dedup {
+                if let Some(original) = store_dedup::find_live(tx, topic_id, &dedup.key, now)? {
+                    store_dedup::count_suppressed(tx, topic, now)?;
+                    return Ok(Err(original));
+                }
+                store_dedup::remember(tx, topic_id, &dedup.key, &id, now, dedup.window_ms)?;
+            }
 
             let seq =
                 queries::insert_message(tx, &id, topic_id, payload, content_type, now, due_at)?;
@@ -385,16 +409,25 @@ impl Engine {
                 queries::insert_pending_delivery(tx, seq, subscription.id)?;
             }
 
-            Ok(subscriptions
+            Ok(Ok(subscriptions
                 .into_iter()
                 .map(|subscription| subscription.name)
-                .collect::<Vec<_>>())
+                .collect::<Vec<_>>()))
         })?;
 
-        Ok(Published {
-            id,
-            delivered_to,
-            due_at,
+        Ok(match stored {
+            Ok(delivered_to) => Published {
+                id,
+                delivered_to,
+                due_at,
+                duplicate: false,
+            },
+            Err(original) => Published {
+                id: original,
+                delivered_to: Vec::new(),
+                due_at: None,
+                duplicate: true,
+            },
         })
     }
 
@@ -1010,7 +1043,9 @@ impl Engine {
             // everything the dashboard's statistics keep.
             queries::sample_totals_if_due(tx, now)?;
             let pruned = queries::prune_history(tx, now, batch_limit)?;
-            report.more_work = report.more_work || pruned >= batch_limit;
+            let pruned_keys = store_dedup::prune(tx, now, batch_limit)?;
+            report.more_work =
+                report.more_work || pruned >= batch_limit || pruned_keys >= batch_limit;
 
             report.wake.sort();
             report.wake.dedup();
