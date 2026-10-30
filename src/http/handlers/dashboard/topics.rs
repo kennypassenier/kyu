@@ -11,7 +11,7 @@ use crate::store::queries;
 use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
-use crate::http::handlers::dashboard::page::{TOPICS_HTML, internal, page};
+use crate::http::handlers::dashboard::page::{TOPICS_HTML, internal, page, read_blocking};
 use crate::http::handlers::dashboard::shell::shell_view;
 
 /// A topic is "Backlog" on the Topics page from this many waiting messages.
@@ -125,14 +125,7 @@ pub async fn topics_page(
     State(state): State<AppState>,
 ) -> Result<Html<String>, ApiError> {
     let engine = state.engine.clone();
-    let built = tokio::task::spawn_blocking(move || -> anyhow::Result<(i64, Vec<TopicRowView>)> {
-        let now = engine.now_ms();
-        let rows = engine.store().read(|conn| read_rows(conn, now))?;
-        Ok((now, rows))
-    })
-    .await
-    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-    .map_err(|error| internal(format!("{error:#}")))?;
+    let built = read_blocking(engine, |conn, now| Ok((now, read_rows(conn, now)?))).await?;
     let (now, topics) = built;
     // The block sits inside a <script type="application/json">: `<` is
     // escaped so a payload excerpt can never close the element.

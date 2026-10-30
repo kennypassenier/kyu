@@ -8,7 +8,7 @@ use crate::store::queries;
 
 use crate::http::AppState;
 use crate::http::error::ApiError;
-use crate::http::handlers::dashboard::page::internal;
+use crate::http::handlers::dashboard::page::read_blocking;
 
 /// One topic as the shell lists it: a palette option and a node of the
 /// "who reads what" map.
@@ -102,12 +102,5 @@ fn read_shell(conn: &rusqlite::Connection, now: i64) -> anyhow::Result<serde_jso
 /// letter total (what "Prune dead letters" would delete).
 pub(crate) async fn shell_view(state: &AppState) -> Result<serde_json::Value, ApiError> {
     let engine = state.engine.clone();
-    tokio::task::spawn_blocking(move || {
-        engine
-            .store()
-            .read(|conn| read_shell(conn, engine.now_ms()))
-    })
-    .await
-    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-    .map_err(|error: anyhow::Error| internal(format!("{error:#}")))
+    read_blocking(engine, read_shell).await
 }

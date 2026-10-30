@@ -13,7 +13,7 @@ use crate::store::queries;
 use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
-use crate::http::handlers::dashboard::page::{TOPIC_HTML, internal, page};
+use crate::http::handlers::dashboard::page::{TOPIC_HTML, page, read_blocking};
 use crate::http::handlers::dashboard::shell::shell_view;
 use crate::http::handlers::dashboard::topic_data::{
     Stamps, build_snippets, first_live_reader, page_data,
@@ -121,14 +121,10 @@ pub async fn dashboard_topic(
     // (the kit refuses to start without it); a command with a client's own
     // token comes from the kit's clients page ("Copy command").
     let token = state.auth.token().map(str::to_string);
-    let built = tokio::task::spawn_blocking(move || -> anyhow::Result<Option<TopicPage>> {
-        engine
-            .store()
-            .read(|conn| load_topic_page(conn, &topic_name, engine.now_ms(), token.as_deref()))
+    let built = read_blocking(engine, move |conn, now| {
+        load_topic_page(conn, &topic_name, now, token.as_deref())
     })
-    .await
-    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-    .map_err(|error| internal(format!("{error:#}")))?;
+    .await?;
     let Some(built) = built else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,

@@ -13,7 +13,7 @@ use crate::store::queries;
 use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::assets::ASSET_VERSION;
-use crate::http::handlers::dashboard::page::{SUBSCRIPTION_HTML, internal, page, to_json};
+use crate::http::handlers::dashboard::page::{SUBSCRIPTION_HTML, page, read_blocking, to_json};
 use crate::http::handlers::dashboard::shell::shell_view;
 use crate::http::handlers::dashboard::subscription_rows::{
     format_duration_ms, subscription_policy_rows,
@@ -131,15 +131,10 @@ pub async fn dashboard_subscription(
     let engine = state.engine.clone();
     let topic_name = topic.clone();
     let subscription_name = subscription.clone();
-    let built =
-        tokio::task::spawn_blocking(move || -> anyhow::Result<Option<SubscriptionPageRows>> {
-            engine
-                .store()
-                .read(|conn| load_rows(conn, &topic_name, &subscription_name, engine.now_ms()))
-        })
-        .await
-        .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
-        .map_err(|error| internal(format!("{error:#}")))?;
+    let built = read_blocking(engine, move |conn, now| {
+        load_rows(conn, &topic_name, &subscription_name, now)
+    })
+    .await?;
     let Some(mut built) = built else {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,

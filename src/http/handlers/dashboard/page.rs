@@ -6,6 +6,12 @@ use axum::http::StatusCode;
 use axum::response::Html;
 use chassis::Dashboard;
 
+use std::sync::Arc;
+
+use rusqlite::Connection;
+
+use crate::engine::Engine;
+use crate::engine::clock::Millis;
 use crate::http::error::ApiError;
 
 /// The hub's own page templates, rendered inside the kit's layout (K2-2,
@@ -67,6 +73,23 @@ pub(crate) fn to_json<T: serde::Serialize>(view: &T) -> serde_json::Value {
         tracing::error!(%error, "a dashboard view could not be serialised");
         serde_json::Value::Null
     })
+}
+
+/// Runs a dashboard read on a blocking thread against a pooled connection,
+/// handing it the engine's clock reading. A task that could not run and a
+/// read that failed both become the dashboard's internal error.
+pub(crate) async fn read_blocking<T, F>(engine: Arc<Engine>, read: F) -> Result<T, ApiError>
+where
+    T: Send + 'static,
+    F: FnOnce(&Connection, Millis) -> anyhow::Result<T> + Send + 'static,
+{
+    tokio::task::spawn_blocking(move || {
+        let now = engine.now_ms();
+        engine.store().read(|conn| read(conn, now))
+    })
+    .await
+    .map_err(|error| internal(format!("the dashboard task failed: {error}")))?
+    .map_err(|error| internal(format!("{error:#}")))
 }
 
 pub(crate) fn internal(message: String) -> ApiError {
