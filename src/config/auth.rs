@@ -1,37 +1,12 @@
-//! Process configuration (AR6, amended 3.0.0): the hub's own settings are
-//! environment variables only. The transport knobs — listen address, state
-//! directory, body limit, shutdown budget, logging — moved to chassis,
-//! which reads them from the same environment (and, optionally, from the
-//! kit's `config.toml`). Everything per-topic or per-subscription is
-//! *policy* (K7, K9) and lives in the database instead, set through the
-//! API or the dashboard.
+//! The door policy (W2): no token at all, or a token with its sealing key.
 
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 
 use crate::crypto::SecretKey;
-use crate::engine::Defaults;
 
 /// Shortest bootstrap token we accept. Long enough that a guess is not a
 /// realistic attack, short enough to type once into a compose file.
 pub const MIN_TOKEN_LEN: usize = 16;
-/// How long the dashboard reveals a token before hiding it again (W2,
-/// Kenny's choice at the 2026-08-28 mini-round).
-pub const REVEAL_SECONDS: u32 = 10;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Config {
-    /// The state root the kit resolved (`KYU_STATE_DIR`).
-    pub data_dir: PathBuf,
-    /// The kit's body limit, mirrored so the publish handler can name it.
-    pub max_body_bytes: u64,
-    /// Hub-wide defaults for things a topic or subscription can override
-    /// (AR6): retention and the idle thresholds.
-    pub defaults: Defaults,
-    /// Who may talk to the hub (W2).
-    pub auth: Auth,
-}
 
 /// The door policy (W2).
 ///
@@ -122,102 +97,6 @@ impl Auth {
     }
 }
 
-impl Config {
-    /// The hub's own settings from the environment, on top of what the kit
-    /// resolved (3.0.0). Present-but-invalid values fail loudly with a
-    /// remedy (AR4, standing rules 11 and 12) rather than falling back.
-    pub fn from_kit(state_dir: &Path, max_body_bytes: u64) -> Result<Self> {
-        Self::from_values(
-            state_dir,
-            max_body_bytes,
-            std::env::var("KYU_TOKEN").ok().as_deref(),
-            std::env::var("KYU_SECRET_KEY").ok().as_deref(),
-        )
-    }
-
-    /// `from_kit` with the door pair passed in, so tests never mutate the
-    /// process environment.
-    pub fn from_values(
-        state_dir: &Path,
-        max_body_bytes: u64,
-        token: Option<&str>,
-        key: Option<&str>,
-    ) -> Result<Self> {
-        let defaults = Defaults::default();
-        let defaults = Defaults {
-            retention_ms: duration_from_env("KYU_RETENTION_MS", defaults.retention_ms)?,
-            idle_flag_ms: duration_from_env("KYU_IDLE_FLAG_MS", Some(defaults.idle_flag_ms))?
-                .unwrap_or(defaults.idle_flag_ms),
-            idle_archive_ms: duration_from_env(
-                "KYU_IDLE_ARCHIVE_MS",
-                Some(defaults.idle_archive_ms),
-            )?
-            .unwrap_or(defaults.idle_archive_ms),
-            expired_event_window_ms: expired_event_window(
-                std::env::var("KYU_EXPIRED_EVENT_WINDOW_MS").ok().as_deref(),
-                defaults.expired_event_window_ms,
-            )?,
-        };
-        Ok(Self {
-            data_dir: state_dir.to_path_buf(),
-            max_body_bytes,
-            defaults,
-            auth: Auth::parse(token, key)?,
-        })
-    }
-}
-
-/// `KYU_EXPIRED_EVENT_WINDOW_MS` (W11, amended 2026-09-18): how long one
-/// `message.expired` announcement stands for a subscription. `never` is
-/// refused here, unlike the other durations: a window that never closes
-/// would announce the first expiry and then nothing, for ever.
-fn expired_event_window(raw: Option<&str>, fallback: i64) -> Result<i64> {
-    match duration_from_value("KYU_EXPIRED_EVENT_WINDOW_MS", raw, Some(fallback))? {
-        Some(window) => Ok(window),
-        None => bail!(
-            "KYU_EXPIRED_EVENT_WINDOW_MS is \"never\", which would announce the \
-             first expired message and then never another. Set a millisecond \
-             count (86400000 is a day); 1 announces every sweep."
-        ),
-    }
-}
-
-/// Reads a millisecond duration from the environment. The literal `never`
-/// means "no limit" — spelled out rather than encoded as 0, which would read
-/// like "immediately" to anyone skimming the compose file.
-fn duration_from_env(name: &str, fallback: Option<i64>) -> Result<Option<i64>> {
-    duration_from_value(name, std::env::var(name).ok().as_deref(), fallback)
-}
-
-/// [`duration_from_env`] with the raw value passed in, so tests never
-/// mutate the process environment.
-fn duration_from_value(
-    name: &str,
-    raw: Option<&str>,
-    fallback: Option<i64>,
-) -> Result<Option<i64>> {
-    let Some(raw) = raw else {
-        return Ok(fallback);
-    };
-    if raw.eq_ignore_ascii_case("never") {
-        return Ok(None);
-    }
-    let parsed: i64 = raw.parse().with_context(|| {
-        format!(
-            "{name} is not a whole number of milliseconds: {raw:?}. Set it to a \
-             millisecond count (604800000 is a week), or to \"never\" to switch the \
-             limit off entirely."
-        )
-    })?;
-    if parsed <= 0 {
-        bail!(
-            "{name} is {parsed}, which is not a usable duration. Set a positive \
-             millisecond count, or \"never\" to switch the limit off."
-        );
-    }
-    Ok(Some(parsed))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,27 +148,6 @@ mod tests {
             format!("{error:#}").contains("door open"),
             "says what is actually wrong"
         );
-    }
-
-    #[test]
-    fn w11_the_expiry_window_takes_a_count_and_refuses_never() {
-        let day = 24 * 60 * 60 * 1_000;
-        assert_eq!(
-            expired_event_window(None, day).expect("absent means the default"),
-            day
-        );
-        assert_eq!(
-            expired_event_window(Some("3600000"), day).expect("an hour"),
-            3_600_000
-        );
-        let error = expired_event_window(Some("never"), day)
-            .expect_err("a window that never closes announces once and then nothing");
-        assert!(
-            format!("{error:#}").contains("86400000"),
-            "carries a remedy with a usable value: {error:#}"
-        );
-        let error = expired_event_window(Some("0"), day).expect_err("zero is not a duration");
-        assert!(format!("{error:#}").contains("positive"), "{error:#}");
     }
 
     #[test]
