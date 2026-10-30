@@ -15,8 +15,12 @@
 //! serialise without a lock of our own, and a small pool of readers so the
 //! dashboard can scan a topic without ever blocking a publish.
 
+mod backup;
 pub mod dedup;
+mod health;
+mod inspect;
 pub mod migrations;
+mod pragmas;
 pub mod queries;
 
 use std::path::{Path, PathBuf};
@@ -58,38 +62,8 @@ pub struct Store {
     last_write_failure: Mutex<Option<std::time::Instant>>,
 }
 
-/// The answer of [`Store::inspect`].
-#[derive(Debug, Clone)]
-pub struct Inspection {
-    pub path: PathBuf,
-    /// `None` when there is no store file yet.
-    pub pending: Option<migrations::Pending>,
-    pub quick_check: Option<String>,
-}
-
-impl Inspection {
-    /// One line for `--check`'s output.
-    pub fn describe(&self) -> String {
-        match self.pending {
-            None => format!(
-                "no store yet at {}; it is created at start",
-                self.path.display()
-            ),
-            Some(p) if p.is_behind() => format!(
-                "store at {} is readable and intact: schema {}, this binary knows {} — the \
-                 migration runs at start, after a snapshot; --check applies nothing",
-                self.path.display(),
-                p.current,
-                p.target
-            ),
-            Some(p) => format!(
-                "store OK at {} (schema {}, current)",
-                self.path.display(),
-                p.current
-            ),
-        }
-    }
-}
+pub use inspect::Inspection;
+use pragmas::{Journal, apply_pragmas};
 
 impl Store {
     /// Opens the store in `data_dir`, creating the directory and the
@@ -129,50 +103,6 @@ impl Store {
             readers,
             path: Some(path),
             last_write_failure: Mutex::new(None),
-        })
-    }
-
-    /// What `--check` asks of the store, without touching it (fix-check-1):
-    /// does it open, is it intact, and how far behind this binary is it. The
-    /// file is opened read-only, no pragma is set, no migration runs and
-    /// nothing is created — a state directory with no store yet is fine,
-    /// because the store is created at start, not by a check.
-    pub fn inspect(data_dir: &Path) -> Result<Inspection> {
-        let path = data_dir.join(STORE_FILE_NAME);
-        if !path.exists() {
-            return Ok(Inspection {
-                path,
-                pending: None,
-                quick_check: None,
-            });
-        }
-        let conn = Connection::open_with_flags(
-            &path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .with_context(|| {
-            format!(
-                "cannot open the store at {} read-only. Check file permissions; the \
-                 service user must be able to read it.",
-                path.display()
-            )
-        })?;
-        let quick_check: String = conn
-            .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
-            .with_context(|| format!("cannot run quick_check on {}", path.display()))?;
-        if quick_check != "ok" {
-            anyhow::bail!(
-                "the store at {} is damaged: quick_check says {quick_check:?}. Restore \
-                 the newest backup (kyu.backup-*.db or the pre-migration snapshot) \
-                 before starting.",
-                path.display()
-            );
-        }
-        let pending = migrations::pending(&conn)?;
-        Ok(Inspection {
-            path,
-            pending: Some(pending),
-            quick_check: Some(quick_check),
         })
     }
 
@@ -272,26 +202,6 @@ impl Store {
         Ok(value)
     }
 
-    /// Called by the engine when a write failed for a storage reason rather
-    /// than a business one — an unknown topic is not a sick store.
-    pub fn record_write_failure(&self) {
-        *self
-            .last_write_failure
-            .lock()
-            .expect("the failure lock is never poisoned") = Some(std::time::Instant::now());
-    }
-
-    /// How long ago a write last failed, if that was recent enough to still
-    /// mean something (W6).
-    pub fn recent_write_failure(&self) -> Option<std::time::Duration> {
-        let last = *self
-            .last_write_failure
-            .lock()
-            .expect("the failure lock is never poisoned");
-        last.map(|at| at.elapsed())
-            .filter(|elapsed| *elapsed < WRITE_FAILURE_WINDOW)
-    }
-
     /// Direct access to the writer connection, for tests that assert on the
     /// schema itself. Ordinary reads go through [`Store::read`].
     pub fn with_conn<T>(&self, f: impl FnOnce(&Connection) -> T) -> T {
@@ -306,126 +216,6 @@ impl Store {
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
     }
-
-    /// W8 · writes a consistent copy of the store while the hub keeps
-    /// running.
-    ///
-    /// `VACUUM INTO` produces a complete database file, not a snapshot of
-    /// bytes mid-write, so a backup taken under load is restorable. Copying
-    /// the file by hand is the thing this exists to stop anyone doing.
-    pub fn backup_to(&self, path: &Path) -> Result<u64> {
-        if path.exists() {
-            anyhow::bail!(
-                "{} already exists. VACUUM INTO refuses to overwrite, so choose \
-                 another name or remove the old backup first.",
-                path.display()
-            );
-        }
-        let conn = self
-            .writer
-            .lock()
-            .expect("the writer lock is never poisoned");
-        conn.execute("VACUUM INTO ?1", [path.to_string_lossy().as_ref()])
-            .with_context(|| {
-                format!(
-                    "cannot write the backup to {}. Check free space and that the \
-                     directory is writable by this user.",
-                    path.display()
-                )
-            })?;
-        let bytes = std::fs::metadata(path)
-            .with_context(|| format!("cannot stat the backup at {}", path.display()))?
-            .len();
-
-        // Open what was just written and ask SQLite whether it is intact. A
-        // backup is only a backup if it restores; reporting success for a
-        // file that merely exists is how a truncated copy gets discovered
-        // on the day it is needed.
-        let verify = Connection::open(path)
-            .with_context(|| format!("the backup at {} cannot be opened", path.display()))?;
-        let integrity: String = verify
-            .query_row("PRAGMA integrity_check", [], |row| row.get(0))
-            .with_context(|| format!("the backup at {} cannot be checked", path.display()))?;
-        anyhow::ensure!(
-            integrity == "ok",
-            "the backup at {} is not a sound database ({integrity}). It has been left \
-             in place for inspection; take another one, and check free space first.",
-            path.display()
-        );
-
-        Ok(bytes)
-    }
-
-    /// Probes write access without writing anything (W6).
-    ///
-    /// `BEGIN IMMEDIATE` takes SQLite's reserved lock, which fails at once
-    /// on a read-only store; rolling it straight back leaves no trace. A
-    /// health check that only read would keep answering "fine" while every
-    /// publish failed.
-    ///
-    /// What it catches: a store opened read-only, a read-only filesystem, a
-    /// missing or unwritable data directory, and a lock another process
-    /// refuses to release. What it does not: a disk that is full but
-    /// writable — that surfaces at commit, so it shows up as failing
-    /// publishes rather than here — and permissions changed *after* the file
-    /// was opened, which POSIX checks only at open time.
-    pub fn probe_writable(&self) -> Result<()> {
-        let mut conn = self
-            .writer
-            .lock()
-            .expect("the writer lock is never poisoned");
-        let tx = conn
-            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
-            .context("the store is not writable")?;
-        tx.rollback().context("cannot release the write probe")?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Journal {
-    Wal,
-    Memory,
-    /// A second connection to a database whose journal mode is already set.
-    Existing,
-}
-
-/// Sets every pragma the durability and correctness promises depend on.
-/// Their effective values are asserted by tests rather than assumed.
-fn apply_pragmas(conn: &Connection, journal: Journal) -> Result<()> {
-    conn.busy_timeout(std::time::Duration::from_millis(BUSY_TIMEOUT_MS.into()))
-        .context("cannot set busy_timeout")?;
-
-    // Referential integrity is off by default in SQLite, and the delivery
-    // rows of AR3 lean on it: a delivery must never outlive its message.
-    conn.pragma_update(None, "foreign_keys", "ON")
-        .context("cannot enable foreign_keys")?;
-
-    if journal == Journal::Existing {
-        return Ok(());
-    }
-
-    if journal == Journal::Wal {
-        // journal_mode returns the mode it settled on, so read it back
-        // rather than trusting the write.
-        let mode: String = conn
-            .query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))
-            .context("cannot switch the journal to WAL")?;
-        anyhow::ensure!(
-            mode.eq_ignore_ascii_case("wal"),
-            "SQLite refused write-ahead logging and settled on {mode:?}. The store \
-             must be on a filesystem that supports it — a local volume, not a \
-             network mount — because K12's durability promise depends on WAL plus \
-             synchronous=FULL."
-        );
-    }
-
-    // The K12 contract: a confirmed publish has been fsynced. NORMAL would
-    // let a committed transaction vanish in a power cut.
-    conn.pragma_update(None, "synchronous", "FULL")
-        .context("cannot set synchronous=FULL")?;
-
-    Ok(())
 }
 
 #[cfg(test)]
