@@ -30,50 +30,69 @@ pub(super) fn apply(
     // that claims a message and then hangs for half an hour must not be
     // able to resurrect it past its deadline (AR9, the stale-doorbell case).
     if policy.is_past_ttl(delivery.published_at, now) {
-        return Ok(
-            if queries::mark_expired(tx, delivery.msg_seq, delivery.sub_id, now)? {
-                queries::close_attempt(
-                    tx,
-                    delivery.msg_seq,
-                    delivery.sub_id,
-                    now,
-                    "expired",
-                    "the message passed its time to live",
-                )?;
-                Settled::Expired
-            } else {
-                Settled::Unchanged
-            },
-        );
+        return expire(tx, delivery, now);
     }
-
     if attempts >= policy.max_attempts {
-        return Ok(
-            if queries::mark_dead(tx, delivery.msg_seq, delivery.sub_id, attempts, now)? {
-                record_dead(tx, delivery, now, cause.exhausted())?;
-                Settled::DeadLettered
-            } else {
-                Settled::Unchanged
-            },
-        );
+        return dead_letter(tx, delivery, attempts, now, cause);
     }
-
     let next_attempt_at = now.saturating_add(policy.retry_delay_ms(attempts));
-    Ok(
-        if queries::repend(
+    retry(tx, delivery, attempts, next_attempt_at, now, cause)
+}
+
+/// `Unchanged` when the guarded update found nothing to change.
+fn settled_if(changed: bool, settled: Settled) -> Settled {
+    if changed { settled } else { Settled::Unchanged }
+}
+
+fn expire(tx: &rusqlite::Transaction, delivery: &Overdue, now: Millis) -> anyhow::Result<Settled> {
+    let changed = queries::mark_expired(tx, delivery.msg_seq, delivery.sub_id, now)?;
+    if changed {
+        queries::close_attempt(
             tx,
             delivery.msg_seq,
             delivery.sub_id,
-            attempts,
-            next_attempt_at,
-        )? {
-            let (outcome, reason) = cause.retry();
-            queries::close_attempt(tx, delivery.msg_seq, delivery.sub_id, now, outcome, reason)?;
-            Settled::Redelivered
-        } else {
-            Settled::Unchanged
-        },
-    )
+            now,
+            "expired",
+            "the message passed its time to live",
+        )?;
+    }
+    Ok(settled_if(changed, Settled::Expired))
+}
+
+fn dead_letter(
+    tx: &rusqlite::Transaction,
+    delivery: &Overdue,
+    attempts: i64,
+    now: Millis,
+    cause: Cause,
+) -> anyhow::Result<Settled> {
+    let changed = queries::mark_dead(tx, delivery.msg_seq, delivery.sub_id, attempts, now)?;
+    if changed {
+        record_dead(tx, delivery, now, cause.exhausted())?;
+    }
+    Ok(settled_if(changed, Settled::DeadLettered))
+}
+
+fn retry(
+    tx: &rusqlite::Transaction,
+    delivery: &Overdue,
+    attempts: i64,
+    next_attempt_at: Millis,
+    now: Millis,
+    cause: Cause,
+) -> anyhow::Result<Settled> {
+    let changed = queries::repend(
+        tx,
+        delivery.msg_seq,
+        delivery.sub_id,
+        attempts,
+        next_attempt_at,
+    )?;
+    if changed {
+        let (outcome, reason) = cause.retry();
+        queries::close_attempt(tx, delivery.msg_seq, delivery.sub_id, now, outcome, reason)?;
+    }
+    Ok(settled_if(changed, Settled::Redelivered))
 }
 
 /// Why a delivery failed, for the attempt history.
