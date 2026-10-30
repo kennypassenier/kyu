@@ -14,11 +14,33 @@ use crate::http::error::ApiError;
 pub(crate) const TOPICS_HTML: &str = include_str!("../../../../templates/topics.html");
 pub(crate) const TOPIC_HTML: &str = include_str!("../../../../templates/topic.html");
 pub(crate) const SUBSCRIPTION_HTML: &str = include_str!("../../../../templates/subscription.html");
-/// The cross-page shell (command palette, keys, help, tour, anchors, uses-map).
-/// The kit renders a page from one source string, so an
-/// `{% include "_kp.html" %}` line is expanded here, before rendering.
-const KP_HTML: &str = include_str!("../../../../templates/_kp.html");
-const KP_INCLUDE: &str = "{% include \"_kp.html\" %}";
+/// The partials a page may include: the cross-page shell (command palette,
+/// keys, help, tour, anchors, uses-map) and the Topic page's sections, one
+/// file each. The kit renders a page from one source string, so every
+/// `{% include "<name>" %}` line is expanded here, before rendering.
+const PARTIALS: &[(&str, &str)] = &[
+    ("_kp.html", include_str!("../../../../templates/_kp.html")),
+    (
+        "_topic_send.html",
+        include_str!("../../../../templates/_topic_send.html"),
+    ),
+    (
+        "_topic_subs.html",
+        include_str!("../../../../templates/_topic_subs.html"),
+    ),
+    (
+        "_topic_dead.html",
+        include_str!("../../../../templates/_topic_dead.html"),
+    ),
+    (
+        "_topic_recent.html",
+        include_str!("../../../../templates/_topic_recent.html"),
+    ),
+    (
+        "_topic_publish.html",
+        include_str!("../../../../templates/_topic_publish.html"),
+    ),
+];
 
 pub(crate) fn page<C: serde::Serialize>(
     dash: &Dashboard,
@@ -26,7 +48,14 @@ pub(crate) fn page<C: serde::Serialize>(
     source: &str,
     ctx: C,
 ) -> Result<Html<String>, ApiError> {
-    let expanded = source.replace(KP_INCLUDE, KP_HTML);
+    let expanded = PARTIALS
+        .iter()
+        .fold(source.to_string(), |page, (name, body)| {
+            page.replace(
+                &format!("{{% include \"{name}\" %}}"),
+                body.trim_end_matches('\n'),
+            )
+        });
     dash.render_project(nav, &expanded, ctx)
         .map_err(|error| internal(format!("cannot render the page: {error}")))
 }

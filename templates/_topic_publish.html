@@ -1,0 +1,35 @@
+<section class="kt-publish" aria-labelledby="kt-publish-title">
+    <div class="kt-head">
+      <h2 class="kp-card__title" id="kt-publish-title">Publish a test message</h2>
+      <p class="kt-lead">One click puts a known message on {{ topic.name }}: it answers whether the producer or the consumer is broken.</p>
+    </div>
+    <form class="kp-form kp-formgrid" id="kt-publish-form" data-kp-form novalidate method="post" action="/t/{{ topic.name }}/dashboard/publish">
+      <div class="kp-form__summary" data-kp-form-summary tabindex="-1" hidden data-kp-formgrid-span="all"></div>
+      <div class="kp-formgrid__row">
+        <label class="kp-formgrid__label" for="kt-publish-body">Message to {{ topic.name }} <span class="kp-field__required">required</span></label>
+        <div class="kp-formgrid__control kp-field">
+          <textarea class="kp-field__input kp-field__input--multiline" id="kt-publish-body" name="payload" required rows="6" maxlength="4000"
+            placeholder='{"title":"hello","body":"world"}' data-kyu-publish
+            data-kp-json="strict" data-kp-json-check="input" data-kp-json-format="button" data-kp-json-indent="2"
+            data-kp-autosize data-kp-autosize-engine="js" data-kp-autosize-max="20" data-kp-counter="chars"
+            data-kp-submit-key="mod-enter" data-kp-remember="kyu-topic-publish-draft"></textarea>
+          <span class="kp-field__error" data-kp-field-error hidden></span>
+        </div>
+      </div>
+      <div class="kp-formgrid__row">
+        <label class="kp-formgrid__label" for="kt-publish-delay">Deliver after (seconds)</label>
+        <div class="kp-formgrid__control kp-field">
+          <input class="kp-field__input kp-field__input--short" id="kt-publish-delay" name="delay" type="number" inputmode="numeric" min="0" max="86400" step="1" placeholder="0" />
+          <span class="kp-field__error" data-kp-field-error hidden></span>
+        </div>
+      </div>
+      <div class="kp-formgrid__row kp-formgrid__row--buttons">
+        <div class="kp-formgrid__control">
+          <div class="kp-formgrid__buttons">
+            <button type="submit" class="kp-button kp-button--primary" id="kt-publish-send" data-kp-submit data-kp-busy="Publishing"
+              data-kp-flash-button data-kp-flash-words="Published,Refused,Failed" data-kp-flash-word="Published" data-kp-refusal="line">Publish test message</button>
+          </div>
+        </div>
+      </div>
+    </form>
+  </section>
