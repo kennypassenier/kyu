@@ -346,4 +346,4 @@ network with no route to the internet, and so opening the dashboard tells
 nobody outside that you did. See [docs/KIT.md](docs/KIT.md) for the vendored
 version; `chassis sync` refuses to report "in sync" while `.chassis.toml`'s
 own `kp_themes` field disagrees with what the installed kit actually
-vendors. kyu's own two assets are just `static/kyu.css` and `app.js`.
+vendors. kyu's own assets are `static/kyu.css` plus one script and stylesheet per page.

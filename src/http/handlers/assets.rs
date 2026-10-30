@@ -15,11 +15,6 @@ use crate::http::page_modules::{MODULE_CONTENT_TYPE, PAGE_MODULES};
 /// carries only what it uses (kp-themes 11.0.0 adoption).
 const ASSETS: &[(&str, &str, &str)] = &[
     (
-        "app.js",
-        include_str!("../../../static/app.js"),
-        "text/javascript; charset=utf-8",
-    ),
-    (
         "common.js",
         include_str!("../../../static/common.js"),
         "text/javascript; charset=utf-8",

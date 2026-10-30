@@ -343,7 +343,8 @@ Per-topic form, payload prefilled with last real payload, send button.
 and its picker in its layout; kyu no longer vendors the eight files, the
 checksum gate and `tests/w13_themes.rs` are gone with them, and the
 picker contract is the kit's to prove. kyu keeps `static/kyu.css` and
-`static/app.js` (the snippet copy/reveal behaviour), served on `/assets`.
+its page scripts, served on `/assets`. *Amended 2026-10-30:* `static/app.js`,
+the pre-kp-themes snippet script, is removed; no page loaded it any more.
 
 *Amended 2026-09-09 (chassis-rs 1.8.0):* the package moves to 5.0.0 — 25
 themes now (`topo` renamed `forest`, `tazhib` renamed `lapis`, `nishiki`

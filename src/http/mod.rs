@@ -194,8 +194,9 @@ pub fn pages(state: AppState) -> Router {
         .with_state(state)
 }
 
-/// The two files the hub's pages need beyond the kit's assets (kyu.css and
-/// app.js), served open on `/assets/…` because the kit owns `/static/…`.
+/// The files the hub's pages need beyond the kit's assets (kyu.css and the
+/// page scripts and stylesheets), served open on `/assets/…` because the kit
+/// owns `/static/…`.
 pub fn assets() -> Router {
     Router::new().route("/assets/{file}", get(handlers::kyu_asset))
 }

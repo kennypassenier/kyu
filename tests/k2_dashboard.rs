@@ -865,8 +865,8 @@ async fn k2_the_hub_assets_are_served_open_and_fingerprinted() {
             .unwrap_or_default()
             .contains("immutable")
     );
-    let js = hub.get_anon("/assets/app.js").await;
-    assert_eq!(js.status(), 200);
+    // The pre-kp-themes app.js is gone; nothing loads it any more.
+    assert_eq!(hub.get_anon("/assets/app.js").await.status(), 404);
     assert_eq!(hub.get_anon("/assets/nope.js").await.status(), 404);
     let page = hub.page("/topics").await;
     // kp-themes 11 pages load the shared common.js instead of app.js.
