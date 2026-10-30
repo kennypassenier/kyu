@@ -1,0 +1,51 @@
+<section class="kp-card kt-send" data-kp-state="ready" aria-labelledby="kt-send-title" data-kp-loading-words="Building the commands" data-kt-send>
+    <div class="kp-card__header">
+      <h2 class="kp-card__title" id="kt-send-title" data-kyu-tour="snippets">Commands for {{ topic.name }}</h2>
+      <div class="kp-card__actions"><button type="button" class="kp-button kp-button--sm" data-kt-start-over>Start over</button></div>
+    </div>
+    <p class="kp-card__body">
+      The commands carry this hub's login token, hidden. Reveal shows it <b data-kt-ttl-words>for {{ reveal_seconds }} seconds</b>.
+      A command with an app's own token is on the <a href="/clients">Apps</a> page (Copy command).
+    </p>
+    <div class="kp-card__stage">
+      <div class="kp-card__data">
+        <ol class="kp-steplist kp-steplist--journey" aria-label="From publishing to acknowledging" data-kt-journey>
+          <li class="kp-steplist__item" data-state="current" data-kp-step-id="publish" data-kp-tone="1">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">1. Publish</span><span class="kp-steplist__note">Send a message to the topic</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+          <li class="kp-steplist__item" data-state="pending" data-kp-step-id="receive" data-kp-tone="2">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">2. Receive</span><span class="kp-steplist__note">Ask for the next message</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+          <li class="kp-steplist__item" data-state="pending" data-kp-step-id="ack" data-kp-tone="3">
+            <span class="kp-steplist__mark" aria-hidden="true"></span>
+            <span class="kp-steplist__body"><span class="kp-steplist__title">3. Acknowledge</span><span class="kp-steplist__note">Say it arrived, so it is not sent again</span></span>
+            <time class="kp-steplist__time"></time>
+          </li>
+        </ol>
+        <div class="kt-steps">
+          <div class="kt-step" data-kt-step="publish">
+            <p class="kt-caption">Publish a message:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that publishes" data-kt-command="publish"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-clear="30" data-kp-secret-label="Working command with the token: publish" data-kt-secret="publish"></div>
+          </div>
+          <div class="kt-step" data-kt-step="receive">
+            <p class="kt-caption">Receive it: the payload is the body, the id comes back in a header:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_raw"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-clear="30" data-kp-secret-label="Working command with the token: receive the raw payload" data-kt-secret="receive_raw"></div>
+            <p class="kt-caption kt-caption--next">Or ask for one JSON document instead:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="receive_envelope"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-clear="30" data-kp-secret-label="Working command with the token: receive the envelope" data-kt-secret="receive_envelope"></div>
+          </div>
+          <div class="kt-step" data-kt-step="ack">
+            <p class="kt-caption">Then acknowledge it, so it is not delivered again:</p>
+            <div class="kp-command" data-kp-command="bash" data-kp-command-where="the machine that reads" data-kt-command="ack"><pre><code></code></pre></div>
+            <div class="kp-secret" data-kp-secret data-kp-secret-mask="24" data-kp-secret-wrap="wrap" data-kp-secret-lines="3" data-kp-secret-clear="30" data-kp-secret-label="Working command with the token: acknowledge" data-kt-secret="ack"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>

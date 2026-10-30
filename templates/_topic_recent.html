@@ -1,0 +1,21 @@
+<section class="kt-recent" aria-labelledby="kt-recent-title" data-kt-recent>
+    <div class="kt-head kt-head--live">
+      <h2 class="kp-card__title" id="kt-recent-title">Recent messages</h2>
+      <p class="kt-lead" data-kt-recent-count></p>
+      <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
+    </div>
+    <div class="kt-stage" data-kt-stage="recent" style="--kt-stage-min: 26rem">
+      <div data-kt-filled>
+        <div class="kp-split kp-split--panes kt-md" data-kp-master-detail data-kp-resizable data-kp-remember="kyu-topic-recent" data-kp-narrow="sheet" data-kp-pane-widths="20rem 1fr" data-kt-md>
+          <section data-kp-pane="list" aria-label="Recent messages" data-kp-newpill-host>
+            <ul class="kp-pane__list kt-live" role="listbox" aria-label="Recent messages" tabindex="0" data-kp-follow="head" data-kp-pill-unit="message,messages" data-kp-since-left="on" data-kt-items></ul>
+          </section>
+          <section data-kp-pane="detail" aria-label="Message">
+            <h3 data-kp-pane-heading tabindex="-1"></h3>
+            <div class="kp-pane__body" data-kt-md-body></div>
+          </section>
+        </div>
+      </div>
+      <div data-kt-plate hidden></div>
+    </div>
+  </section>

@@ -1,0 +1,51 @@
+<section class="kp-card kt-subs" data-kp-state="ready" aria-labelledby="kt-subs-title" data-kp-loading-words="Reading the subscriptions" data-kt-subs data-kyu-tour="subs">
+    <div class="kp-card__header">
+      <h2 class="kp-card__title" id="kt-subs-title">Subscriptions of {{ topic.name }}</h2>
+      <div class="kp-card__actions"><span class="kp-timestamp" data-kt-sub-total></span></div>
+    </div>
+    <p class="kp-card__body">One row per reader. A subscription starts existing when it first polls.</p>
+    <div class="kp-card__stage">
+      <div class="kp-card__data">
+        <div class="kt-filterbar">
+          <div class="kp-segmented kp-segmented--chips" data-kp-segmented="multi" role="group" aria-label="Show subscriptions in state" data-kt-filter>
+            <button type="button" class="kp-segmented__item" data-value="all" data-kp-segmented-all aria-pressed="true"><span class="kp-segmented__label">All</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="active" aria-pressed="false"><span class="kp-segmented__label">Active</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="flagged" aria-pressed="false"><span class="kp-segmented__label">Flagged</span><span class="kp-segmented__count">0</span></button>
+            <button type="button" class="kp-segmented__item" data-value="archived" aria-pressed="false"><span class="kp-segmented__label">Archived</span><span class="kp-segmented__count">0</span></button>
+          </div>
+        </div>
+        <div class="kp-datatable kt-table-sticky" data-kp-datatable data-kp-cards data-kp-remember="kyu-topic-subs" data-kp-page-sizes="none" data-kp-sort-multi data-kp-fixed-columns="1" data-kt-subs-table data-kp-busy-overlay>
+          <div class="kp-table-wrap">
+            <table class="kp-table">
+              <caption class="kp-sr-only">Subscriptions of {{ topic.name }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col" data-kp-sort="text">Name</th>
+                  <th scope="col" data-kp-sort="text" data-kp-filter="choice">State</th>
+                  <th scope="col" data-kp-sort="number" data-kp-filter="range" class="kp-text-end">Backlog</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">In flight</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">Dead</th>
+                  <th scope="col" data-kp-sort="number" class="kp-text-end">Lapsed</th>
+                  <th scope="col" data-kp-sort="date">Oldest unacked</th>
+                  <th scope="col">Policy</th>
+                  <th scope="col" class="kt-col-actions"><span class="kp-sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody data-kt-subs-rows></tbody>
+            </table>
+          </div>
+          <div class="kp-empty" data-kp-datatable-empty hidden>
+            <div data-kp-art="none" data-kp-datatable-empty-none>
+              <p class="kp-empty__title">Nothing has polled this topic yet</p>
+              <p class="kp-empty__body">A subscription shows up here the first time something polls {{ topic.name }}.</p>
+            </div>
+            <div data-kp-art="nomatch" data-kp-datatable-empty-nomatch hidden>
+              <p class="kp-empty__title">No subscription matches</p>
+              <p class="kp-empty__body">Loosen the filter above.</p>
+              <button type="button" class="kp-button" data-kp-datatable-clear>Clear the filter</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
