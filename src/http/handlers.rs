@@ -2154,7 +2154,15 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
     // FNV-1a: not cryptographic, and does not need to be — this answers
     // "did these bytes change", nothing more (T6: no crate for six lines).
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in ASSETS.iter().flat_map(|(_, body, _)| body.bytes()) {
+    let parts = super::page_modules::PAGE_MODULES
+        .iter()
+        .map(|(_, body)| body);
+    for byte in ASSETS
+        .iter()
+        .map(|(_, body, _)| body)
+        .chain(parts)
+        .flat_map(|body| body.bytes())
+    {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
@@ -2166,20 +2174,54 @@ pub static ASSET_VERSION: std::sync::LazyLock<String> = std::sync::LazyLock::new
 /// An explicit match rather than a path join: a lookup that builds a path
 /// from user input is how a static handler turns into a file-disclosure
 /// bug, and there are exactly two files.
-pub async fn kyu_asset(Path(file): Path<String>) -> Response {
-    let Some(&(_, body, content_type)) = ASSETS.iter().find(|(name, _, _)| *name == file) else {
-        return ApiError::new(
-            StatusCode::NOT_FOUND,
-            format!("no asset named {file:?}"),
-            "the hub serves its own page scripts and stylesheets here; everything else is the kit's, under /static",
+pub async fn kyu_asset(Path(file): Path<String>, headers: HeaderMap) -> Response {
+    if let Some(&(_, body, content_type)) = ASSETS.iter().find(|(name, _, _)| *name == file) {
+        return (
+            [
+                (header::CONTENT_TYPE, content_type),
+                // Safe because every reference carries ?v=<ASSET_VERSION>.
+                (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            ],
+            body,
         )
-        .into_response();
-    };
+            .into_response();
+    }
+    if let Some(&(_, body)) = super::page_modules::PAGE_MODULES
+        .iter()
+        .find(|(name, _)| *name == file)
+    {
+        return page_module(&headers, body);
+    }
+    ApiError::new(
+        StatusCode::NOT_FOUND,
+        format!("no asset named {file:?}"),
+        "the hub serves its own page scripts and stylesheets here; everything else is the kit's, under /static",
+    )
+    .into_response()
+}
+
+/// A part module of a page script. Its import carries no `?v=`, so it must not be cached as
+/// immutable: it revalidates by `ETag` (the fingerprint of all assets) and answers 304 when
+/// the browser already has this build's copy.
+fn page_module(request: &HeaderMap, body: &'static str) -> Response {
+    let etag = format!("\"{}\"", *ASSET_VERSION);
+    let cache = (header::CACHE_CONTROL, "no-cache".to_string());
+    let tag = (header::ETAG, etag.clone());
+    let unchanged = request
+        .get(header::IF_NONE_MATCH)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|sent| sent.split(',').any(|candidate| candidate.trim() == etag));
+    if unchanged {
+        return (StatusCode::NOT_MODIFIED, [cache, tag]).into_response();
+    }
     (
         [
-            (header::CONTENT_TYPE, content_type),
-            // Safe because every reference carries ?v=<ASSET_VERSION>.
-            (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+            (
+                header::CONTENT_TYPE,
+                super::page_modules::MODULE_CONTENT_TYPE.to_string(),
+            ),
+            cache,
+            tag,
         ],
         body,
     )
