@@ -95,6 +95,8 @@ pub async fn publish(
         (None, Some(at)) => Some(at),
     };
 
+    let dedup = super::dedup::from_headers(&headers)?;
+
     let limit = state.limits.max_body_bytes;
     let payload = to_bytes(body, limit).await.map_err(|error| {
         // to_bytes fails both for an oversized body and for a broken
@@ -117,9 +119,20 @@ pub async fn publish(
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
     let published = spawn_engine_write(move || {
-        engine.publish_due(&topic_for_engine, &payload, content_type.as_deref(), due_at)
+        engine.publish_damped(
+            &topic_for_engine,
+            &payload,
+            content_type.as_deref(),
+            due_at,
+            dedup.as_ref(),
+        )
     })
     .await?;
+
+    if published.duplicate {
+        tracing::info!(topic = %topic, id = %published.id, "duplicate publish suppressed");
+        return Ok(super::dedup::duplicate_response(&published.id));
+    }
 
     state.notifiers.wake(&topic, &published.delivered_to);
 

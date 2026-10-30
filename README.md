@@ -45,6 +45,34 @@ curl -s "http://hub.lan/t/notify.kenny/next?as=printer&envelope=json"
 curl -sX POST "http://hub.lan/t/notify.kenny/ack/<id>?as=printer"
 ```
 
+### Damping repeated notifications
+
+A publisher that fires the same alert over and over can name it. Send
+`Kyu-Dedup-Key: <key>` (1 to 200 printable ASCII bytes) and optionally
+`Kyu-Dedup-Window: <duration>` (whole milliseconds, or a number with `ms`,
+`s`, `m`, `h` or `d`: `30m`, `20h`; at most `7d`; default `24h` when only the
+key is given). While a message with that key exists on the same topic within
+the window, kyu stores and delivers nothing new and answers **200** (not 201)
+with the original id:
+
+```bash
+curl -H 'Kyu-Dedup-Key: disk-ct109' -H 'Kyu-Dedup-Window: 20h' \
+     -d '{"title":"Disk almost full"}' http://hub.lan/t/notify.kenny
+# first time: 201 {"id":"..."}
+# repeat:     200 {"id":"<the original>","duplicate":true}  + header Kyu-Duplicate: true
+```
+
+The window of the publish that stored the key decides, and a suppressed
+repeat does not extend it. A different key or topic passes; no key behaves
+exactly as before. A window without a key, a bad key or a window over 7 days
+is a 400 with a remedy. Keys are remembered in the `dedup_keys` table
+(shown on the Storage page), capped at 10,000 across all topics (the oldest
+are evicted first, which at worst lets an old repeat through), and the
+sweeper removes expired keys and keys of deleted topics. Suppressed repeats
+are counted per topic and hour in the hourly statistics and exported as
+`kyu_duplicates_suppressed{topic}` and `kyu_dedup_keys` on `/metrics`.
+There is no environment variable for it.
+
 ## Running it
 
 Kenny runs kyu as a **native binary under systemd**, on its own Proxmox LXC

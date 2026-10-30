@@ -15,6 +15,7 @@
 //! serialise without a lock of our own, and a small pool of readers so the
 //! dashboard can scan a topic without ever blocking a publish.
 
+pub mod dedup;
 pub mod migrations;
 pub mod queries;
 

@@ -11,6 +11,15 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Added
+- Damping of repeated notifications: `Kyu-Dedup-Key` and `Kyu-Dedup-Window`
+  on `POST /t/{topic}`. A repeat inside the window stores nothing and
+  answers 200 with the original id, `"duplicate": true` and
+  `Kyu-Duplicate: true`. Schema 8 (`dedup_keys`, capped at 10,000 rows,
+  pruned by the sweeper), a "Dedup keys" kind on the Storage page, a
+  `deduplicated` hourly counter and the `kyu_duplicates_suppressed` and
+  `kyu_dedup_keys` metrics.
+
 ## [5.0.0] - 2026-10-22
 
 ### Added

@@ -9,6 +9,7 @@ use crate::dashboard::TopicView;
 use chassis::{App, ScrapeSource, Subsystem, SubsystemStatus};
 
 use crate::engine::Engine;
+use crate::store::dedup as store_dedup;
 use crate::store::queries;
 use crate::sweeper::Heartbeat;
 
@@ -125,6 +126,23 @@ fn render(engine: &Engine, heartbeat: &Heartbeat) -> anyhow::Result<String> {
                 escape_label(&count.subscription),
                 count.state,
                 count.count
+            ));
+        }
+        out.push_str("# HELP kyu_dedup_keys Dedup keys currently remembered.\n");
+        out.push_str("# TYPE kyu_dedup_keys gauge\n");
+        out.push_str(&format!(
+            "kyu_dedup_keys {}\n",
+            store_dedup::live_keys(conn)?
+        ));
+        out.push_str(
+            "# HELP kyu_duplicates_suppressed Publishes suppressed by a dedup key, per topic, \
+             over the retained hourly statistics (30 days).\n",
+        );
+        out.push_str("# TYPE kyu_duplicates_suppressed gauge\n");
+        for (topic, count) in store_dedup::suppressed_by_topic(conn)? {
+            out.push_str(&format!(
+                "kyu_duplicates_suppressed{{topic=\"{}\"}} {count}\n",
+                escape_label(&topic)
             ));
         }
         out.push_str("# HELP kyu_sweeper_age_ms Time since the sweeper last ran.\n");

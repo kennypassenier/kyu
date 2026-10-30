@@ -50,6 +50,15 @@ pub fn kinds() -> Vec<DataKind> {
                 "outcome",
                 ["in_flight", "acked", "nacked", "expired", "dead"],
             )),
+        DataKind::new("dedup_keys", "Dedup keys")
+            .description(
+                "The dedup keys publishers sent with Kyu-Dedup-Key and the message each \
+                 one produced. While a key is remembered, a repeat publish on that topic \
+                 is suppressed. Deleting a key lets the next publish with it through.",
+            )
+            .unit("keys")
+            .table("dedup_keys")
+            .time_column("published_at", TimeFormat::UnixMillis),
         DataKind::new("stats_hourly", "Hourly statistics")
             .description(
                 "Published and dead-letter counters per topic and hour, behind the charts.",

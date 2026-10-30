@@ -570,6 +570,18 @@ dead-letters two messages on two different topics, posts to the button's
 route with the admin session, and confirms both topics report "Nothing
 has been dead-lettered" afterward.
 
+### feat-dedup-1 · Damping of repeated notifications *(added 2026-10-30, Kenny: "demping: Doen")*
+
+A publisher that repeats the same alert can name it with `Kyu-Dedup-Key`
+(and `Kyu-Dedup-Window`, default 24 h, at most 7 days, ms or `30m`/`20h`
+style). A repeat on the same topic inside the window stores and delivers
+nothing and answers 200 with the original id (`Kyu-Duplicate: true`,
+`"duplicate": true`). No key means today's behaviour exactly. Backed by the
+`dedup_keys` table (schema 8, capped, pruned by the sweeper, visible on the
+Storage page); suppressed repeats are counted in the hourly statistics and
+in `/metrics`. Code: `src/engine/dedup.rs`, `src/store/dedup.rs`,
+`src/http/dedup.rs`. Proven by `tests/dedup_damping.rs`.
+
 ### Considered and set aside at the same mini-round
 
 - **Editing a payload before requeuing a dead letter.** The payload lives
