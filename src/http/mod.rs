@@ -5,6 +5,7 @@ pub mod dedup;
 pub mod error;
 pub mod handlers;
 pub mod notify;
+pub mod page_modules;
 
 use std::sync::Arc;
 use std::time::Duration;
