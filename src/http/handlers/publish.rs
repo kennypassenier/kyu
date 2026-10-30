@@ -19,6 +19,41 @@ pub struct PublishQuery {
     pub at: Option<i64>,
 }
 
+/// When the message becomes deliverable: `None` for immediately, else the
+/// Unix millisecond timestamp from `delay` (relative to `now`) or `at`.
+fn due_at(query: &PublishQuery, now: i64) -> Result<Option<i64>, ApiError> {
+    match (query.delay, query.at) {
+        (None, None) => Ok(None),
+        (Some(_), Some(_)) => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "delay and at cannot both be given",
+            "use delay=<milliseconds from now> or at=<unix milliseconds>, not both. \
+             Two answers to when would mean one of them is quietly ignored.",
+        )),
+        (Some(delay), None) if delay < 0 => Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            format!("delay must not be negative, got {delay}"),
+            "use a positive number of milliseconds, or leave delay out to \
+             deliver immediately.",
+        )),
+        (Some(delay), None) => Ok(Some(now.saturating_add(delay))),
+        (None, Some(at)) => Ok(Some(at)),
+    }
+}
+
+/// Reads the body up to the configured limit.
+async fn read_payload(body: Body, limit: usize) -> Result<axum::body::Bytes, ApiError> {
+    to_bytes(body, limit).await.map_err(|error| {
+        // to_bytes fails both for an oversized body and for a broken
+        // connection; only the size case has a useful remedy about limits.
+        if error.to_string().contains("length limit") {
+            ApiError::payload_too_large(limit)
+        } else {
+            ApiError::unreadable_body(&error.to_string())
+        }
+    })
+}
+
 /// K1 · `POST /t/{topic}`
 pub async fn publish(
     State(state): State<AppState>,
@@ -27,43 +62,9 @@ pub async fn publish(
     headers: HeaderMap,
     body: Body,
 ) -> Result<Response, ApiError> {
-    let now = state.engine.now_ms();
-    let due_at = match (query.delay, query.at) {
-        (None, None) => None,
-        (Some(_), Some(_)) => {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "delay and at cannot both be given",
-                "use delay=<milliseconds from now> or at=<unix milliseconds>, not both. \
-                 Two answers to when would mean one of them is quietly ignored.",
-            ));
-        }
-        (Some(delay), None) => {
-            if delay < 0 {
-                return Err(ApiError::new(
-                    StatusCode::BAD_REQUEST,
-                    format!("delay must not be negative, got {delay}"),
-                    "use a positive number of milliseconds, or leave delay out to \
-                     deliver immediately.",
-                ));
-            }
-            Some(now.saturating_add(delay))
-        }
-        (None, Some(at)) => Some(at),
-    };
-
+    let due_at = due_at(&query, state.engine.now_ms())?;
     let dedup = crate::http::dedup::from_headers(&headers)?;
-
-    let limit = state.limits.max_body_bytes;
-    let payload = to_bytes(body, limit).await.map_err(|error| {
-        // to_bytes fails both for an oversized body and for a broken
-        // connection; only the size case has a useful remedy about limits.
-        if error.to_string().contains("length limit") {
-            ApiError::payload_too_large(limit)
-        } else {
-            ApiError::unreadable_body(&error.to_string())
-        }
-    })?;
+    let payload = read_payload(body, state.limits.max_body_bytes).await?;
 
     // Stored verbatim, including a content type the client got wrong:
     // `curl -d` sends form-urlencoded unless told otherwise (AR2). kyu

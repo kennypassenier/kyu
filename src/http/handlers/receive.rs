@@ -12,10 +12,10 @@ use tokio::time::Instant;
 
 use crate::engine::{EngineError, Received, names};
 
-use crate::http::AppState;
 use crate::http::error::ApiError;
 use crate::http::handlers::engine_call::spawn_engine_write;
 use crate::http::handlers::wire::{HEADER_NOTICE, insert_str, notice, render};
+use crate::http::{AppState, Limits};
 
 #[derive(Debug, Deserialize)]
 pub struct ReceiveQuery {
@@ -31,6 +31,46 @@ pub struct ReceiveQuery {
     pub from: Option<String>,
 }
 
+/// Who polled goes into the attempt history the dashboard shows. The login
+/// token is "admin"; an open hub (tests) has no caller at all.
+fn polling_app(caller: Caller) -> String {
+    match caller {
+        Caller::Client { name, .. } => name,
+        Caller::Admin => "admin".to_string(),
+    }
+}
+
+/// Validated before anything is allocated for this subscription: the
+/// notifier map is keyed by name, and a typo should not be able to leave an
+/// entry behind in it. The engine validates again for its own callers, and
+/// both paths report the same error.
+fn validate_names(topic: &str, subscription: &str) -> Result<(), ApiError> {
+    for (kind, name) in [("topic", topic), ("subscription", subscription)] {
+        if !names::is_valid(name) {
+            return Err(EngineError::InvalidName {
+                kind,
+                name: name.to_string(),
+            }
+            .into());
+        }
+    }
+    Ok(())
+}
+
+/// How long this poll may wait, within the transport's bounds.
+fn wait_duration(requested: Option<u64>, limits: &Limits) -> Result<Duration, ApiError> {
+    match requested {
+        None => Ok(Duration::from_secs(limits.default_wait_s)),
+        Some(seconds) if seconds <= limits.max_wait_s => Ok(Duration::from_secs(seconds)),
+        Some(_) => Err(ApiError::invalid_wait(limits.max_wait_s)),
+    }
+}
+
+/// The `kyu-notice` text for a poll that replayed retained messages.
+fn backfill_notice(count: usize, subscription: &str) -> String {
+    format!("replayed {count} retained message(s) into subscription {subscription:?}")
+}
+
 /// K2 · `GET /t/{topic}/next?as={subscription}`
 pub async fn receive(
     State(state): State<AppState>,
@@ -38,36 +78,13 @@ pub async fn receive(
     Path(topic): Path<String>,
     Query(query): Query<ReceiveQuery>,
 ) -> Result<Response, ApiError> {
-    // Who polled goes into the attempt history the dashboard shows. The
-    // login token is "admin"; an open hub (tests) has no caller at all.
-    let app = caller.map(|Extension(caller)| match caller {
-        Caller::Client { name, .. } => name,
-        Caller::Admin => "admin".to_string(),
-    });
+    let app = caller.map(|Extension(caller)| polling_app(caller));
     let subscription = query
         .as_
         .clone()
         .ok_or_else(ApiError::missing_subscription)?;
-
-    // Validated here, before anything is allocated for this subscription:
-    // the notifier map is keyed by name, and a typo should not be able to
-    // leave an entry behind in it. The engine validates again for its own
-    // callers, and both paths report the same error.
-    for (kind, name) in [("topic", &topic), ("subscription", &subscription)] {
-        if !names::is_valid(name) {
-            return Err(EngineError::InvalidName {
-                kind,
-                name: name.clone(),
-            }
-            .into());
-        }
-    }
-
-    let wait = match query.wait {
-        None => Duration::from_secs(state.limits.default_wait_s),
-        Some(seconds) if seconds <= state.limits.max_wait_s => Duration::from_secs(seconds),
-        Some(_) => return Err(ApiError::invalid_wait(state.limits.max_wait_s)),
-    };
+    validate_names(&topic, &subscription)?;
+    let wait = wait_duration(query.wait, &state.limits)?;
     let envelope = matches!(query.envelope.as_deref(), Some("json"));
     let from_beginning = matches!(query.from.as_deref(), Some("beginning"));
 
@@ -99,9 +116,7 @@ pub async fn receive(
                 insert_str(
                     response.headers_mut(),
                     HEADER_NOTICE,
-                    &format!(
-                        "replayed {backfilled} retained message(s) into subscription {subscription:?}"
-                    ),
+                    &backfill_notice(backfilled, &subscription),
                 );
             }
             return Ok(response);
@@ -116,9 +131,7 @@ pub async fn receive(
                 insert_str(
                     response.headers_mut(),
                     HEADER_NOTICE,
-                    &format!(
-                        "replayed {backfilled} retained message(s) into subscription {subscription:?}"
-                    ),
+                    &backfill_notice(backfilled, &subscription),
                 );
             } else if let Some(new) = &created {
                 insert_str(response.headers_mut(), HEADER_NOTICE, &notice(new));

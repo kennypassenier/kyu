@@ -8,7 +8,9 @@ pub mod history;
 pub mod page;
 pub mod stats;
 pub mod subscription;
+pub mod subscription_rows;
 pub mod topic;
+pub mod topic_data;
 pub mod topics;
 
 pub use actions::{
