@@ -64,7 +64,7 @@ A server-rendered set of pages behind the admin login:
 | project pages | Whatever kyu adds under its own navigation entries. |
 
 The layout, the navigation and the **theme picker** (kp-themes
-11.2.0) come from the kit; a chosen theme is remembered by the
+12.0.0) come from the kit; a chosen theme is remembered by the
 browser.
 
 ## Health and metrics
@@ -210,7 +210,7 @@ ignored.
 | `subsystem_check_timeout_ms` | `KYU_SUBSYSTEM_CHECK_TIMEOUT_MS` | `--subsystem-check-timeout-ms` | `2000` | core | A `/healthz` subsystem check longer than this many milliseconds counts as failing. |
 | `healthcheck_timeout_secs` | `KYU_HEALTHCHECK_TIMEOUT_SECS` | `--healthcheck-timeout-secs` | `5` | core | Seconds the `--healthcheck` probe waits for `/healthz`. |
 | `trusted_proxies` | `KYU_TRUSTED_PROXIES` | `--trusted-proxies` | `""` | core | Comma-separated IP addresses whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. |
-| `trusted_admins` | `KYU_TRUSTED_ADMINS` | `--trusted-admins` | `""` | core | Comma-separated IP addresses whose requests are the admin without a login (the TCP peer itself; never through a proxy, never a trusted proxy). Needs the dashboard feature. |
+| `trusted_admins` | `KYU_TRUSTED_ADMINS` | `--trusted-admins` | `""` | core | Comma-separated IP addresses whose requests are the admin without a login: the TCP peer, or behind a trusted proxy the last X-Forwarded-For hop that proxy appended; never a trusted proxy itself. Needs the dashboard feature. |
 | `token` | `KYU_TOKEN` | — | (secret) | dashboard | The admin token (at least 16 characters): logs in on `/login` and works as a bearer for the operator's own scripts. |
 | `secret_key` | `KYU_SECRET_KEY` | — | (secret) | dashboard | 32 bytes as 64 hex characters, sealing the clients, sessions and passkeys stores on disk. |
 | `session_ttl_secs` | `KYU_SESSION_TTL_SECS` | `--session-ttl-secs` | `86400` | dashboard | Seconds a plain login session stays valid after its last use. |

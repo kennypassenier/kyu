@@ -11,6 +11,16 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Migration
+- A major release because chassis-rs moves to 4.0.0 (kp-themes 12). kyu's
+  HTTP contract and environment variables are unchanged; nothing in a
+  publisher's or consumer's setup needs to change.
+- The kit database (`kyu-kit.db`) moves to kit schema step 2 on first start;
+  a kyu older than 6.0.0 refuses that file, so a rollback restores the backup
+  taken before the update rather than running the old binary on it.
+- Behind Traefik, `KYU_TRUSTED_ADMINS` now also matches the address Traefik
+  forwards when `KYU_TRUSTED_PROXIES` holds Traefik's (10.10.10.4).
+
 ### Added
 - Damping of repeated notifications: `Kyu-Dedup-Key` and `Kyu-Dedup-Window`
   on `POST /t/{topic}`. A repeat inside the window stores nothing and
@@ -21,6 +31,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
   `kyu_dedup_keys` metrics.
 
 ### Changed
+- chassis-rs 4.0.0 (kp-themes 12.0.0): the kit's shared notification sender,
+  static files served gzip, and one kp-themes bundle for the dashboard.
 - The code is split into one module per concern (HTTP handlers, store
   queries, engine, migrations, dashboard views, kit glue, configuration),
   with no file of code over 250 lines. No behaviour change.
