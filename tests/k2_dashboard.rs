@@ -351,7 +351,7 @@ async fn k2_the_topic_page_shows_subscriptions_backlogs_and_policy() {
         "an explicit policy is shown"
     );
     let script = hub
-        .get_anon("/assets/topic.js")
+        .get_anon("/assets/topic-subs-rows.js")
         .await
         .text()
         .await
@@ -440,7 +440,7 @@ async fn k2_a_topic_nobody_polls_explains_the_bootstrap_order() {
         "the page knows nobody polls"
     );
     let script = hub
-        .get_anon("/assets/topic.js")
+        .get_anon("/assets/topic-readers.js")
         .await
         .text()
         .await
@@ -984,7 +984,7 @@ async fn the_subscriptions_table_archives_a_live_subscription_and_deletes_an_arc
         "the page data says printer is archived"
     );
     let script = hub
-        .get_anon("/assets/topic.js")
+        .get_anon("/assets/topic-subs-rows.js")
         .await
         .text()
         .await

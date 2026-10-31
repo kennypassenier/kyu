@@ -205,6 +205,10 @@ async fn dedup_bad_headers_are_refused_with_a_remedy() {
 #[tokio::test]
 async fn dedup_a_suppressed_duplicate_delivers_nothing_and_is_counted() {
     let hub = spawn().await;
+    // A poll needs an existing topic (G7: a typo must not create one), so a
+    // plain message makes the topic first; the subscription sees only what
+    // follows it.
+    hub.publish("alerts", &[]).await;
     let sub = reqwest::get(hub.url("/t/alerts/next?as=ha&wait=0"))
         .await
         .unwrap();
@@ -219,7 +223,7 @@ async fn dedup_a_suppressed_duplicate_delivers_nothing_and_is_counted() {
         1
     );
     assert_eq!(hub.count("SELECT sum(deduplicated) FROM stats_hourly"), 2);
-    assert_eq!(hub.count("SELECT sum(published) FROM stats_hourly"), 1);
+    assert_eq!(hub.count("SELECT sum(published) FROM stats_hourly"), 2);
 }
 
 #[tokio::test]
