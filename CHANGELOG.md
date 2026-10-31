@@ -30,6 +30,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
   stale copy after an upgrade.
 - The Topic page's markup and stylesheet are one partial and one stylesheet
   per region.
+- The pages load kp-themes from its single bundle
+  (`/static/kp/dist/kp-themes.min.js`) instead of one file per component.
 
 ### Removed
 - `/assets/app.js`, the pre-kp-themes snippet script no page loaded any more.
