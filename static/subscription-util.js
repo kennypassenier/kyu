@@ -1,6 +1,7 @@
 // kyu: subscription-util.js, small helpers of the Subscription page: selectors, the boot hook, JSON reads and duration words.
 
-import { agoMoment } from '/static/kp/js/freshness.js';
+import { freshnessExports } from '/static/kp/dist/kp-themes.min.js';
+const { agoMoment } = freshnessExports;
 
 /** @param {string} sel @param {ParentNode} [root] @returns {HTMLElement | null} */
 export const $ = (sel, root = document) => /** @type {HTMLElement | null} */ (root.querySelector(sel));

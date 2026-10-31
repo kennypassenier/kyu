@@ -1,12 +1,13 @@
 // kyu: topics-row.js, one topic's table row: its markup and painting its cells from a topic.
 
-import { setStackbar } from '/static/kp/js/stackbar.js';
-import { setBarCell } from '/static/kp/js/barcell.js';
-import { setAgo } from '/static/kp/js/freshness.js';
-import { tickTo } from '/static/kp/js/tick.js';
-import { update } from '/static/kp/js/update.js';
+import { stackbarExports, barcellExports, freshnessExports, tickExports, updateExports } from '/static/kp/dist/kp-themes.min.js';
 import { h, number, plural } from './topics-util.js';
 import { M, mark, STATUS_BADGE, QUIET_AFTER } from './topics-state.js';
+const { setStackbar } = stackbarExports;
+const { setBarCell } = barcellExports;
+const { setAgo } = freshnessExports;
+const { tickTo } = tickExports;
+const { update } = updateExports;
 
 /** @typedef {import('./topics-state.js').Topic} Topic */
 

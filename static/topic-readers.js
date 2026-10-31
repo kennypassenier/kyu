@@ -1,9 +1,10 @@
 // kyu: topic-readers.js, section 3 of the Topic page: the warning shown while nobody has polled yet.
 
-import { setCardState } from '/static/kp/js/card-state.js';
-import { setProblems } from '/static/kp/js/problems.js';
+import { cardStateExports, problemsExports } from '/static/kp/dist/kp-themes.min.js';
 import { $ } from './topic-util.js';
 import { S, TOPIC, withOrigin } from './topic-state.js';
+const { setCardState } = cardStateExports;
+const { setProblems } = problemsExports;
 
 const readers = $('[data-kt-readers]');
 export function renderReaders() {

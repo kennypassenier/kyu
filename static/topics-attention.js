@@ -1,8 +1,9 @@
 // kyu: topics-attention.js, the Topics page's attention band: what needs a look, most urgent first.
 
-import { setAttention } from '/static/kp/js/attention.js';
+import { attentionExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, h, number, plural } from './topics-util.js';
 import { M, HOUR } from './topics-state.js';
+const { setAttention } = attentionExports;
 
 const band = $('[data-tp-attention]');
 /** A topic's backlog counts as worth a warning from this many messages. */

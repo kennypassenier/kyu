@@ -1,8 +1,9 @@
 // kyu: topic-subs-menu.js, the "More" menu of a subscription row: jump to its dead letters or oldest message, copy its commands.
 
-import { toast } from '/static/kp/js/overlays.js';
+import { overlaysExports } from '/static/kp/dist/kp-themes.min.js';
 import { S, ORIGIN, T, TOPIC } from './topic-state.js';
 import { subsCard } from './topic-subs.js';
+const { toast } = overlaysExports;
 
 /** Copy text; say what happened in a toast. @param {string} text @param {string} said */
 async function copyToast(text, said) {

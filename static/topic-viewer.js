@@ -1,9 +1,10 @@
 // kyu: topic-viewer.js, the large payload viewer of a recent message (JSON laid out, copy, download).
 
-import { openViewer } from '/static/kp/js/viewer.js';
-import { runFlashButton } from '/static/kp/js/flash.js';
-import { setCode } from '/static/kp/js/code.js';
+import { viewerExports, flashExports, codeExports } from '/static/kp/dist/kp-themes.min.js';
 import { make, dmy, bytesText } from './topic-util.js';
+const { openViewer } = viewerExports;
+const { runFlashButton } = flashExports;
+const { setCode } = codeExports;
 
 let viewerOpen = /** @type {import('/static/kp/js/viewer.js').ViewerHandle | null} */ (null);
 

@@ -1,13 +1,14 @@
 // kyu: topic-dead-actions.js, the actions on dead-letter rows: requeue, delete with Undo, and the selection bar.
 
-import { undoToast } from '/static/kp/js/undo-toast.js';
-import { runFlashButton } from '/static/kp/js/flash.js';
-import { setSelectionBusy, setSelectionResult } from '/static/kp/js/selection-bar.js';
+import { undoToastExports, flashExports, selectionBarExports } from '/static/kp/dist/kp-themes.min.js';
 import { $$, num, plural } from './topic-util.js';
 import { S, T, call, refusal, sentence, holdPending } from './topic-state.js';
 import { deadBody } from './topic-dead.js';
 import { bulk, deadKey } from './topic-dead-core.js';
 import { reload } from './topic-refresh.js';
+const { undoToast } = undoToastExports;
+const { runFlashButton } = flashExports;
+const { setSelectionBusy, setSelectionResult } = selectionBarExports;
 
 const selectionBar = /** @type {HTMLElement} */ (document.querySelector('[data-kt-dead] [data-kt-selection]'));
 

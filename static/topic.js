@@ -9,11 +9,10 @@
 // component; nothing here draws a control of its own.
 //
 // Order matters once: the rows are built first, then the kit's boot
-// (/static/kp/js/auto.js) is imported, so it attaches the datatable, the menus,
+// (/static/kp/dist/kp-themes.min.js) is imported, so it attaches the datatable, the menus,
 // the code blocks and the rest to markup that already exists.
 
-import { dataTable } from '/static/kp/js/datatable.js';
-import { masterDetail, setPaneState } from '/static/kp/js/master-detail.js';
+import { datatableExports, masterDetailExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$ } from './topic-util.js';
 import { S, SUBS } from './topic-state.js';
 import { renderHeader } from './topic-header.js';
@@ -28,6 +27,8 @@ import { renderRecent } from './topic-recent.js';
 import { mdRoot, fillDetail } from './topic-detail.js';
 import './topic-publish.js';
 import { load, reload, readRetention } from './topic-refresh.js';
+const { dataTable } = datatableExports;
+const { masterDetail, setPaneState } = masterDetailExports;
 
 for (const el of [subsTableEl, deadTableEl]) el.addEventListener('kp-datatable-retry', () => void reload(true));
 
@@ -52,7 +53,7 @@ const autoReady = new Promise((resolve) => {
         resolve(undefined);
     }).observe(root, { attributes: true, attributeFilter: ['data-kp-auto-ready'] });
 });
-const auto = await import('/static/kp/js/auto.js');
+const { autoExports: auto } = await import('/static/kp/dist/kp-themes.min.js');
 S.attachAll = (/** @type {ParentNode} */ r) => auto.attachAll(r);
 await autoReady;
 S.booted = true;

@@ -1,8 +1,9 @@
 // kyu: topics-heat.js, the Topics page's heat map: messages published or died per topic per hour, last 24 hours.
 
-import { setHeat, HEAT_PICK_EVENT, HEAT_RETRY_EVENT } from '/static/kp/js/heat.js';
+import { heatExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, h, number, readJson } from './topics-util.js';
 import { M } from './topics-state.js';
+const { setHeat, HEAT_PICK_EVENT, HEAT_RETRY_EVENT } = heatExports;
 
 /** A whole-hub hour with this many dead letters shows as completely full. */
 const HUB_DEAD_FULL_AT = 3;

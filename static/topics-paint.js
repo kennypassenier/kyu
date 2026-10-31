@@ -1,13 +1,14 @@
 // kyu: topics-paint.js, drawing the Topics page from the model: hub bar, update time, and everything at once.
 
-import { setStackbar } from '/static/kp/js/stackbar.js';
-import { setAgo } from '/static/kp/js/freshness.js';
+import { stackbarExports, freshnessExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, h, number, plural } from './topics-util.js';
 import { M, totals } from './topics-state.js';
 import { drawKpis } from './topics-kpis.js';
 import { drawBand } from './topics-attention.js';
 import { paintRow } from './topics-row.js';
 import { table, rowsOf } from './topics-table.js';
+const { setStackbar } = stackbarExports;
+const { setAgo } = freshnessExports;
 
 export function drawHubBar() {
     const bar = $('[data-tp-hubbar]');

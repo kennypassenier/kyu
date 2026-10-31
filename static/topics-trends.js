@@ -1,9 +1,10 @@
 // kyu: topics-trends.js, the Topics page's key figures with their last 24 hours (sparkline tiles).
 
-import { setTrendData, CHART_RETRY_EVENT } from '/static/kp/js/chart.js';
-import { attachAll } from '/static/kp/js/auto.js';
+import { chartExports, autoExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, h, number, readJson } from './topics-util.js';
 import { totals } from './topics-state.js';
+const { setTrendData, CHART_RETRY_EVENT } = chartExports;
+const { attachAll } = autoExports;
 
 const SAMPLE_STEP = 300_000;
 /** `key` is the field of a totals sample; `bad` is whether a rise is bad news. */

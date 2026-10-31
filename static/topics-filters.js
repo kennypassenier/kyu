@@ -1,10 +1,11 @@
 // kyu: topics-filters.js, the key figures filter the table, the table's filters light the tiles, and fix links land on their row.
 
-import { VIEW_EVENT } from '/static/kp/js/datatable.js';
+import { datatableExports } from '/static/kp/dist/kp-themes.min.js';
 import { $ } from './topics-util.js';
 import { ui, totals } from './topics-state.js';
 import { table } from './topics-table.js';
 import { sendTest } from './topics-test.js';
+const { VIEW_EVENT } = datatableExports;
 
 /* ---- the key figures filter the table (Backlog and Dead are range filters on their columns) */
 

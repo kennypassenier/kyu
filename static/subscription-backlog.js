@@ -1,13 +1,14 @@
 // kyu: subscription-backlog.js, the backlog table of the Subscription page: bulk delete with Undo, the live row swap, and the Attempts buttons.
 
-import { agoMoment } from '/static/kp/js/freshness.js';
-import { dataTable } from '/static/kp/js/datatable.js';
-import { undoToast } from '/static/kp/js/undo-toast.js';
-import { setSelectionResult } from '/static/kp/js/selection-bar.js';
+import { freshnessExports, datatableExports, undoToastExports, selectionBarExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, getJson } from './subscription-util.js';
 import { DATA, BASE, items } from './subscription-state.js';
 import { drawGauges, drawCounts } from './subscription-gauges.js';
 import { loadAttempts } from './subscription-attempts.js';
+const { agoMoment } = freshnessExports;
+const { dataTable } = datatableExports;
+const { undoToast } = undoToastExports;
+const { setSelectionResult } = selectionBarExports;
 
 /** Set by initBacklog: take the rows of a freshly read page. @type {(doc: Document) => void} */
 export let swapRows = () => undefined;
@@ -138,6 +139,6 @@ function swapIn(b, body, handle, doc) {
     b.byKey.clear();
     for (const row of fresh) b.byKey.set(row.dataset.kpRowKey ?? '', row);
     for (const el of $$('[data-ky-moment]', body)) el.textContent = agoMoment(Number(el.dataset.kyMoment));
-    void import('/static/kp/js/auto.js').then((auto) => auto.attachAll(body));
+    void import('/static/kp/dist/kp-themes.min.js').then((kp) => kp.autoExports.attachAll(body));
     handle()?.refresh();
 }

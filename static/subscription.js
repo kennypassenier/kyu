@@ -7,7 +7,7 @@
 // request inspector for one message, and the 90-day strip. The data of the
 // page is the JSON block `#ky-page-data`; the rest is fetched from the
 // dashboard routes under `/t/{topic}/dashboard/subs/{name}`.
-import { setStrings } from '/static/kp/js/strings.js';
+import { stringsExports } from '/static/kp/dist/kp-themes.min.js';
 import { onReady } from './subscription-util.js';
 import { P } from './subscription-state.js';
 import { initHeader } from './subscription-header.js';
@@ -16,6 +16,7 @@ import { initBacklog } from './subscription-backlog.js';
 import { wireAttempts, holdAttempts, startAttempts } from './subscription-attempts.js';
 import { initUptime } from './subscription-uptime.js';
 import './subscription-page.js';
+const { setStrings } = stringsExports;
 
 
 // kyu's own words on the uptime strip: a day is judged by what was delivered, not by what was up.

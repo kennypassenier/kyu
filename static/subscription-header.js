@@ -1,9 +1,10 @@
 // kyu: subscription-header.js, the header of the Subscription page: the marks, the freshness line and the moments.
 
-import { setIdmark, idmarkColours } from '/static/kp/js/idmark.js';
-import { setAgo, agoMoment } from '/static/kp/js/freshness.js';
+import { idmarkExports, freshnessExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$ } from './subscription-util.js';
 import { DATA } from './subscription-state.js';
+const { setIdmark, idmarkColours } = idmarkExports;
+const { setAgo, agoMoment } = freshnessExports;
 
 export function initHeader() {
     const names = [DATA.topic, DATA.subscription];

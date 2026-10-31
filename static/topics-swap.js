@@ -1,13 +1,14 @@
 // kyu: topics-swap.js, the automatic refresh: it swaps the key-figure group and the page follows from the data block that carries.
 
-import { tickTo } from '/static/kp/js/tick.js';
-import { update } from '/static/kp/js/update.js';
+import { tickExports, updateExports } from '/static/kp/dist/kp-themes.min.js';
 import { $$ } from './topics-util.js';
 import { M, ui, takeData, decideSlots } from './topics-state.js';
 import { kpis, kpiTiles, shown, remember } from './topics-kpis.js';
 import { drawBand } from './topics-attention.js';
 import { drawHubBar, drawMeta } from './topics-paint.js';
 import { table, syncRows } from './topics-table.js';
+const { tickTo } = tickExports;
+const { update } = updateExports;
 
 /** New tiles start on what the old ones showed and count to the new numbers; the words change the theme's way.
  * @param {HTMLElement} group @param {Map<string | null, string>} before */

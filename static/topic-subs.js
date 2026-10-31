@@ -1,14 +1,15 @@
 // kyu: topic-subs.js, section 4 of the Topic page: the subscriptions table, its filter, and archive/delete with Undo.
 
-import { setCardState } from '/static/kp/js/card-state.js';
-import { undoToast } from '/static/kp/js/undo-toast.js';
-import { toast } from '/static/kp/js/overlays.js';
-import { setSegmentedCounts, setSegmentedValues } from '/static/kp/js/segmented.js';
+import { cardStateExports, undoToastExports, overlaysExports, segmentedExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, make, plural } from './topic-util.js';
 import { S, SUBS, T, TOPIC, call, sentence, holdPending } from './topic-state.js';
 import { reconcile } from './topic-reconcile.js';
 import { subRow, paintRow } from './topic-subs-rows.js';
 import { reload } from './topic-refresh.js';
+const { setCardState } = cardStateExports;
+const { undoToast } = undoToastExports;
+const { toast } = overlaysExports;
+const { setSegmentedCounts, setSegmentedValues } = segmentedExports;
 
 export const subsCard = /** @type {HTMLElement} */ ($('[data-kt-subs]'));
 export const subsBody = /** @type {HTMLElement} */ ($('[data-kt-subs-rows]', subsCard));

@@ -1,11 +1,12 @@
 // kyu: subscription-attempts.js, the attempts of one message: its timeline, its inspector, and picking the message closest to dying.
 
-import { agoMoment } from '/static/kp/js/freshness.js';
-import { GANTT_STEPS, setGanttRuns, setGanttState, setGanttPoints, setGanttKinds, setGanttZones, setGanttWindow } from '/static/kp/js/gantt.js';
-import { setRequests, setRequestsState } from '/static/kp/js/request-inspector.js';
+import { freshnessExports, ganttExports, requestInspectorExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, getJson, words, withSeconds } from './subscription-util.js';
 import { DATA, SUB, SEC, items } from './subscription-state.js';
 import { readPage } from './subscription-page.js';
+const { agoMoment } = freshnessExports;
+const { GANTT_STEPS, setGanttRuns, setGanttState, setGanttPoints, setGanttKinds, setGanttZones, setGanttWindow } = ganttExports;
+const { setRequests, setRequestsState } = requestInspectorExports;
 
 const OUTCOME_WORDS = /** @type {Record<string, string>} */ ({ expired: 'Lease expired', nacked: 'Nack', dead: 'Dead', acked: 'Acked', in_flight: 'Claimed, still held' });
 const KIND = /** @type {Record<string, string>} */ ({ expired: 'expired', nacked: 'nack', dead: 'dead', acked: 'ack' });

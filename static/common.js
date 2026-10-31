@@ -1,7 +1,7 @@
 // kyu: common.js, the parts that cross every page (kp-themes 11.0.0 adoption, demo kyu-11-overview).
 // The entry: each part is a common-*.js module, imported here in the order it must run.
 //
-// Loaded by templates/_kp.html on every page, before /static/kp/js/auto.js. The server wrote
+// Loaded by templates/_kp.html on every page, before the kp-themes bundle. The server wrote
 // the palette's options into a <template id="kyu-shell"> (every topic, every subscription,
 // Publish, Prune, Apps); this file moves the dialogs into the body and gives them their
 // behaviour:

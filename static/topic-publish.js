@@ -1,8 +1,9 @@
 // kyu: topic-publish.js, section 7 of the Topic page: the publish-a-test-message form.
 
-import { runFlashButton } from '/static/kp/js/flash.js';
+import { flashExports } from '/static/kp/dist/kp-themes.min.js';
 import { T, call, refusal } from './topic-state.js';
 import { reload } from './topic-refresh.js';
+const { runFlashButton } = flashExports;
 
 const form = /** @type {HTMLFormElement} */ (document.getElementById('kt-publish-form'));
 const area = /** @type {HTMLTextAreaElement} */ (document.getElementById('kt-publish-body'));

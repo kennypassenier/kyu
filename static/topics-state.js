@@ -1,7 +1,8 @@
 // kyu: topics-state.js, the Topics page's shared data (the model read from the page, mark colours) and its constants.
 
-import { setIdmark, idmarkColours } from '/static/kp/js/idmark.js';
+import { idmarkExports } from '/static/kp/dist/kp-themes.min.js';
 import { $ } from './topics-util.js';
+const { setIdmark, idmarkColours } = idmarkExports;
 
 export const HOUR = 3_600_000;
 /** A topic counts as quiet after this long, in seconds (the server's status word uses the same 24 h). */

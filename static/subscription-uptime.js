@@ -1,9 +1,10 @@
 // kyu: subscription-uptime.js, the 90-day delivery strip of the Subscription page and the daily statistics it shares with the drain bar.
 
-import { setUptime } from '/static/kp/js/uptime.js';
+import { uptimeExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, getJson } from './subscription-util.js';
 import { DATA, SUB, P } from './subscription-state.js';
 import { drawGauges } from './subscription-gauges.js';
+const { setUptime } = uptimeExports;
 
 /** The uptime/daily statistics, fetched once and shared by the strip and the progress bar. @type {Promise<{ days: { day: string, delivered: number, dead: number }[] }> | undefined} */
 let dailyAnswer;

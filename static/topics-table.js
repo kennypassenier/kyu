@@ -1,9 +1,10 @@
 // kyu: topics-table.js, the Topics table: finding it, filling its rows from the model, and syncing rows after a refresh.
 
-import { dataTable } from '/static/kp/js/datatable.js';
+import { datatableExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$ } from './topics-util.js';
 import { M } from './topics-state.js';
 import { buildRow, paintRow } from './topics-row.js';
+const { dataTable } = datatableExports;
 
 export const tableEl = () => $('[data-tp-datatable]');
 export const table = () => {

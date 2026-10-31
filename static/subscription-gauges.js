@@ -1,10 +1,11 @@
 // kyu: subscription-gauges.js, the gauges of the Subscription page: oldest unacked, attempts, the drain bar, and the counts.
 
-import { agoMoment } from '/static/kp/js/freshness.js';
-import { setBullets } from '/static/kp/js/bullets.js';
-import { setProgress, setIndeterminate, setProgressFailed } from '/static/kp/js/progressbar.js';
+import { freshnessExports, bulletsExports, progressbarExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, words } from './subscription-util.js';
 import { DATA, SEC, items, P } from './subscription-state.js';
+const { agoMoment } = freshnessExports;
+const { setBullets } = bulletsExports;
+const { setProgress, setIndeterminate, setProgressFailed } = progressbarExports;
 
 function counts() {
     let pending = 0;

@@ -1,14 +1,15 @@
 // kyu: subscription-page.js, reading the Subscription page again: the policy, the gauges and the backlog show one state together.
 
-import { agoMoment } from '/static/kp/js/freshness.js';
-import { dataTable } from '/static/kp/js/datatable.js';
-import { setCardState, CARD_RETRY_EVENT } from '/static/kp/js/card-state.js';
-import { setCode } from '/static/kp/js/code.js';
+import { freshnessExports, datatableExports, cardStateExports, codeExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$ } from './subscription-util.js';
 import { items, P } from './subscription-state.js';
 import { drawGauges, drawCounts } from './subscription-gauges.js';
 import { swapRows } from './subscription-backlog.js';
 import { initUptime } from './subscription-uptime.js';
+const { agoMoment } = freshnessExports;
+const { dataTable } = datatableExports;
+const { setCardState, CARD_RETRY_EVENT } = cardStateExports;
+const { setCode } = codeExports;
 
 const policyCard = () => /** @type {HTMLElement | null} */ ($('#ky-policy'));
 const backlogTable = () => {

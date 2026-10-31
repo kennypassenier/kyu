@@ -1,8 +1,9 @@
 // kyu: topic-stage.js, a region that keeps its footprint in every state (busy card, plate, ready).
 
-import { openBusyCard } from '/static/kp/js/busy-card.js';
-import { attachArt } from '/static/kp/js/art.js';
+import { busyCardExports, artExports } from '/static/kp/dist/kp-themes.min.js';
 import { $ } from './topic-util.js';
+const { openBusyCard } = busyCardExports;
+const { attachArt } = artExports;
 
 /** @param {HTMLElement} host a `[data-kt-stage]` */
 export function stage(host) {

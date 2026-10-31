@@ -1,11 +1,12 @@
 // kyu: topic-detail.js, the detail pane of the recent messages: facts, payload block, Open large and Replay.
 
-import { setCode } from '/static/kp/js/code.js';
-import { runFlashButton } from '/static/kp/js/flash.js';
+import { codeExports, flashExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, make, dmy, bytesText } from './topic-util.js';
 import { S, MESSAGES, T, call, refusal } from './topic-state.js';
 import { openPayload } from './topic-viewer.js';
 import { reload } from './topic-refresh.js';
+const { setCode } = codeExports;
+const { runFlashButton } = flashExports;
 
 export const recent = /** @type {HTMLElement} */ ($('[data-kt-recent]'));
 export const mdRoot = /** @type {HTMLElement} */ ($('[data-kt-md]', recent));

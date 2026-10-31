@@ -1,8 +1,9 @@
 // kyu: topic-subs-rows.js, one subscription row: its markup, its policy text, its menu and its delete-confirmation template.
 
-import { setMenu } from '/static/kp/js/menu-button.js';
+import { menuButtonExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, esc, num, plural, dmy, iso, span } from './topic-util.js';
 import { S, T } from './topic-state.js';
+const { setMenu } = menuButtonExports;
 
 /** @param {any} s */
 function policyHtml(s) {

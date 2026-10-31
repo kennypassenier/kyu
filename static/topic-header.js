@@ -1,8 +1,9 @@
 // kyu: topic-header.js, section 1 of the Topic page: the header (dead badge, facts, last published, URL).
 
-import { setAgo } from '/static/kp/js/freshness.js';
+import { freshnessExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, num, plural } from './topic-util.js';
 import { S, ORIGIN, TOPIC } from './topic-state.js';
+const { setAgo } = freshnessExports;
 
 const header = /** @type {HTMLElement} */ ($('[data-kt-header]'));
 /** Draw the header from the page data. */

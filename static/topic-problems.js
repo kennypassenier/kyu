@@ -1,12 +1,13 @@
 // kyu: topic-problems.js, the problems of the dead letters: what died, why, and what now, plus the actions on those cards.
 
-import { setProblems } from '/static/kp/js/problems.js';
-import { runFlashButton } from '/static/kp/js/flash.js';
+import { problemsExports, flashExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, make, num, plural, dmy } from './topic-util.js';
 import { S, SUBS, ORIGIN, TOPIC } from './topic-state.js';
 import { stage } from './topic-stage.js';
 import { deadKey, deadBySub, bulk } from './topic-dead-core.js';
 import { reload } from './topic-refresh.js';
+const { setProblems } = problemsExports;
+const { runFlashButton } = flashExports;
 
 const deadSection = /** @type {HTMLElement} */ ($('[data-kt-dead]'));
 const problemsHost = /** @type {HTMLElement} */ ($('[data-kt-stage="problems"]', deadSection));

@@ -1,12 +1,13 @@
 // kyu: topic-recent.js, section 6 of the Topic page: the recent-messages list and its master-detail pane wiring.
 
-import { masterDetail, setPaneState } from '/static/kp/js/master-detail.js';
-import { statePlate } from '/static/kp/js/state-plate.js';
+import { masterDetailExports, statePlateExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, make, num, iso, bytesText } from './topic-util.js';
 import { S, MESSAGES, TOPIC } from './topic-state.js';
 import { stage } from './topic-stage.js';
 import { recent, mdRoot, fillDetail, resetDetail } from './topic-detail.js';
 import { reload } from './topic-refresh.js';
+const { masterDetail, setPaneState } = masterDetailExports;
+const { statePlate } = statePlateExports;
 
 /** How long a new arrival keeps its data-new mark, in ms. */
 const NEW_MARK_MS = 2500;

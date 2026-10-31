@@ -1,6 +1,6 @@
 // kyu: topic-refresh.js, reading the page again: fetch the data block, redraw every section, and the failed/loading states.
 
-import { setPaneState } from '/static/kp/js/master-detail.js';
+import { masterDetailExports } from '/static/kp/dist/kp-themes.min.js';
 import { S, T } from './topic-state.js';
 import { renderHeader } from './topic-header.js';
 import { renderReaders } from './topic-readers.js';
@@ -8,6 +8,7 @@ import { renderSubs } from './topic-subs.js';
 import { renderDead } from './topic-dead.js';
 import { renderRecent } from './topic-recent.js';
 import { mdRoot, setDetailCode, detailFig } from './topic-detail.js';
+const { setPaneState } = masterDetailExports;
 
 /** Read the retention of dead letters once; a hub without the route answers 404 and the problem is left out. */
 export async function readRetention() {

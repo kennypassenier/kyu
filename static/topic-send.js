@@ -1,8 +1,9 @@
 // kyu: topic-send.js, section 2 of the Topic page: the send-and-receive commands, the secret fields and the journey steps.
 
-import { setStep } from '/static/kp/js/steplist.js';
+import { steplistExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, dmy } from './topic-util.js';
 import { S, page, withOrigin } from './topic-state.js';
+const { setStep } = steplistExports;
 
 const send = /** @type {HTMLElement} */ ($('[data-kt-send]'));
 const ttl = Number(page.dataset.ktRevealSeconds ?? 10);

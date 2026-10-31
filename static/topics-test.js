@@ -1,6 +1,7 @@
 // kyu: topics-test.js, Send test: publishes a known message to a topic from its row.
 
-import { toast } from '/static/kp/js/overlays.js';
+import { overlaysExports } from '/static/kp/dist/kp-themes.min.js';
+const { toast } = overlaysExports;
 
 /** @param {HTMLButtonElement} button */
 export async function sendTest(button) {
