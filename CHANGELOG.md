@@ -20,6 +20,20 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
   `deduplicated` hourly counter and the `kyu_duplicates_suppressed` and
   `kyu_dedup_keys` metrics.
 
+### Changed
+- The code is split into one module per concern (HTTP handlers, store
+  queries, engine, migrations, dashboard views, kit glue, configuration),
+  with no file of code over 250 lines. No behaviour change.
+- The dashboard page scripts are ES modules: each page's script imports its
+  parts from `/assets/`, which serves them with `no-cache` and an `ETag`, so a
+  browser revalidates them (a 304 when nothing changed) instead of keeping a
+  stale copy after an upgrade.
+- The Topic page's markup and stylesheet are one partial and one stylesheet
+  per region.
+
+### Removed
+- `/assets/app.js`, the pre-kp-themes snippet script no page loaded any more.
+
 ## [5.0.0] - 2026-10-22
 
 ### Added
