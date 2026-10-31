@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-10-31
+
 ### Migration
 - A major release because chassis-rs moves to 4.0.0 (kp-themes 12). kyu's
   HTTP contract and environment variables are unchanged; nothing in a
