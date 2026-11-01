@@ -139,3 +139,8 @@ When chassis-rs kit-storage-2 lands: move the 2.x token import into
 `AppDbSpec::with_import` (one open at start), read the failure age from
 `Db::recent_write_failure_age`, drop the probe-skip workaround and kyu's own
 `on_flush` checkpoint. Merge to main only with a released chassis tag.
+
+Also with kp-themes 12.2.0: opt the subscription, dead-letter and backlog tables into
+`data-kp-row-actions="menu"` (one primary action, the rest in a menu on a phone)
+once its placement is confirmed in the 12.2.0 docs; drop the phone 44 px overrides
+kyu added if the kit's coarse-pointer hit areas cover them.
