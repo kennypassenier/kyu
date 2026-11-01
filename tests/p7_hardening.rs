@@ -10,12 +10,16 @@ use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
+use chassis::storage::{AppDb, Db, Migration};
 use kyu::engine::clock::{Clock, MockClock, SystemClock};
 use kyu::engine::{Defaults, Engine};
 use kyu::events::EVENTS_TOPIC;
 use kyu::http::{AppState, Limits, router_with_probes};
 use kyu::store::queries::StoredPolicy;
-use kyu::store::{Store, migrations};
+#[path = "common/db.rs"]
+mod db;
+use db::RawStore;
+use kyu::store::migrations;
 use kyu::sweeper::{self, Heartbeat};
 use serde_json::Value;
 
@@ -43,7 +47,7 @@ const DAY: i64 = 24 * 60 * 60 * 1_000;
 
 struct Hub {
     addr: SocketAddr,
-    store: Arc<Store>,
+    store: AppDb,
     server: tokio::task::JoinHandle<()>,
     sweeper: tokio::task::JoinHandle<()>,
 }
@@ -62,7 +66,7 @@ impl Hub {
 }
 
 async fn spawn_at(dir: &Path) -> Hub {
-    let store = Arc::new(Store::open(dir).expect("a store"));
+    let store = kyu::storage::open(dir).expect("a store");
     let engine = Arc::new(Engine::new(store.clone(), Arc::new(SystemClock)));
     let heartbeat = Heartbeat::starting_at(SystemClock.now_ms());
     let state = AppState::new(
@@ -162,8 +166,8 @@ async fn bootstrap(hub: &Hub, topic: &str, subscription: &str) {
     );
 }
 
-fn fixture(defaults: Defaults) -> (Engine, Arc<MockClock>, Arc<Store>) {
-    let store = Arc::new(Store::open_in_memory().expect("a store"));
+fn fixture(defaults: Defaults) -> (Engine, Arc<MockClock>, AppDb) {
+    let store = kyu::storage::open_in_memory().expect("a store");
     let clock = Arc::new(MockClock::new(START));
     let engine = Engine::with_defaults(store.clone(), clock.clone(), defaults);
     (engine, clock, store)
@@ -178,21 +182,26 @@ fn p7_g2_a_kill_before_the_snapshot_leaves_the_old_store_intact() {
     // fails part-way, which is the same thing from the store's point of view.
     let dir = tempfile::tempdir().expect("a temp dir");
     let path = dir.path().join("kyu.db");
-    let mut conn = rusqlite::Connection::open(&path).expect("open");
 
-    let v1 = ["CREATE TABLE probe (id INTEGER PRIMARY KEY) STRICT;"];
-    migrations::migrate_with(&mut conn, &v1, Some(dir.path())).expect("v1");
-    conn.execute("INSERT INTO probe (id) VALUES (1)", [])
+    let v1 = [Migration::sql(
+        "CREATE TABLE probe (id INTEGER PRIMARY KEY) STRICT;",
+    )];
+    let db = Db::open_with(&path, &v1, &kyu::store::options()).expect("v1");
+    db.write_blocking(|tx| Ok(tx.execute("INSERT INTO probe (id) VALUES (1)", [])?))
         .expect("a row");
+    drop(db);
 
     // Version 2 is broken: it adds a column, then does something impossible.
     let v2 = [
-        v1[0],
-        "ALTER TABLE probe ADD COLUMN note TEXT; INSERT INTO nonexistent VALUES (1);",
+        v1[0].clone(),
+        Migration::sql(
+            "ALTER TABLE probe ADD COLUMN note TEXT; INSERT INTO nonexistent VALUES (1);",
+        ),
     ];
-    let error = migrations::migrate_with(&mut conn, &v2, Some(dir.path()))
+    let error = Db::open_with(&path, &v2, &kyu::store::options())
         .expect_err("a broken migration must fail");
     assert!(format!("{error:#}").contains("migration 2"));
+    let conn = rusqlite::Connection::open(&path).expect("reopen");
 
     // The failed migration rolled back whole: version unchanged, no stray
     // column, data intact.
@@ -243,7 +252,8 @@ async fn p7_g2_a_hard_kill_at_startup_leaves_a_migratable_store() {
         let _ = process.wait();
     }
 
-    let store = Store::open(dir.path()).expect("the store must still open after repeated kills");
+    let store =
+        kyu::storage::open(dir.path()).expect("the store must still open after repeated kills");
     let version: u32 = store.with_conn(|conn| {
         conn.query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version")
@@ -264,7 +274,7 @@ async fn p7_g3_a_full_store_refuses_publishes_loudly_and_stays_up() {
 
     // max_page_count makes SQLite behave exactly as it does on a full disk:
     // writes fail at commit with SQLITE_FULL.
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         let pages: i64 = conn
             .query_row("PRAGMA page_count", [], |row| row.get(0))
             .expect("page count");
@@ -816,7 +826,7 @@ async fn p7_g11_healthz_answers_503_when_the_store_refuses_writes() {
 
     // query_only is how SQLite behaves on a read-only store, applied to the
     // live writer connection so the endpoint sees what a real one would.
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         conn.pragma_update(None, "query_only", "ON")
             .expect("the pragma")
     });
@@ -860,7 +870,7 @@ fn p7_g12_the_events_topic_behaves_like_any_other() {
     clock.advance(8 * DAY);
     engine.sweep(1000).expect("a sweep that flags");
 
-    let events = |store: &Store| -> i64 {
+    let events = |store: &AppDb| -> i64 {
         store.with_conn(|conn| {
             conn.query_row(
                 "SELECT count(*) FROM messages m JOIN topics t ON t.id = m.topic_id \
@@ -1125,10 +1135,10 @@ async fn p7_g15_several_waiters_and_one_message_wakes_someone_promptly() {
 #[test]
 fn p7_g16_a_corrupt_backup_target_is_not_reported_as_a_backup() {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Store::open(dir.path()).expect("a store");
+    let store = kyu::storage::open(dir.path()).expect("a store");
 
     let good = dir.path().join("good.db");
-    let bytes = store.backup_to(&good).expect("a healthy backup");
+    let bytes = store.vacuum_into(&good).expect("a healthy backup");
     assert!(bytes > 0);
 
     // The verification opens what it wrote: prove it would catch a file that
@@ -1136,7 +1146,7 @@ fn p7_g16_a_corrupt_backup_target_is_not_reported_as_a_backup() {
     let occupied = dir.path().join("occupied.db");
     std::fs::write(&occupied, b"not a database at all").expect("a file");
     let error = store
-        .backup_to(&occupied)
+        .vacuum_into(&occupied)
         .expect_err("an existing file is refused before anything is written");
     assert!(format!("{error:#}").contains("already exists"));
 

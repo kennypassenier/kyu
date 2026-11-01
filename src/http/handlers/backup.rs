@@ -16,15 +16,20 @@ pub async fn backup(State(state): State<AppState>) -> Result<Response, ApiError>
     let engine = state.engine.clone();
 
     let result = tokio::task::spawn_blocking(move || -> anyhow::Result<(String, u64)> {
-        let store = engine.store();
-        let Some(path) = store.path() else {
+        let db = engine.db()?;
+        let Some(path) = db.path() else {
             anyhow::bail!("this hub runs on an in-memory store, which has nothing to back up");
         };
         let directory = path.parent().unwrap_or(std::path::Path::new("."));
         // Named for the moment it was taken, so several backups coexist and
         // the newest is obvious from a directory listing.
         let target = directory.join(format!("kyu.backup-{}.db", engine.now_ms()));
-        let bytes = store.backup_to(&target)?;
+        // `VACUUM INTO` writes a complete database, not a snapshot of bytes
+        // mid-write, so a backup taken under load is restorable; it refuses
+        // to overwrite a file that exists, and the kit opens what it wrote
+        // and runs `integrity_check` on it before reporting success. Copying
+        // the file by hand is the thing this exists to stop anyone doing.
+        let bytes = db.vacuum_into(&target)?;
         Ok((target.display().to_string(), bytes))
     })
     .await

@@ -69,7 +69,6 @@ impl Engine {
     /// and a 500 would tell them nothing.
     pub fn list_apps(&self, key: &SecretKey) -> Result<Vec<App>> {
         let stored = self
-            .store
             .read(queries::list_apps)
             .map_err(EngineError::Internal)?;
         Ok(stored
@@ -87,7 +86,6 @@ impl Engine {
     pub fn app_token(&self, name: &str, key: &SecretKey) -> Result<Option<String>> {
         let name_owned = name.to_string();
         let stored = self
-            .store
             .read(move |conn| queries::live_app_by_name(conn, &name_owned))
             .map_err(EngineError::Internal)?;
         match stored {
@@ -116,7 +114,6 @@ impl Engine {
     /// changes, this becomes an indexed lookup on a keyed hash.
     pub fn app_for_token(&self, candidate: &str, key: &SecretKey) -> Result<Option<String>> {
         let apps = self
-            .store
             .read(queries::live_apps)
             .map_err(EngineError::Internal)?;
         let mut found: Option<String> = None;

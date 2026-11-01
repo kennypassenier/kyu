@@ -14,7 +14,6 @@ impl chassis::StatusSection for TopicsSection {
         let now = self.0.now_ms();
         let topics: Vec<TopicView> = self
             .0
-            .store()
             .read(crate::store::queries::topic_summaries)
             .map(|summaries| {
                 summaries

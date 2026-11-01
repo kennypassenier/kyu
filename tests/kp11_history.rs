@@ -9,12 +9,14 @@ mod common;
 
 use std::sync::Arc;
 
+use chassis::storage::{AppDb, Db, Migration};
+use common::db::RawStore;
 use common::{KitHub, body_json, spawn_kit};
 use kyu::engine::clock::MockClock;
 use kyu::engine::days;
 use kyu::engine::{Defaults, Engine};
-use kyu::store::Store;
-use kyu::store::migrations::{MIGRATIONS, migrate_with};
+use kyu::store::migrations::{MIGRATIONS, migrations};
+use kyu::store::options;
 use kyu::store::queries::{self, StoredPolicy};
 use serde_json::{Value, json};
 
@@ -26,11 +28,11 @@ const DAY: i64 = 24 * HOUR;
 struct Fixture {
     engine: Engine,
     clock: Arc<MockClock>,
-    store: Arc<Store>,
+    store: AppDb,
 }
 
 fn fixture() -> Fixture {
-    let store = Arc::new(Store::open_in_memory().expect("an in-memory store"));
+    let store = kyu::storage::open_in_memory().expect("an in-memory store");
     let clock = Arc::new(MockClock::new(START));
     let engine = Engine::with_defaults(store.clone(), clock.clone(), Defaults::default());
     Fixture {
@@ -84,7 +86,7 @@ impl Fixture {
     /// `(n, outcome, app, reason)` for each attempt, oldest first.
     fn attempts(&self, id: &str) -> Vec<(i64, String, Option<String>, Option<String>)> {
         self.store
-            .read(|conn| {
+            .read_any(|conn| {
                 let topic_id = queries::topic_id_by_name_conn(conn, "jobs")?.unwrap();
                 let sub_id =
                     queries::subscription_id_by_name_conn(conn, topic_id, "worker")?.unwrap();
@@ -298,36 +300,41 @@ fn kp11_a_day_is_a_brussels_day() {
 
 #[test]
 fn kp11_migration_seven_keeps_every_row_of_a_schema_six_store() {
-    let mut conn = rusqlite::Connection::open_in_memory().expect("a database");
-    migrate_with(&mut conn, &MIGRATIONS[..6], None).expect("schema 6");
-    conn.execute(
-        "INSERT INTO topics (name, created_at) VALUES ('old', 1)",
-        [],
-    )
-    .expect("a topic");
-    conn.execute(
-        "INSERT INTO messages (id, topic_id, payload, published_at)
-         VALUES ('m1', (SELECT id FROM topics WHERE name = 'old'), x'7b7d', 5)",
-        [],
-    )
-    .expect("a message");
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let path = dir.path().join("kyu.db");
+    let six: Vec<Migration> = migrations()[..6].to_vec();
+    let db = Db::open_with(&path, &six, &options()).expect("schema 6");
+    db.write_blocking(|tx| {
+        tx.execute(
+            "INSERT INTO topics (name, created_at) VALUES ('old', 1)",
+            [],
+        )?;
+        tx.execute(
+            "INSERT INTO messages (id, topic_id, payload, published_at)
+             VALUES ('m1', (SELECT id FROM topics WHERE name = 'old'), x'7b7d', 5)",
+            [],
+        )?;
+        Ok(())
+    })
+    .expect("a topic and a message");
+    drop(db);
 
-    migrate_with(&mut conn, MIGRATIONS, None).expect("schema 7");
-    let version: u32 = conn
-        .query_row("PRAGMA user_version", [], |row| row.get(0))
-        .expect("a version");
-    assert_eq!(version as usize, MIGRATIONS.len());
-    let messages: i64 = conn
-        .query_row("SELECT count(*) FROM messages WHERE id = 'm1'", [], |row| {
+    let db = Db::open_with(&path, &migrations(), &options()).expect("schema 7");
+    assert_eq!(db.schema_version(), MIGRATIONS.len());
+    let messages: i64 = db.with_conn(|conn| {
+        conn.query_row("SELECT count(*) FROM messages WHERE id = 'm1'", [], |row| {
             row.get(0)
         })
-        .expect("a count");
+        .expect("a count")
+    });
     assert_eq!(messages, 1);
     for table in ["attempts", "stats_hourly", "stats_daily", "stats_samples"] {
-        conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
-            row.get::<_, i64>(0)
-        })
-        .unwrap_or_else(|error| panic!("{table} must exist: {error}"));
+        db.with_conn(|conn| {
+            conn.query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap_or_else(|error| panic!("{table} must exist: {error}"))
+        });
     }
 }
 

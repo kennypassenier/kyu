@@ -5,11 +5,14 @@
 
 use std::sync::Arc;
 
+use chassis::storage::AppDb;
 use kyu::engine::clock::MockClock;
 use kyu::engine::policy::Policy;
 use kyu::engine::{Defaults, Engine};
 use kyu::events::EVENTS_TOPIC;
-use kyu::store::Store;
+#[path = "common/db.rs"]
+mod db;
+use db::RawStore;
 use kyu::store::queries::StoredPolicy;
 
 const START: i64 = 1_700_000_000_000;
@@ -18,11 +21,11 @@ const DAY: i64 = 24 * 60 * 60 * 1_000;
 struct Fixture {
     engine: Engine,
     clock: Arc<MockClock>,
-    store: Arc<Store>,
+    store: AppDb,
 }
 
 fn fixture_with(defaults: Defaults) -> Fixture {
-    let store = Arc::new(Store::open_in_memory().expect("an in-memory store"));
+    let store = kyu::storage::open_in_memory().expect("an in-memory store");
     let clock = Arc::new(MockClock::new(START));
     let engine = Engine::with_defaults(store.clone(), clock.clone(), defaults);
     Fixture {

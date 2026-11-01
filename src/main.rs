@@ -9,13 +9,15 @@ use std::collections::BTreeMap;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+use chassis::storage::{AppDb, Db};
 use chassis::{App, AppSpec, Control};
 use kyu::config::{Config, HELP_EXTRA, refuse_retired_data_dir};
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
 use kyu::http::{AppState, Limits, assets};
 use kyu::kit::{import_app_tokens, mount};
-use kyu::store::Store;
+use kyu::store::STORE_FILE_NAME;
+use kyu::store::migrations::MIGRATIONS;
 use kyu::sweeper::{self, Heartbeat};
 
 #[tokio::main]
@@ -53,36 +55,30 @@ async fn start() -> Result<ExitCode, ExitCode> {
     if matches!(app.control, Some(Control::Check)) {
         return check(app, &config).await;
     }
-    let store = open_store(&config)?;
-    let (engine, state, heartbeat) = assemble(&mut app, &config, store.clone());
-    // chassis 3.11.0 / 3.12.0: kyu's tables as data kinds on the Storage
-    // page and the browser keys that follow the login. The kit opens the
-    // same `kyu.db` under the same migration list; nothing moves.
-    kyu::storage::declare(&mut app).map_err(|e| {
+    // chassis 3.11.0: the kit owns the store. kyu declares it (schema, pool,
+    // copy before a migration, its tables as data kinds on the Storage page,
+    // the browser keys that follow the login) and the kit opens `kyu.db` at
+    // start, before anything serves. Failing there is correct: serving
+    // requests without somewhere durable to put them would break K1's
+    // promise that a confirmed publish is a kept one.
+    let db = kyu::storage::declare(&mut app).map_err(|e| {
         eprintln!("kyu: {e}");
         ExitCode::FAILURE
     })?;
     if let (Some(key), Some(hex)) = (config.auth.key(), secret_hex.as_deref()) {
-        import_tokens(&state_dir, &engine, key, hex)?;
+        import_tokens(&state_dir, key, hex)?;
     }
+    let (engine, state, heartbeat) = assemble(&mut app, &config, db.clone());
     start_sweeper(&mut app, &state, engine, heartbeat);
-    settle_store_on_pause_and_stop(&mut app, store);
+    settle_store_on_stop(&mut app, db);
     Ok(app.run().await)
 }
 
 /// The engine and the HTTP state on top of the store, hung on the kit.
-fn assemble(
-    app: &mut App,
-    config: &Config,
-    store: Arc<Store>,
-) -> (Arc<Engine>, AppState, Heartbeat) {
+fn assemble(app: &mut App, config: &Config, db: AppDb) -> (Arc<Engine>, AppState, Heartbeat) {
     let clock = SystemClock;
     let heartbeat = Heartbeat::starting_at(clock.now_ms());
-    let engine = Arc::new(Engine::with_defaults(
-        store,
-        Arc::new(clock),
-        config.defaults,
-    ));
+    let engine = Arc::new(Engine::with_defaults(db, Arc::new(clock), config.defaults));
     let state = AppState::with_auth(
         engine.clone(),
         Limits::from_config(config),
@@ -133,20 +129,22 @@ fn build_app(env: BTreeMap<String, String>) -> Result<App, ExitCode> {
 /// `<staging> --check` before the swap, so a check that writes would move
 /// the schema forward before the new binary is even in place.
 async fn check(mut app: App, config: &Config) -> Result<ExitCode, ExitCode> {
-    let inspection = Store::inspect(&config.data_dir).map_err(fail)?;
+    let path = config.data_dir.join(STORE_FILE_NAME);
+    let inspection = Db::inspect(&path, MIGRATIONS.len()).map_err(|e| fail(e.into()))?;
+    if inspection.is_newer() {
+        eprintln!(
+            "kyu: {}. Roll back to the newer build, or restore the copy its migration wrote \
+             (kyu.pre-v*.db in the data directory). kyu never downgrades a schema, because \
+             guessing at an unknown layout risks the messages in it.",
+            inspection.describe()
+        );
+        return Err(ExitCode::FAILURE);
+    }
     app.on_check(move || {
         println!("{}", inspection.describe());
         Ok(())
     });
     Ok(app.run().await)
-}
-
-/// Opening the store migrates it forward, snapshotting first if there is
-/// anything to lose (AR10). Failing here is correct: serving requests
-/// without somewhere durable to put them would break K1's promise that a
-/// confirmed publish is a kept one.
-fn open_store(config: &Config) -> Result<Arc<Store>, ExitCode> {
-    Store::open(&config.data_dir).map(Arc::new).map_err(fail)
 }
 
 /// K2-1 (2026-09-06, amended 2026-09-20): the kit owns the clients now.
@@ -157,11 +155,16 @@ fn open_store(config: &Config) -> Result<Arc<Store>, ExitCode> {
 /// case this exists for (fix-state-1 follow-up).
 fn import_tokens(
     state_dir: &std::path::Path,
-    engine: &Engine,
     key: &kyu::crypto::SecretKey,
     hex: &str,
 ) -> Result<(), ExitCode> {
-    match import_app_tokens(state_dir, engine, key, hex).map_err(fail)? {
+    // The import has to finish before the kit opens its client store, which
+    // is before the kit opens the database, so it reads the 2.x `apps` table
+    // through a short-lived handle of its own. That open does what a start
+    // does (migrates, copies first), so the kit's open finds nothing to do.
+    let db = kyu::storage::open(state_dir).map_err(|e| fail(e.into()))?;
+    let engine = Engine::new(db, Arc::new(SystemClock));
+    match import_app_tokens(state_dir, &engine, key, hex).map_err(fail)? {
         0 => {}
         count => eprintln!(
             "kyu: imported {count} app token(s) from the 2.x apps table into the kit's \
@@ -190,29 +193,18 @@ fn start_sweeper(app: &mut App, state: &AppState, engine: Arc<Engine>, heartbeat
     });
 }
 
-/// Checkpoints the write-ahead log before a backup pause and at shutdown.
-fn settle_store_on_pause_and_stop(app: &mut App, store: Arc<Store>) {
-    let store_for_pause = store.clone();
-    // feat-backup-1 (chassis 3.1.0) · `<name> backup-pause` holds every
-    // write wrapped in `chassis::shell::backup::writing_blocking()` (see
-    // `http::handlers::engine_call::spawn_engine_write`), waits for the ones already in
-    // flight, then runs this hook before answering the caller: the same
-    // `wal_checkpoint(TRUNCATE)` W12 runs at shutdown, so a file-level
-    // backup of the state root sees no WAL/SHM to miss. An error here falls
-    // the pause back to stopping the unit instead.
-    app.on_backup_pause(move |_mode| {
-        store_for_pause.checkpoint().map_err(|error| {
-            chassis::Error::dependency(
-                format!("could not checkpoint the store for a backup pause: {error:#}"),
-                "the pause falls back to stopping the unit; investigate the write-ahead log",
-            )
-        })
-    });
-    // W12 · after the drain, settle the write-ahead log. Bounded by the
-    // kit's shutdown budget (KYU_SHUTDOWN_TIMEOUT_MS); a checkpoint that does
-    // not finish costs nothing but a file-level backup's restorability —
-    // WAL and synchronous=FULL keep the data intact either way.
-    app.on_flush(move || match store.checkpoint() {
+/// Checkpoints the write-ahead log at shutdown (W12). The backup pause
+/// (feat-backup-1, chassis 3.1.0) needs no hook of kyu's: the kit holds
+/// every write ticket the `Db` takes, waits for the ones in flight, then
+/// runs the same `wal_checkpoint(TRUNCATE)` on the app database itself,
+/// and falls back to stopping the unit when it is busy.
+///
+/// W12 · after the drain, settle the write-ahead log. Bounded by the kit's
+/// shutdown budget (KYU_SHUTDOWN_TIMEOUT_MS); a checkpoint that does not
+/// finish costs nothing but a file-level backup's restorability — WAL and
+/// synchronous=FULL keep the data intact either way.
+fn settle_store_on_stop(app: &mut App, db: AppDb) {
+    app.on_flush(move || match db.db().and_then(Db::checkpoint) {
         Ok(()) => tracing::info!("store checkpointed; stopping"),
         Err(error) => tracing::warn!(
             %error,

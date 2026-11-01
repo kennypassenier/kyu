@@ -1,25 +1,42 @@
-//! What kyu declares to the kit's storage layer (chassis-rs 3.11.0 and
-//! 3.12.0): its data as kinds on the Storage page, and the browser keys that
-//! follow the login.
+//! What kyu declares to the kit's storage layer: its database (the schema,
+//! the pool shape, the copy before a migration), its data as kinds on the
+//! Storage page, and the browser keys that follow the login.
 //!
-//! kyu keeps its own store (`crate::store`, `kyu.db`). The kit's
-//! `App::app_db` opens the same file under the same migration list, so the
-//! schema does not change and nothing moves: `Store::open` has already
-//! migrated the file to the current schema before the kit opens it, which
-//! leaves the kit with nothing to apply. What the kit adds is the budget,
-//! the Storage page with its preview and typed-confirm delete, the backup
-//! pause checkpoint, and the preferences table `chassis_prefs`.
+//! The kit owns the handle (`AppDb`, since chassis-rs 3.11.0): it opens
+//! `kyu.db` at start, migrates it, copies it first when it is behind, and
+//! adds the budget, the Storage page with its preview and typed-confirm
+//! delete, the backup-pause checkpoint and the preferences table
+//! `chassis_prefs`. kyu keeps no handle of its own.
 
-use chassis::storage::{AppDb, AppDbSpec, BrowserKeys, DataKind, Filter, Migration, TimeFormat};
+use std::path::Path;
+
+use chassis::storage::{AppDb, AppDbSpec, BrowserKeys, DataKind, Filter, TimeFormat};
 use chassis::{App, Error};
 
-use crate::store::migrations::MIGRATIONS;
+use crate::store::migrations::migrations;
+use crate::store::{STORE_FILE_NAME, options};
 
-/// kyu's schema as the kit's migration list: the same SQL, one step per
-/// version, so the kit and `Store::open` can never disagree about the
-/// version number of the file they share.
-pub fn migrations() -> Vec<Migration> {
-    MIGRATIONS.iter().map(|sql| Migration::sql(sql)).collect()
+/// kyu's database as the kit opens it: the schema, four readers and a copy
+/// before every migration.
+pub fn spec() -> AppDbSpec {
+    AppDbSpec::new(migrations()).with_options(options())
+}
+
+/// Opens the store in `data_dir` the way a start does (migrating it
+/// forward, copying it first when it is behind), without a running kit.
+/// For the one-time token import, which has to read the 2.x `apps` table
+/// before the kit opens its client store, and for tests.
+pub fn open(data_dir: &Path) -> Result<AppDb, Error> {
+    AppDb::open(&data_dir.join(STORE_FILE_NAME), spec(), kinds())
+}
+
+/// An in-memory store for fast logic tests.
+///
+/// Write-ahead logging does not apply to memory databases, so anything
+/// asserting durability or crash behaviour must use [`open`] with a real
+/// file (standing rule 9).
+pub fn open_in_memory() -> Result<AppDb, Error> {
+    AppDb::open_in_memory(spec(), kinds())
 }
 
 /// The data kinds. None has a "finished by its own definition" rule: kyu's
@@ -86,7 +103,7 @@ pub fn browser_keys() -> BrowserKeys {
 
 /// Declare everything in one place, for the binary and the test harness.
 pub fn declare(app: &mut App) -> Result<AppDb, Error> {
-    let db = app.app_db(AppDbSpec::new(migrations()))?;
+    let db = app.app_db(spec())?;
     for kind in kinds() {
         app.storage_kind(kind);
     }

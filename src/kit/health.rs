@@ -11,6 +11,11 @@ use crate::sweeper::Heartbeat;
 /// because they fail differently: the probe takes the write lock, which
 /// catches a read-only store; the failure record catches what a probe
 /// cannot — a disk that is full but writable only refuses at commit time.
+/// The failure record is asked first and the probe skipped while it stands:
+/// a successful probe clears the kit's record (the lock is taken without a
+/// commit, so it proves less than a write), which would end the report on
+/// the second poll with the disk still full. Both questions are the kit's
+/// `Db` (`recent_write_failure`, `probe_writable`); the words are the hub's.
 pub struct StoreSubsystem(pub Arc<Engine>);
 
 impl Subsystem for StoreSubsystem {
@@ -19,21 +24,24 @@ impl Subsystem for StoreSubsystem {
     }
 
     fn check(&self) -> SubsystemStatus {
-        if let Err(error) = self.0.store().probe_writable() {
+        let db = match self.0.db() {
+            Ok(db) => db,
+            Err(error) => return SubsystemStatus::failing(format!("not open: {error}")),
+        };
+        if let Some(why) = db.recent_write_failure() {
             return SubsystemStatus::failing(format!(
-                "unwritable: {error:#}. Check free space on the data volume first, then that \
+                "a write failed within the last minute ({why}); the store may be full. Check \
+                 free space on the data volume first, then that it is still mounted and \
+                 writable by this user; the hub refuses publishes it cannot store and \
+                 recovers by itself once writes succeed again"
+            ));
+        }
+        if let Err(error) = db.probe_writable() {
+            return SubsystemStatus::failing(format!(
+                "unwritable: {error}. Check free space on the data volume first, then that \
                  it is still mounted, writable by this user and not locked by another \
                  process; the hub refuses publishes it cannot store and recovers by itself \
                  once writes succeed again"
-            ));
-        }
-        if let Some(ago) = self.0.store().recent_write_failure() {
-            return SubsystemStatus::failing(format!(
-                "a write failed {} seconds ago; the store may be full. Check free space on the \
-                 data volume first, then that it is still mounted and writable by this user; \
-                 the hub refuses publishes it cannot store and recovers by itself once writes \
-                 succeed again",
-                ago.as_secs()
             ));
         }
         SubsystemStatus::ok("writable")

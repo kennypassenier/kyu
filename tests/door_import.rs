@@ -19,7 +19,6 @@ use kyu::crypto::SecretKey;
 use kyu::engine::Engine;
 use kyu::engine::clock::MockClock;
 use kyu::kit::import_app_tokens;
-use kyu::store::Store;
 
 const START: i64 = 1_700_000_000_000;
 
@@ -32,7 +31,7 @@ struct Fixture {
 
 fn fixture() -> Fixture {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Arc::new(Store::open(dir.path()).expect("a store"));
+    let store = kyu::storage::open(dir.path()).expect("a store");
     let engine = Engine::new(store, Arc::new(MockClock::new(START)));
     let hex = SecretKey::generate_hex();
     let key = SecretKey::parse_hex(&hex).expect("a key");

@@ -13,7 +13,6 @@ use std::time::Duration;
 use kyu::engine::clock::{Clock, MockClock, SystemClock};
 use kyu::engine::{Defaults, Engine};
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 
@@ -37,7 +36,7 @@ impl Hub {
 }
 
 async fn spawn_at(dir: &Path) -> Hub {
-    let store = Arc::new(Store::open(dir).expect("a store"));
+    let store = kyu::storage::open(dir).expect("a store");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     let state = AppState::new(
         engine,
@@ -128,7 +127,7 @@ async fn l8_metrics_expose_the_series_that_reveal_a_silent_failure() {
 
 #[test]
 fn l8_a_delayed_message_is_durable_immediately_and_deliverable_later() {
-    let store = Arc::new(Store::open_in_memory().expect("a store"));
+    let store = kyu::storage::open_in_memory().expect("a store");
     let clock = Arc::new(MockClock::new(1_700_000_000_000));
     let engine = Engine::with_defaults(store, clock.clone(), Defaults::default());
 
@@ -292,12 +291,12 @@ async fn l8_a_backup_taken_under_load_restores_to_a_working_store() {
 #[tokio::test]
 async fn l8_a_backup_never_overwrites_an_existing_file() {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Store::open(dir.path()).expect("a store");
+    let store = kyu::storage::open(dir.path()).expect("a store");
     let target = dir.path().join("taken.db");
     std::fs::write(&target, b"something precious").expect("a file");
 
     let error = store
-        .backup_to(&target)
+        .vacuum_into(&target)
         .expect_err("an existing file must not be replaced");
     assert!(
         format!("{error:#}").contains("already exists"),

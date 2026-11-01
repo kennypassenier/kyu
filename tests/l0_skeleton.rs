@@ -7,13 +7,12 @@ use std::sync::Arc;
 use kyu::engine::Engine;
 use kyu::engine::clock::SystemClock;
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 
 /// Starts the router on an ephemeral port and returns its address. The
 /// task is left running; the test process exiting cleans it up.
 async fn spawn_server() -> SocketAddr {
-    let store = Arc::new(Store::open_in_memory().expect("an in-memory store"));
+    let store = kyu::storage::open_in_memory().expect("an in-memory store");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     let heartbeat = Heartbeat::starting_at(i64::MAX / 2);
     let state = AppState::new(

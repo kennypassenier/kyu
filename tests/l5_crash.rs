@@ -444,10 +444,9 @@ async fn l5_healthz_goes_unhealthy_when_the_sweeper_stops() {
     use kyu::engine::Engine;
     use kyu::engine::clock::{Clock, SystemClock};
     use kyu::http::{AppState, Limits, router_with_probes};
-    use kyu::store::Store;
     use kyu::sweeper::{Heartbeat, STALE_AFTER_MS};
 
-    let store = Arc::new(Store::open_in_memory().expect("a store"));
+    let store = kyu::storage::open_in_memory().expect("a store");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     // A heartbeat from well before the staleness threshold: no sweeper has
     // reported in for far too long.

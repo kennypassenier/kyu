@@ -7,10 +7,13 @@
 
 use std::sync::Arc;
 
+use chassis::storage::AppDb;
+#[path = "common/db.rs"]
+mod db;
+use db::RawStore;
 use kyu::engine::clock::MockClock;
 use kyu::engine::policy::{DEFAULT_MAX_ATTEMPTS, Policy};
 use kyu::engine::{Engine, Settled};
-use kyu::store::Store;
 use kyu::store::queries::StoredPolicy;
 
 const START: i64 = 1_700_000_000_000;
@@ -18,11 +21,11 @@ const START: i64 = 1_700_000_000_000;
 struct Fixture {
     engine: Engine,
     clock: Arc<MockClock>,
-    store: Arc<Store>,
+    store: AppDb,
 }
 
 fn fixture() -> Fixture {
-    let store = Arc::new(Store::open_in_memory().expect("an in-memory store"));
+    let store = kyu::storage::open_in_memory().expect("an in-memory store");
     let clock = Arc::new(MockClock::new(START));
     let engine = Engine::new(store.clone(), clock.clone());
     Fixture {

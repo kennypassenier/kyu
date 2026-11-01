@@ -42,7 +42,6 @@ pub async fn dashboard_stats_hourly(
         let last = days::hour_of(engine.now_ms());
         let first = last - (hours - 1) * days::HOUR;
         engine
-            .store()
             .read(|conn| {
                 let names = queries::topic_names_conn(conn)?;
                 let rows = queries::hourly_since(conn, first)?;
@@ -100,7 +99,6 @@ pub async fn dashboard_stats_totals(
     let samples = spawn_engine(move || {
         let from = engine.now_ms() - hours * crate::engine::days::HOUR;
         engine
-            .store()
             .read(|conn| queries::samples_since(conn, from))
             .map_err(EngineError::Internal)
     })

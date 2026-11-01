@@ -12,17 +12,20 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use chassis::storage::AppDb;
 use kyu::engine::Engine;
 use kyu::engine::clock::SystemClock;
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
+#[path = "common/db.rs"]
+mod db;
+use db::RawStore;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
 struct Hub {
     addr: SocketAddr,
-    store: Arc<Store>,
+    store: AppDb,
     _server: JoinHandle<()>,
 }
 
@@ -34,7 +37,7 @@ impl Hub {
 
 async fn spawn() -> (Hub, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Arc::new(Store::open(dir.path()).expect("the store must open"));
+    let store = kyu::storage::open(dir.path()).expect("the store must open");
     let engine = Arc::new(Engine::new(store.clone(), Arc::new(SystemClock)));
     let heartbeat = Heartbeat::starting_at(i64::MAX / 2);
     let state = AppState::new(
@@ -311,7 +314,7 @@ async fn l3_an_archived_subscription_receives_nothing_new() {
     // K11's lifecycle lands in L6; archiving directly here is enough to
     // prove the publish path already respects the state, which is what
     // makes AR3's retention rule safe.
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         conn.execute(
             "UPDATE subscriptions SET state = 'archived' WHERE name = ?1",
             ["retired"],

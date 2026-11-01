@@ -85,7 +85,7 @@ where
 {
     tokio::task::spawn_blocking(move || {
         let now = engine.now_ms();
-        engine.store().read(|conn| read(conn, now))
+        engine.read(|conn| read(conn, now))
     })
     .await
     .map_err(|error| internal(format!("the dashboard task failed: {error}")))?

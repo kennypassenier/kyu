@@ -10,6 +10,7 @@
 //! same assertions against the kit.
 
 mod common;
+use common::db::RawStore;
 
 use std::process::Command;
 
@@ -200,7 +201,7 @@ async fn k2_app_tokens_issued_by_2x_keep_working_after_the_import() {
     // newsflash keep their environment files.
     let dir = tempfile::tempdir().unwrap();
     let old_token = {
-        let store = std::sync::Arc::new(kyu::store::Store::open(dir.path()).unwrap());
+        let store = kyu::storage::open(dir.path()).unwrap();
         let engine =
             kyu::engine::Engine::new(store, std::sync::Arc::new(kyu::engine::clock::SystemClock));
         let key = kyu::crypto::SecretKey::parse_hex(KEY).unwrap();
@@ -604,7 +605,7 @@ async fn k2_the_awkward_dashboard_states_all_render() {
     assert_eq!(delayed.status(), 201);
     // An archived subscription, so the snippet has no live name to use.
     hub.bootstrap("notify.kenny", "retired").await;
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         conn.execute(
             "UPDATE subscriptions SET state = 'archived' WHERE name = 'retired'",
             [],

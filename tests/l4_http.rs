@@ -10,7 +10,6 @@ use std::time::Duration;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::sweeper;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
@@ -38,7 +37,7 @@ impl Hub {
 /// Mirrors `main.rs`: the same wiring, so these tests exercise the sweeper
 /// the way it actually runs rather than a stand-in.
 async fn spawn_at(data_dir: &Path) -> Hub {
-    let store = Arc::new(Store::open(data_dir).expect("the store must open"));
+    let store = kyu::storage::open(data_dir).expect("the store must open");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     let heartbeat = Heartbeat::starting_at(SystemClock.now_ms());
     let state = AppState::new(

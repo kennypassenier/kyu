@@ -21,6 +21,7 @@ pub mod names;
 pub mod policy;
 mod publish;
 mod settle;
+mod store_access;
 mod subscriptions;
 mod sweep;
 
@@ -32,7 +33,8 @@ pub use sweep::SweepReport;
 
 use std::sync::{Arc, Mutex};
 
-use crate::store::Store;
+use chassis::storage::AppDb;
+
 use crate::store::queries::{self, ClaimedMessage};
 
 use clock::{Clock, Millis};
@@ -118,20 +120,20 @@ impl Default for Defaults {
 }
 
 pub struct Engine {
-    store: Arc<Store>,
+    db: AppDb,
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
     defaults: Defaults,
 }
 
 impl Engine {
-    pub fn new(store: Arc<Store>, clock: Arc<dyn Clock>) -> Self {
-        Self::with_defaults(store, clock, Defaults::default())
+    pub fn new(db: AppDb, clock: Arc<dyn Clock>) -> Self {
+        Self::with_defaults(db, clock, Defaults::default())
     }
 
-    pub fn with_defaults(store: Arc<Store>, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
+    pub fn with_defaults(db: AppDb, clock: Arc<dyn Clock>, defaults: Defaults) -> Self {
         Self {
-            store,
+            db,
             clock,
             ids: Mutex::new(MessageIds::new()),
             defaults,
@@ -140,25 +142,6 @@ impl Engine {
 
     pub fn defaults(&self) -> Defaults {
         self.defaults
-    }
-
-    pub fn store(&self) -> &Arc<Store> {
-        &self.store
-    }
-
-    /// Every write goes through here so that a storage failure is recorded
-    /// once, in one place (W6, the L1 gap closed at the Phase 7 gate).
-    ///
-    /// Only `Internal` counts. The typed errors — an unknown topic, an
-    /// already-acked message — are the caller being wrong, and a hub that
-    /// called itself unhealthy over a 404 would be crying wolf.
-    fn write<T>(&self, f: impl FnOnce(&rusqlite::Transaction) -> Result<T>) -> Result<T> {
-        let result = self.store.write(f);
-        if let Err(EngineError::Internal(error)) = &result {
-            tracing::error!(error = ?error, "a store write failed");
-            self.store.record_write_failure();
-        }
-        result
     }
 
     pub fn now_ms(&self) -> Millis {

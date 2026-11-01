@@ -15,9 +15,12 @@
 //! which the kit does not know about.
 #![allow(dead_code)]
 
+pub mod db;
+
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
+use chassis::storage::AppDb;
 use chassis::testing::TestApp;
 use chassis::{App, AppSpec};
 use kyu::config::{Auth, Config};
@@ -25,15 +28,16 @@ use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
 use kyu::http::{AppState, Limits, assets};
 use kyu::kit::{import_app_tokens, mount};
-use kyu::store::Store;
 use kyu::sweeper::{self, Heartbeat};
+use tokio::task::JoinHandle;
 
 pub struct KitHub {
     app: TestApp,
     pub addr: SocketAddr,
-    pub store: Arc<Store>,
+    /// The kit's handle on `kyu.db`, open once the kit has started.
+    pub store: AppDb,
     pub engine: Arc<Engine>,
-    sweeper: tokio::task::JoinHandle<()>,
+    sweeper: SweeperSlot,
     /// `spawn_kit_in`'s caller-supplied state directory, kept alive as long
     /// as the app runs (`KYU_STATE_DIR` points into it). `TestApp` owns and
     /// cleans up its own separate tempdir regardless — this one is `None`
@@ -195,8 +199,11 @@ impl KitHub {
     }
 
     pub async fn shutdown(mut self) {
-        self.sweeper.abort();
-        let _ = (&mut self.sweeper).await;
+        let sweeper = self.sweeper.lock().expect("the sweeper slot").take();
+        if let Some(mut sweeper) = sweeper {
+            sweeper.abort();
+            let _ = (&mut sweeper).await;
+        }
         self.app.shutdown().await;
     }
 }
@@ -235,7 +242,11 @@ fn spec() -> AppSpec {
 
 /// What `configure_hub` builds, smuggled out of an `FnOnce(&mut App)` that
 /// cannot return a value directly.
-type Configured = (Arc<Store>, Arc<Engine>, tokio::task::JoinHandle<()>);
+type Configured = (AppDb, Arc<Engine>, SweeperSlot);
+
+/// The sweeper's handle, filled by the kit's start hook: the sweeper must
+/// not run before the kit has opened the store.
+type SweeperSlot = Arc<Mutex<Option<JoinHandle<()>>>>;
 
 /// Everything `spawn_kit`/`spawn_kit_in` share: build the engine/store the
 /// way `main.rs` does, from the token and secret key the kit itself just
@@ -263,10 +274,11 @@ fn configure_hub(app: &mut App, out: Arc<Mutex<Option<Configured>>>) {
     let mut config =
         Config::from_kit(&state_dir, app.limits.max_body_bytes as u64).expect("a config");
     config.auth = Auth::parse(Some(&token), Some(&secret_key)).expect("a protected hub");
-    let store = Arc::new(Store::open(&config.data_dir).expect("a store"));
     let heartbeat = Heartbeat::starting_at(SystemClock.now_ms());
+    // The kit owns the handle, as in main.rs: declared here, opened at start.
+    let db = kyu::storage::declare(app).expect("the storage declarations agree with the schema");
     let engine = Arc::new(Engine::with_defaults(
-        store.clone(),
+        db.clone(),
         Arc::new(SystemClock),
         config.defaults,
     ));
@@ -282,16 +294,28 @@ fn configure_hub(app: &mut App, out: Arc<Mutex<Option<Configured>>>) {
         config.auth.clone(),
     );
     let key = config.auth.key().expect("a protected hub").clone();
-    import_app_tokens(&state_dir, &engine, &key, &secret_key).expect("the import runs");
+    // The import runs on a short-lived handle of its own, before the kit
+    // opens its client store (and the database), as in main.rs.
+    let early = Engine::new(
+        kyu::storage::open(&config.data_dir).expect("a store"),
+        Arc::new(SystemClock),
+    );
+    import_app_tokens(&state_dir, &early, &key, &secret_key).expect("the import runs");
+    drop(early);
     mount(app, state.clone(), engine.clone(), heartbeat.clone());
-    kyu::storage::declare(app).expect("the storage declarations agree with the schema");
+    let sweeper: SweeperSlot = Arc::new(Mutex::new(None));
+    let slot = sweeper.clone();
+    let for_sweeper = engine.clone();
     let notifiers = state.notifiers.clone();
-    let sweeper = sweeper::spawn(engine.clone(), heartbeat, move |woken| {
-        for (topic, subscription) in woken {
-            notifiers.wake(topic, std::slice::from_ref(subscription));
-        }
+    app.on_start(move || {
+        let handle = sweeper::spawn(for_sweeper, heartbeat, move |woken| {
+            for (topic, subscription) in woken {
+                notifiers.wake(topic, std::slice::from_ref(subscription));
+            }
+        });
+        *slot.lock().expect("the sweeper slot") = Some(handle);
     });
-    *out.lock().expect("configure runs once, uncontended") = Some((store, engine, sweeper));
+    *out.lock().expect("configure runs once, uncontended") = Some((db, engine, sweeper));
 }
 
 pub async fn spawn_kit() -> KitHub {

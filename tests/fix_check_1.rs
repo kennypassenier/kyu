@@ -11,7 +11,8 @@ use std::io::Read;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use kyu::store::migrations::{MIGRATIONS, migrate_with};
+use chassis::storage::{Db, DbOptions};
+use kyu::store::migrations::{MIGRATIONS, migrations};
 use rusqlite::Connection;
 
 /// Runs the real binary with `--check` against `state_dir`, bounded.
@@ -81,14 +82,19 @@ fn fix_check_1_check_reports_a_pending_migration_and_applies_nothing() {
     let db = dir.path().join("kyu.db");
     // A store one schema behind the binary, with rows in it.
     {
-        let mut conn = Connection::open(&db).expect("create");
         let behind = MIGRATIONS.len() - 1;
-        migrate_with(&mut conn, &MIGRATIONS[..behind], None).expect("older schema");
-        conn.execute(
-            "INSERT INTO topics (name, retention_ms, created_at) VALUES ('notify.kenny', NULL, 1)",
-            [],
-        )
-        .expect("a row");
+        let older =
+            Db::open_with(&db, &migrations()[..behind], &DbOptions::new()).expect("older schema");
+        older
+            .write_blocking(|tx| {
+                tx.execute(
+                    "INSERT INTO topics (name, retention_ms, created_at) \
+                     VALUES ('notify.kenny', NULL, 1)",
+                    [],
+                )?;
+                Ok(())
+            })
+            .expect("a row");
     }
     let before = user_version(&db);
     assert_eq!(before as usize, MIGRATIONS.len() - 1);

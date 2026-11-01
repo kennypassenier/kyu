@@ -8,10 +8,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use chassis::storage::AppDb;
+#[path = "common/db.rs"]
+mod db;
+use db::RawStore;
 use kyu::engine::Engine;
 use kyu::engine::clock::MockClock;
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::store::dedup::MAX_ROWS;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
@@ -23,7 +26,7 @@ struct Hub {
     addr: SocketAddr,
     engine: Arc<Engine>,
     clock: Arc<MockClock>,
-    store: Arc<Store>,
+    store: AppDb,
     _server: JoinHandle<()>,
     _dir: tempfile::TempDir,
 }
@@ -53,7 +56,7 @@ impl Hub {
 
 async fn spawn() -> Hub {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Arc::new(Store::open(dir.path()).expect("the store must open"));
+    let store = kyu::storage::open(dir.path()).expect("the store must open");
     let clock = Arc::new(MockClock::new(1_800_000_000_000));
     let engine = Arc::new(Engine::new(store.clone(), clock.clone()));
     let state = AppState::new(
@@ -242,7 +245,7 @@ async fn dedup_the_sweeper_prunes_expired_keys_and_orphans() {
     hub.publish("gone", &[("kyu-dedup-key", "x")]).await;
 
     // A deleted topic takes its keys with it (cascade) ...
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         conn.execute("DELETE FROM topics WHERE name = 'gone'", [])
             .expect("delete the topic");
     });
@@ -262,7 +265,7 @@ async fn dedup_the_sweeper_prunes_expired_keys_and_orphans() {
 async fn dedup_the_key_table_is_capped_by_evicting_the_oldest() {
     let hub = spawn().await;
     // Fill the table to its cap directly, then publish one more key.
-    hub.store.with_conn(|conn| {
+    hub.store.with_writer(|conn| {
         conn.execute(
             "INSERT INTO topics (name, created_at) VALUES ('bulk', 0)",
             [],
@@ -321,7 +324,7 @@ async fn dedup_metrics_report_keys_and_suppressed_duplicates() {
     let headers = [("kyu-dedup-key", "disk-full")];
     hub.publish("alerts", &headers).await;
     hub.publish("alerts", &headers).await;
-    let scraped = hub.store.read(|conn| {
+    let scraped = hub.store.read_any(|conn| {
         Ok((
             kyu::store::dedup::live_keys(conn)?,
             kyu::store::dedup::suppressed_by_topic(conn)?,

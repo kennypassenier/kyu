@@ -78,7 +78,6 @@ pub async fn dashboard_attempts(
     let (t, s, i) = (topic.clone(), subscription.clone(), id.clone());
     let attempts = spawn_engine(move || {
         engine
-            .store()
             .read(|conn| read_attempts(conn, &t, &s, &i))
             .map_err(EngineError::Internal)
     })
@@ -114,7 +113,6 @@ pub async fn dashboard_daily(
     let (t, s) = (topic.clone(), subscription.clone());
     let found = spawn_engine(move || {
         engine
-            .store()
             .read(|conn| {
                 let Some(topic_id) = queries::topic_id_by_name_conn(conn, &t)? else {
                     return Ok(None);

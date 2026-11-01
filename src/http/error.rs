@@ -90,18 +90,31 @@ impl From<EngineError> for ApiError {
             EngineError::AppExists { .. } => StatusCode::CONFLICT,
             EngineError::UnknownApp { .. } => StatusCode::NOT_FOUND,
             EngineError::Unprotected => StatusCode::CONFLICT,
-            EngineError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            // A write held by a backup pause is the kit's retryable 503; every
+            // other storage failure is ours.
+            EngineError::Store(kit) if kit.kind == chassis::Kind::Overloaded => {
+                StatusCode::SERVICE_UNAVAILABLE
+            }
+            EngineError::Store(_) | EngineError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
         // Internal faults are ours, not the caller's: log the detail and
         // keep the response generic (AR4).
-        if let EngineError::Internal(detail) = &error {
-            tracing::error!(error = ?detail, "internal failure");
+        match &error {
+            EngineError::Internal(detail) => {
+                tracing::error!(error = ?detail, "internal failure");
+            }
+            EngineError::Store(kit) => tracing::error!(error = %kit, "store failure"),
+            _ => {}
         }
 
         let remedy = error.remedy();
         let message = match &error {
             EngineError::Internal(_) => "kyu hit an internal error".to_string(),
+            EngineError::Store(kit) if kit.kind == chassis::Kind::Overloaded => {
+                "the store is paused for a backup".to_string()
+            }
+            EngineError::Store(_) => "kyu hit a storage error".to_string(),
             other => other.to_string(),
         };
 

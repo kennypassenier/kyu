@@ -71,6 +71,13 @@ pub enum EngineError {
     #[error("this hub has no token configured, so it cannot manage apps")]
     Unprotected,
 
+    /// The kit's storage layer refused or failed the call: a backup pause
+    /// held the write past its limit, the transaction could not begin or
+    /// commit. The kit has already recorded it, so it is not counted a
+    /// second time (see `Engine::write`).
+    #[error("the store could not take this: {}", .0.message)]
+    Store(chassis::Error),
+
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 }
@@ -157,6 +164,7 @@ impl EngineError {
                  Archive it first (the Archive button on the topic page): that settles \
                  its backlog as lapsed, so nothing it still holds is lost silently."
             ),
+            Self::Store(error) => error.remedy.clone(),
             Self::Internal(_) => {
                 "this is a fault in kyu rather than in the request. Check the hub's logs \
                  for the matching error line and the dashboard for the store's health."

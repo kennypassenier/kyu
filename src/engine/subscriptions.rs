@@ -89,17 +89,16 @@ impl Engine {
 
     /// K9 · a topic's retention, `None` meaning "keep forever".
     pub fn retention(&self, topic: &str) -> Result<(Option<Millis>, Option<Millis>)> {
-        self.store
-            .write(|tx| -> Result<(Option<Millis>, Option<Millis>)> {
-                let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
-                    return Err(EngineError::UnknownTopic {
-                        topic: topic.to_string(),
-                        existing: queries::topic_names(tx)?,
-                    });
-                };
-                let explicit = queries::topic_retention(tx, topic_id)?;
-                Ok((explicit.or(self.defaults.retention_ms), explicit))
-            })
+        self.write(|tx| -> Result<(Option<Millis>, Option<Millis>)> {
+            let Some(topic_id) = queries::topic_id_by_name(tx, topic)? else {
+                return Err(EngineError::UnknownTopic {
+                    topic: topic.to_string(),
+                    existing: queries::topic_names(tx)?,
+                });
+            };
+            let explicit = queries::topic_retention(tx, topic_id)?;
+            Ok((explicit.or(self.defaults.retention_ms), explicit))
+        })
     }
 
     pub fn set_retention(&self, topic: &str, retention_ms: Option<Millis>) -> Result<()> {

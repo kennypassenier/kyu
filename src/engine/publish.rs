@@ -98,7 +98,6 @@ impl Engine {
     /// subscription. The original stays as it is.
     pub fn replay(&self, topic: &str, message_id: &str) -> Result<Published> {
         let found = self
-            .store
             .read(|conn| {
                 let Some(topic_id) = queries::topic_id_by_name_conn(conn, topic)? else {
                     return Ok(None);

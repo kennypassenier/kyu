@@ -16,7 +16,6 @@ use std::time::{Duration, Instant};
 use kyu::engine::Engine;
 use kyu::engine::clock::SystemClock;
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 use serde_json::Value;
 use tokio::task::JoinHandle;
@@ -51,7 +50,7 @@ fn test_limits(max_body_bytes: usize) -> Limits {
 }
 
 async fn spawn_at(data_dir: &Path, limits: Limits) -> Hub {
-    let store = Arc::new(Store::open(data_dir).expect("the store must open"));
+    let store = kyu::storage::open(data_dir).expect("the store must open");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     // Far in the future, so the health endpoint never calls the sweeper
     // stalled in tests that do not run one.

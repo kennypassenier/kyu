@@ -13,7 +13,6 @@ use std::time::Duration;
 use kyu::engine::Engine;
 use kyu::engine::clock::{Clock, SystemClock};
 use kyu::http::{AppState, Limits, router_with_probes};
-use kyu::store::Store;
 use kyu::sweeper::Heartbeat;
 
 struct Hub {
@@ -28,7 +27,7 @@ impl Hub {
 
 async fn spawn() -> (Hub, tempfile::TempDir) {
     let dir = tempfile::tempdir().expect("a temp dir");
-    let store = Arc::new(Store::open(dir.path()).expect("a store"));
+    let store = kyu::storage::open(dir.path()).expect("a store");
     let engine = Arc::new(Engine::new(store, Arc::new(SystemClock)));
     let state = AppState::new(
         engine,

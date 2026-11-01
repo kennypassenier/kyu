@@ -30,7 +30,7 @@ impl ScrapeSource for KyuMetrics {
 
 fn render(engine: &Engine, heartbeat: &Heartbeat) -> anyhow::Result<String> {
     let now = engine.now_ms();
-    engine.store().read(|conn| {
+    engine.read(|conn| {
         let counts = queries::delivery_counts(conn)?;
         let topics = queries::scalar(conn, "SELECT count(*) FROM topics")?;
         let subscriptions = queries::scalar(conn, "SELECT count(*) FROM subscriptions")?;
