@@ -7,7 +7,7 @@
       <div data-kt-filled><div class="kp-problems" data-kp-problems data-kp-problems-mode="each" data-kt-problems></div></div>
       <div data-kt-plate hidden></div>
     </div>
-    <div data-kp-anchors="rows" data-kp-anchor-show="hover" data-kp-anchor-copy="url" data-kp-anchor-target="highlight">
+    <div>
       <div class="kp-selection" data-kp-selection data-kp-selection-for="kt-dead-table" data-kp-placement="sticky-top" data-kp-selection-names="names" data-kp-selection-max="6" data-kp-undo-ms="6000" aria-label="Selected dead letters" data-kt-selection>
         <div class="kp-selection__actions">
           <button type="button" class="kp-button" data-kp-selection-action="requeue">Requeue</button>
@@ -19,7 +19,7 @@
           <input class="kp-datatable__search" type="search" data-kp-datatable-search aria-label="Search dead letters" placeholder="Search dead letters" />
         </div>
         <div class="kp-table-wrap">
-          <table class="kp-table">
+          <table class="kp-table" data-kp-anchors="rows" data-kp-anchor-show="hover" data-kp-anchor-copy="url" data-kp-anchor-target="highlight">
             <caption class="kp-sr-only">Dead letters of {{ topic.name }}</caption>
             <thead>
               <tr>
