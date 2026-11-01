@@ -127,3 +127,7 @@ figure with the node count because the graph had no height option. kp-themes
 12.2.0 adds `data-kp-graph-height` (200 to 1200 px, also `setGraphOptions`);
 once chassis-rs ships it, set the height from the node count instead and drop
 the width rule.
+
+Also with kp-themes 12.2.0 (kp-themes main 1a856f3c0): drop the menu re-attach in
+`static/topic-subs-menu.js` and the "Copy with token" label observer in the Topic
+page commands; the form summary now shows each field's current message.
