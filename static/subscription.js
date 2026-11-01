@@ -9,13 +9,14 @@
 // dashboard routes under `/t/{topic}/dashboard/subs/{name}`.
 import { stringsExports } from '/static/kp/dist/kp-themes.min.js';
 import { onReady } from './subscription-util.js';
-import { P } from './subscription-state.js';
+import { DATA, P } from './subscription-state.js';
 import { initHeader } from './subscription-header.js';
 import { drawGauges } from './subscription-gauges.js';
 import { initBacklog } from './subscription-backlog.js';
 import { wireAttempts, holdAttempts, startAttempts } from './subscription-attempts.js';
 import { initUptime } from './subscription-uptime.js';
 import { initPolicy } from './subscription-policy.js';
+import { initTestButton } from './subscription-test.js';
 import './subscription-page.js';
 const { setStrings } = stringsExports;
 
@@ -23,6 +24,8 @@ const { setStrings } = stringsExports;
 // kyu's own words on the uptime strip: a day is judged by what was delivered, not by what was up.
 const STATE_WORDS = /** @type {Record<string, string>} */ ({ up: 'all delivered', degraded: 'some dead', down: 'mostly dead' });
 setStrings({
+    reqSendTest: `Publish a test to ${DATA.topic}`,
+    reqEmptyText: `Publish a test to ${DATA.topic} to see its delivery here.`,
     uptimeIncidents: (n) => `${n} dead`,
     uptimeSummary: (percent, n) => `${percent}% delivered, ${n} dead`,
     uptimeStateWord: (state) => STATE_WORDS[state] ?? 'no messages',
@@ -40,6 +43,7 @@ onReady(() => {
     drawGauges();
     initBacklog();
     initPolicy();
+    initTestButton();
     wireAttempts();
     holdAttempts();
     void initUptime();

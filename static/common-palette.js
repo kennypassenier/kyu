@@ -21,7 +21,7 @@ if (dialog) {
     const pruneWords = one('[data-value="prune"] .kp-palette__description', dialog);
     if (pruneWords) {
         pruneWords.textContent = dead > 0
-            ? `Delete the ${counted(dead, 'dead letter')} on this hub, after you type prune`
+            ? `Delete the ${counted(dead, 'dead letter')} on this hub, after you confirm`
             : 'Nothing is dead, so there is nothing to prune';
     }
 

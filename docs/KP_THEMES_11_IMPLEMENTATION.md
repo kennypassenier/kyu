@@ -119,3 +119,11 @@ Answered 2026-11-01 (Kenny, after 6.0.0): first complete the kit, then
 rebuild. chassis-rs adds the pre-migration copy, the /healthz write probe,
 app-typed write errors and a configurable reader count; kyu moves its store
 onto the kit's `Db` in a later release (about 32 files, 108 call sites).
+
+## Waiting on kp-themes 12.2.0 (2026-11-01)
+
+The hub diagram (`static/common-uses-graph.js`, `static/kyu.css`) narrows the
+figure with the node count because the graph had no height option. kp-themes
+12.2.0 adds `data-kp-graph-height` (200 to 1200 px, also `setGraphOptions`);
+once chassis-rs ships it, set the height from the node count instead and drop
+the width rule.

@@ -10,6 +10,7 @@
 //   3. the two history sections, which read GET /dashboard/stats/hourly and
 //      GET /dashboard/stats/totals and draw them with setHeat and setTrendData.
 
+import { autoRefreshExports } from '/static/kp/dist/kp-themes.min.js';
 import { $ } from './topics-util.js';
 import { M, ui, takeData, decideSlots } from './topics-state.js';
 import './topics-swap.js';
@@ -18,6 +19,7 @@ import { paintAll } from './topics-paint.js';
 import { fillRows } from './topics-table.js';
 import { drawHeat, loadHeat } from './topics-heat.js';
 import { drawTrends, loadTrends } from './topics-trends.js';
+const { refreshOf } = autoRefreshExports;
 
 // All of it is in the markup before auto.js attaches the components.
 {
@@ -44,6 +46,9 @@ const autoReady = new Promise((resolve) => {
 });
 void autoReady.then(() => {
     ui.ready = true;
+    // The page was read a moment ago: the freshness line starts from a real read, not from "not updated yet".
+    const control = $('[data-tp-refresh]');
+    if (control) refreshOf(control)?.now('now');
     void loadHeat();
     void loadTrends();
 });

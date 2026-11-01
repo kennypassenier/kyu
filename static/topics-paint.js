@@ -1,14 +1,13 @@
 // kyu: topics-paint.js, drawing the Topics page from the model: hub bar, update time, and everything at once.
 
-import { stackbarExports, freshnessExports } from '/static/kp/dist/kp-themes.min.js';
-import { $, h, number, plural } from './topics-util.js';
+import { stackbarExports } from '/static/kp/dist/kp-themes.min.js';
+import { $, number } from './topics-util.js';
 import { M, totals } from './topics-state.js';
 import { drawKpis } from './topics-kpis.js';
 import { drawBand } from './topics-attention.js';
 import { paintRow } from './topics-row.js';
 import { table, rowsOf } from './topics-table.js';
 const { setStackbar } = stackbarExports;
-const { setAgo } = freshnessExports;
 
 export function drawHubBar() {
     const bar = $('[data-tp-hubbar]');
@@ -34,21 +33,11 @@ export function drawHubBar() {
 }
 
 
-export function drawMeta() {
-    const meta = $('[data-tp-meta]');
-    if (!meta) return;
-    const time = h('time', { class: 'kp-ago', 'data-kp-ago': true, 'data-kp-ago-verb': 'updated', 'data-kp-stale-after': '180' });
-    meta.replaceChildren(h('span', {}, `${plural(M.model.topics.length, 'topic', 'topics')}\u00a0\u00b7\u00a0`), time);
-    setAgo(time, M.model.now_ms);
-}
-
-
 /** Everything the data changes: the figures, the band, the bar and the rows. @param {boolean} [animate] */
 export function paintAll(animate = false) {
     drawKpis();
     drawBand();
     drawHubBar();
-    drawMeta();
     for (const row of rowsOf()) {
         const t = M.model.topics.find((x) => x.name === row.getAttribute('data-tp-topic'));
         if (t) paintRow(row, t, animate);

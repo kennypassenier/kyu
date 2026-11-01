@@ -56,6 +56,8 @@ export function mountGraph(section, current) {
             graph.setGraphState(el, 'empty', 'Nothing to draw yet: no topic has a subscription.');
             return;
         }
+        // The picture is as wide, and so as tall, as its node count asks; kyu.css does the sizing.
+        el.style.setProperty('--kyu-graph-nodes', String(subs.length));
         graph.setGraphData(el, graphData(subs, bySize));
     };
     section.addEventListener('click', (event) => {

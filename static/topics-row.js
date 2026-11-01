@@ -30,6 +30,19 @@ function flowSpec(t) {
     };
 }
 
+/** The names kyu writes to itself start with this; a test message to them is refused. */
+const RESERVED_PREFIX = 'kyu.';
+
+/** The Send test button; on a reserved topic it is off and says why. @param {string} name */
+function testButton(name) {
+    const button = h('button', { type: 'button', class: 'kp-button kp-button--sm', 'data-kp-action': 'test', 'data-tp-test': name }, 'Send test');
+    if (name.startsWith(RESERVED_PREFIX)) {
+        button.setAttribute('disabled', '');
+        button.setAttribute('data-kp-disabled-reason', 'kyu writes here itself');
+    }
+    return button;
+}
+
 /** @param {Topic} t @returns {HTMLTableRowElement} */
 export function buildRow(t) {
     const cell = (/** @type {string} */ label, /** @type {string} */ cls, /** @type {Node[]} */ kids) =>
@@ -40,7 +53,7 @@ export function buildRow(t) {
     const row = /** @type {HTMLTableRowElement} */ (
         h(
             'tr',
-            { 'data-kp-row-key': t.name, 'data-kp-anchor': `topic-${t.name}`, 'data-tp-topic': t.name },
+            { class: 'tp-row', 'data-kp-row-key': t.name, 'data-kp-anchor': `topic-${t.name}`, 'data-tp-topic': t.name },
             cell('Topic', 'tp-name', [
                 h('span', { class: 'tp-topic' }, markEl, h('a', { class: 'tp-topic__link', href }, t.name)),
             ]),
@@ -56,8 +69,7 @@ export function buildRow(t) {
                 h(
                     'div',
                     { class: 'kp-row-actions' },
-                    h('button', { type: 'button', class: 'kp-button kp-button--sm', 'data-kp-action': 'test', 'data-tp-test': t.name }, 'Send test'),
-                    h('a', { class: 'kp-button kp-button--sm kp-button--primary', href, 'data-kp-action': 'open' }, 'Open'),
+                    testButton(t.name),
                 ),
             ]),
         )
