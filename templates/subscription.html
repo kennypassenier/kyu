@@ -48,7 +48,7 @@
 <section class="ky-sec" aria-labelledby="h-ky-section-policy">
   <div class="ky-sec__head">
     <h2 id="h-ky-section-policy">Policy</h2>
-    <p>How this subscription treats a message. A quiet "(default)" marks every value kyu chose itself.</p>
+    <p>How this subscription treats a message. A quiet "(default)" marks every value kyu chose itself; Change edits one value in place, and Undo puts it back.</p>
   </div>
   <div id="ky-policy" class="kp-card" data-kp-state="ready" data-kp-loading-words="Reading the policy" aria-labelledby="h-ky-policy">
     <div class="kp-card__header">
@@ -58,11 +58,12 @@
       <div class="kp-card__data">
         <dl class="kp-kv kp-kv--lines">
           {% for row in policy_rows %}
-          <div class="kp-kv__row">
+          <div class="kp-kv__row"{% if row.field %} data-ky-policy="{{ row.field }}"{% endif %}>
             <dt>{{ row.label }}</dt>
-            <dd>
+            <dd class="ky-policy__value">
               {% if row.created_ms %}<span class="kp-numeric" data-ky-moment="{{ row.created_ms }}"></span>
-              {% else %}<span class="kp-numeric">{{ row.value }}</span>{% if row.is_default %} <span class="kp-text-muted">(default)</span>{% endif %}{% endif %}
+              {% else %}<span class="ky-policy__shown"><span class="kp-numeric" data-ky-policy-text>{{ row.value }}</span> <span class="kp-text-muted" data-ky-policy-default{% if not row.is_default %} hidden{% endif %}>(default)</span></span>
+              <button type="button" class="kp-button kp-button--sm kp-button--ghost ky-policy__edit" data-ky-policy-edit aria-label="Change {{ row.label|lower }}" title="Change {{ row.label|lower }}; Enter saves, Esc cancels, Undo follows">Change</button>{% endif %}
             </dd>
           </div>
           {% endfor %}

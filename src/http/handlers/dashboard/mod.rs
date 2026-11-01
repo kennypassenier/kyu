@@ -6,6 +6,7 @@ pub mod bulk;
 pub mod form;
 pub mod history;
 pub mod page;
+pub mod policy_edit;
 pub mod shell;
 pub mod stats;
 pub mod subscription;
@@ -20,6 +21,7 @@ pub use actions::{
 };
 pub use bulk::{dashboard_bulk_delete, dashboard_bulk_requeue, dashboard_replay};
 pub use history::{AttemptsQuery, DaysQuery, dashboard_attempts, dashboard_daily};
+pub use policy_edit::dashboard_set_policy_field;
 pub use stats::{HoursQuery, dashboard_retention, dashboard_stats_hourly, dashboard_stats_totals};
 pub use subscription::dashboard_subscription;
 pub use topic::dashboard_topic;

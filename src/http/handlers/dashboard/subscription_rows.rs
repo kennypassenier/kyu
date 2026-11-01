@@ -39,13 +39,13 @@ pub(super) fn subscription_policy_rows(
         )
     };
     vec![
-        json!({ "label": "Lease", "value": format_duration_ms(view.lease_ms),
+        json!({ "label": "Lease", "field": "lease_ms", "value": format_duration_ms(view.lease_ms),
                 "is_default": view.explicit.lease_ms.is_none() }),
-        json!({ "label": "Attempts before a message is dead", "value": view.max_attempts.to_string(),
+        json!({ "label": "Attempts before a message is dead", "field": "max_attempts", "value": view.max_attempts.to_string(),
                 "is_default": view.explicit.max_attempts.is_none() }),
-        json!({ "label": "Wait between attempts", "value": wait,
+        json!({ "label": "Wait between attempts", "field": "backoff_ms", "value": wait,
                 "is_default": view.explicit.backoff_ms.is_none() }),
-        json!({ "label": "Time to live",
+        json!({ "label": "Time to live", "field": "ttl_ms",
                 "value": view.ttl_ms.map_or("No limit".to_string(), format_duration_ms),
                 "is_default": view.explicit.ttl_ms.is_none() }),
         json!({ "label": "Created", "created_ms": created_at, "value": "", "is_default": false }),

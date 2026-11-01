@@ -136,6 +136,10 @@ pub fn pages(state: AppState) -> Router {
             get(handlers::dashboard_subscription),
         )
         .route(
+            "/t/{topic}/dashboard/subs/{subscription}/policy",
+            post(handlers::dashboard_set_policy_field),
+        )
+        .route(
             "/t/{topic}/dashboard/subs/{subscription}/archive",
             post(handlers::dashboard_archive_subscription),
         )
