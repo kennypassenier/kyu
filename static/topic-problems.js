@@ -4,7 +4,8 @@ import { problemsExports, flashExports } from '/static/kp/dist/kp-themes.min.js'
 import { $, make, num, plural, dmy } from './topic-util.js';
 import { S, SUBS, ORIGIN, TOPIC } from './topic-state.js';
 import { stage } from './topic-stage.js';
-import { deadKey, deadBySub, bulk } from './topic-dead-core.js';
+import { deadKey, deadBySub, bulk, NOT_DEAD_ANYMORE } from './topic-dead-core.js';
+import { takeDead } from './topic-dead-state.js';
 import { reload } from './topic-refresh.js';
 const { setProblems } = problemsExports;
 const { runFlashButton } = flashExports;
@@ -94,11 +95,19 @@ problemsList.addEventListener('click', async (event) => {
     if (!(button instanceof HTMLElement)) return;
     const name = button.dataset.ktFix ?? '';
     const list = deadBySub().get(name) ?? [];
+    /** @type {{ subscription: string, id: string }[]} */
+    let requeued = [];
     await runFlashButton(button, async () => {
         const { done, refused } = await bulk('requeue', list.map((d) => ({ subscription: name, id: d.id })));
-        if (refused.length) return { error: `${plural(refused.length, 'message', 'messages')} not requeued.`, remedy: refused[0].reason };
-        void done;
+        requeued = done;
+        if (refused.length) {
+            const n = refused.length;
+            const text = n === 1 && list.length === 1 ? NOT_DEAD_ANYMORE : `${n === 1 ? '1 message is no longer a dead letter' : `${plural(n, 'message', 'messages')} are no longer dead letters`}; the list is refreshed.`;
+            return { error: text, remedy: '' };
+        }
         return 'Requeued';
     });
+    // The card redraws only after the button's own flash, so its word can be read.
+    takeDead(requeued);
     void reload();
 });

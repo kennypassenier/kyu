@@ -4,7 +4,8 @@ import { undoToastExports, flashExports, selectionBarExports } from '/static/kp/
 import { $$, num, plural } from './topic-util.js';
 import { S, T, call, refusal, sentence, holdPending } from './topic-state.js';
 import { deadBody } from './topic-dead.js';
-import { bulk, deadKey } from './topic-dead-core.js';
+import { bulk, deadKey, plainRefusal, deadLabel } from './topic-dead-core.js';
+import { takeDead, giveBackDead } from './topic-dead-state.js';
 import { reload } from './topic-refresh.js';
 const { undoToast } = undoToastExports;
 const { runFlashButton } = flashExports;
@@ -34,14 +35,15 @@ async function requeueRow(button, row) {
     let ok = false;
     await runFlashButton(button, async () => {
         const r = await call(`${T}/requeue`, { form: { subscription: sub, id } });
-        if (!r.ok) return refusal(/** @type {any} */ (r));
+        if (!r.ok) return plainRefusal(/** @type {any} */ (r)) ?? refusal(/** @type {any} */ (r));
         ok = true;
         return 'Requeued';
     });
-    if (!ok) return;
+    if (!ok) return void reload();
     await new Promise((resolve) => setTimeout(resolve, FLASH_LINGER_MS));
     row.remove();
     S.deadTable?.refresh();
+    takeDead([{ subscription: sub, id }]);
     void reload();
 }
 
@@ -50,14 +52,17 @@ function deleteRowWithUndo(row) {
     const sub = row.dataset.ktSub ?? '';
     const id = row.dataset.ktId ?? '';
     const next = row.nextElementSibling;
+    const title = deadLabel(S.data.dead_letters.find((/** @type {any} */ d) => d.subscription === sub && d.id === id));
     row.remove();
     S.deadTable?.refresh();
+    const taken = takeDead([{ subscription: sub, id }]);
     const settle = holdPending();
     const putBack = () => {
         deadBody.insertBefore(row, next && next.isConnected ? next : null);
         S.deadTable?.refresh();
+        giveBackDead(taken);
     };
-    undoToast(`Dead letter ${id} deleted`, {
+    undoToast(`${title} deleted`, {
         ms: UNDO_MS,
         max: 3,
         commit: async () => {
@@ -106,6 +111,7 @@ function deleteSelected(rows, items, count, undoMs) {
     untick(rows);
     for (const r of rows) r.remove();
     S.deadTable?.refresh();
+    const taken = takeDead(items);
     const settle = holdPending();
     const putBack = (/** @type {HTMLElement[]} */ list) => {
         for (const r of list) {
@@ -113,6 +119,8 @@ function deleteSelected(rows, items, count, undoMs) {
             deadBody.insertBefore(r, place && place.isConnected ? place : null);
         }
         S.deadTable?.refresh();
+        const back = new Set(list.map((r) => `dead-${r.dataset.ktSub}-${r.dataset.ktId}`));
+        giveBackDead(taken.filter((t) => back.has(deadKey(t.letter))));
     };
     /** @type {HTMLElement[]} */
     let restoreOnly = rows;
@@ -123,9 +131,10 @@ function deleteSelected(rows, items, count, undoMs) {
             const { refused } = await bulk('delete', items);
             settle();
             if (refused.length) {
-                const gone = new Set(refused.map((x) => deadKey(x)));
-                restoreOnly = rows.filter((r) => gone.has(r.getAttribute('data-kp-row-key') ?? ''));
-                throw new Error(`${plural(refused.length, 'dead letter', 'dead letters')} could not be deleted: ${refused[0].reason}`);
+                // What the hub refused is no longer a dead letter: it stays gone and the page is read again.
+                restoreOnly = [];
+                void reload();
+                throw new Error(`${plural(refused.length, 'dead letter', 'dead letters')} could not be deleted. ${refused[0].reason}`);
             }
             void reload();
         },
@@ -150,6 +159,7 @@ function requeueSelected(rows, items, count) {
         const gone = new Set(done.map((x) => deadKey(x)));
         for (const r of rows) if (gone.has(r.getAttribute('data-kp-row-key') ?? '')) r.remove();
         S.deadTable?.refresh();
+        takeDead(done);
         void reload();
     });
 }

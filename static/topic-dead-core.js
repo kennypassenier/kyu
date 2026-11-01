@@ -25,7 +25,7 @@ export async function bulk(action, items) {
     for (const [subscription, ids] of groups) {
         const r = await call(`${T}/bulk/${action}`, { json: { subscription, ids } });
         if (!r.ok) {
-            const why = r.status === 404 ? 'bulk actions are not available on this hub yet' : sentence(/** @type {any} */ (r));
+            const why = r.status === 404 ? 'Bulk actions are not available on this hub yet.' : sentence(/** @type {any} */ (r));
             for (const id of ids) refused.push({ subscription, id, reason: why });
             continue;
         }
@@ -35,3 +35,25 @@ export async function bulk(action, items) {
     }
     return { done, refused };
 }
+
+/** The one plain sentence for a message that stopped being a dead letter while the page still listed it. */
+export const NOT_DEAD_ANYMORE = 'That message is no longer a dead letter; the list is refreshed.';
+
+/** The plain refusal of a single requeue the hub answered with a conflict (status 409), or null for any other answer.
+ * @param {{ status?: number }} r */
+export const plainRefusal = (r) => (r.status === 409 ? { error: NOT_DEAD_ANYMORE, remedy: '' } : null);
+
+/** The title a JSON payload names itself with, quoted and cut, or null. @param {any} payload */
+export function payloadTitle(payload) {
+    const text = payload?.binary ? '' : payload?.text;
+    try {
+        const title = text ? JSON.parse(text)?.title : null;
+        if (typeof title === 'string' && title.trim() !== '') return `"${title.trim().slice(0, 40)}"`;
+    } catch {
+        // Not JSON: the payload has no title to name.
+    }
+    return null;
+}
+
+/** What a dead letter is called in a sentence: its payload's title when it has one, else "1 dead letter". @param {any} d */
+export const deadLabel = (d) => payloadTitle(d?.payload) ?? '1 dead letter';
