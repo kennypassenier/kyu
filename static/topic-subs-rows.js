@@ -15,6 +15,20 @@ function policyHtml(s) {
 const badge = (/** @type {any} */ s) =>
     `<span class="kp-badge${s.state === 'active' ? ' kp-badge--success' : s.state === 'flagged' ? ' kp-badge--warning' : ''}">${esc(s.state)}</span>`;
 
+/** Change the badge in place: replacing the node makes the kit run an arrive and a leave on it at once, leaving it clipped. @param {Element} cell @param {any} s */
+function paintBadge(cell, s) {
+    const now = cell.firstElementChild;
+    if (!now) {
+        cell.innerHTML = badge(s);
+        return;
+    }
+    const next = document.createElement('template');
+    next.innerHTML = badge(s);
+    const fresh = /** @type {HTMLElement} */ (next.content.firstElementChild);
+    now.className = fresh.className;
+    now.textContent = fresh.textContent;
+}
+
 /** @param {any} s */
 export function subRow(s) {
     const tr = document.createElement('tr');
@@ -40,15 +54,14 @@ export function subRow(s) {
         <td class="kt-col-actions">
             <div class="kp-row-actions">
                 <button type="button" class="kp-button kp-button--sm" data-kp-action="archive" data-kt-archive data-kp-disabled-reason="${n} is already archived">Archive</button>
-                <button type="button" class="kp-button kp-button--sm kp-button--destructive" data-kp-action="delete" data-kt-delete data-kp-destructive
-                    data-kp-confirm="Delete subscription ${n} and its delivery history?" data-kp-confirm-type="${n}"
-                    data-kp-confirm-loses="kt-loses-${n}"
-                    data-kp-disabled-reason="Archive ${n} first: only an archived subscription can be deleted">Delete</button>
                 <div class="kp-menu-button" data-kp-menu-button data-kp-action="more" data-kt-menu="${n}">
                     <button type="button" class="kp-button kp-button--sm" aria-label="More for ${n}">More ▾</button>
                     <div class="kp-menu kp-menu--rich" role="menu" aria-label="More for ${n}"></div>
                 </div>
             </div>
+            <button type="button" class="kp-button kp-sr-only" tabindex="-1" aria-hidden="true" data-kt-delete data-kp-destructive
+                data-kp-confirm="Delete subscription ${n} and its delivery history?" data-kp-confirm-type="${n}"
+                data-kp-confirm-loses="kt-loses-${n}">Delete</button>
         </td>`;
     paintRow(tr, s);
     return tr;
@@ -96,14 +109,30 @@ function menuGroups(s) {
                 { label: 'Copy acknowledge command', hint: 'Without the token', disabled: gone ? away : null, value: 'copy-ack' },
             ],
         },
+        {
+            group: 'Manage',
+            items: [
+                {
+                    label: 'Delete subscription…',
+                    hint: 'Removes it and its delivery history for good',
+                    danger: true,
+                    disabled: gone ? null : `Archive ${s.name} first: only an archived subscription can be deleted`,
+                    value: 'delete',
+                },
+            ],
+        },
     ];
 }
 
 /** Bring a row's buttons, badge and menu in step with its subscription. @param {HTMLElement} tr @param {any} s */
-export function paintRow(tr, s) {
+export function paintRow(tr, s, filterState = s.state) {
     tr.dataset.state = s.state;
     const cell = $('[data-kt-state-cell]', tr);
-    if (cell) cell.innerHTML = badge(s);
+    if (cell) {
+        paintBadge(cell, s);
+        // The state filter reads this: an archive waiting out its Undo window keeps the row where it stands.
+        cell.setAttribute('data-kp-filter-value', filterState);
+    }
     const archived = s.state === 'archived';
     const archive = /** @type {HTMLButtonElement} */ ($('[data-kt-archive]', tr));
     const del = /** @type {HTMLButtonElement} */ ($('[data-kt-delete]', tr));

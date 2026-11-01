@@ -69,14 +69,18 @@ filterGroup
     ?.querySelector('[data-kp-datatable-clear]')
     ?.addEventListener('click', () => setSegmentedValues(filterGroup, []));
 
-/** @param {any} s @param {string} state */
-function setSubState(s, state) {
+/**
+ * Show a subscription in another state. `holdFilter` is the state the state filter keeps reading for the row: during an
+ * archive's Undo window the row is marked archived but stays where it stands, so nothing around it moves.
+ * @param {any} s @param {string} state @param {string} [holdFilter]
+ */
+function setSubState(s, state, holdFilter = state) {
     s.state = state;
     // The page data keeps the state too: a dead-letter action redraws the table from it while an Undo window is open.
     const mirror = S.data.subscriptions.find((/** @type {any} */ x) => x.name === s.name);
     if (mirror) mirror.state = state;
     const tr = subsBody.querySelector(`tr[data-kt-sub="${CSS.escape(s.name)}"]`);
-    if (tr instanceof HTMLElement) paintRow(tr, s);
+    if (tr instanceof HTMLElement) paintRow(tr, s, holdFilter);
     updateCounts();
     S.subsTable?.refresh();
 }
@@ -84,7 +88,9 @@ function setSubState(s, state) {
 /** Archive with Undo: the page changes at once, the hub hears it when the window closes. @param {any} s */
 function archiveWithUndo(s) {
     const before = s.state;
-    setSubState(s, 'archived');
+    setSubState(s, 'archived', before);
+    // The Archive button goes off; the focus stays on the row, on its menu button.
+    $('[data-kt-menu] > .kp-button', subsBody.querySelector(`tr[data-kt-sub="${CSS.escape(s.name)}"]`) ?? subsBody)?.focus();
     const settle = holdPending();
     undoToast(`${s.name} archived`, {
         ms: 6000,
@@ -94,6 +100,7 @@ function archiveWithUndo(s) {
         commit: async () => {
             const r = await call(`${T}/subs/${encodeURIComponent(s.name)}/archive`);
             settle();
+            if (r.ok) setSubState(s, 'archived');
             if (!r.ok) throw new Error(sentence(/** @type {any} */ (r)));
             void reload();
         },
