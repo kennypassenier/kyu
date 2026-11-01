@@ -1,11 +1,50 @@
-/* kyu: topic-publish.css, the Topic page on kp-themes 11.0.0: the publish form.
+/* kyu: topic-publish.css, the Topic page on kp-themes: the publish card.
    Loaded after topic-layout.css and before topic-actions.css, which settles the action cells last. */
 
-/* 7 · publish: the section head in a narrow column, the form beside it. */
+/* 7 · publish: a composition on the card's grid. The editor takes the wide column; beside it stand the delay field,
+   the button and the result, which keeps its height whether it is filled or not. Under the phone breakpoint the
+   columns become one, in the same order. */
+.kt-publish__form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-md, 1rem);
+    align-items: start;
+}
+
+.kt-publish__editor,
+.kt-publish__delay,
+.kt-publish__send,
+.kt-publish__result {
+    min-inline-size: 0;
+}
+
+.kt-publish__result {
+    min-block-size: 9rem;
+}
+
+.kt-publish__result .kp-form__summary {
+    margin: 0;
+}
+
 @media (min-width: 64rem) {
-    .kt-publish {
-        grid-template-columns: minmax(14rem, 1fr) minmax(0, 3fr);
+    .kt-publish__form {
+        grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+        grid-template-rows: repeat(3, auto);
         column-gap: var(--kp-space-xl, 2rem);
-        align-items: start;
+    }
+
+    .kt-publish__editor {
+        grid-column: 1;
+        grid-row: 1 / span 3;
+    }
+
+    .kt-publish__delay,
+    .kt-publish__send,
+    .kt-publish__result {
+        grid-column: 2;
+    }
+
+    .kt-publish__send .kp-button {
+        inline-size: 100%;
     }
 }
