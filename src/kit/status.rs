@@ -35,23 +35,35 @@ impl chassis::StatusSection for TopicsSection {
                 ("Backlog".into(), backlog.to_string()),
                 ("Dead letters".into(), dead.to_string()),
             ],
-            html: Some("<p><a class=\"kp-button\" href=\"/topics\">Open the topics</a></p>".into()),
+            html: Some(section_html(dead)),
         }
     }
+}
 
-    /// [K-actions, chassis-rs 1.8.0] "Prune every dead letter" — every dead
-    /// letter across every topic and subscription, in one confirmed sweep,
-    /// once the storm that produced them is diagnosed. The one-at-a-time
-    /// Delete on a topic page (W15) does not scale to a storm; this is that
-    /// button's hub-wide sibling, not a replacement for it.
-    fn actions(&self) -> Vec<chassis::SectionAction> {
-        vec![chassis::SectionAction {
-            label: "Prune every dead letter".into(),
-            route: "/dashboard/dead-letters/prune".into(),
-            method: "POST".into(),
-            destructive: true,
-            confirm: Some("Delete every dead letter across every topic and subscription?".into()),
-            busy_label: Some("Pruning…".into()),
-        }]
+/// The section's links and its one destructive action. [K-actions] "Prune
+/// every dead letter" sweeps every topic and subscription at once, after the
+/// storm that produced them is diagnosed. Kenny, 2026-11-01: a destructive
+/// action keeps its own label and puts the consequence in the confirmation
+/// dialog, so the button is drawn here with the dialog naming the count,
+/// rather than as a kit `SectionAction`, whose dialog has one fixed text.
+/// kp-themes 12.1 reads `data-kp-confirm-label` only in a typed confirm, so
+/// the accept button still says "Yes, do it" until kp-themes reads it for
+/// every confirm (queued in docs/KP_THEMES_11_IMPLEMENTATION.md).
+fn section_html(dead: i64) -> String {
+    let open = "<a class=\"kp-button\" href=\"/topics\">Open the topics</a>";
+    if dead <= 0 {
+        return format!("<p>{open}</p>");
     }
+    let noun = if dead == 1 {
+        "dead letter"
+    } else {
+        "dead letters"
+    };
+    format!(
+        "<p>{open} <button type=\"button\" class=\"kp-button kp-button--destructive\" \
+         data-post=\"/dashboard/dead-letters/prune\" data-busy-label=\"Pruning…\" \
+         data-kp-destructive \
+         data-kp-confirm=\"Delete all {dead} {noun} across every topic and subscription?\" \
+         data-kp-confirm-label=\"Delete {dead} {noun}\">Prune every dead letter</button></p>"
+    )
 }
