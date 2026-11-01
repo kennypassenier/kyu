@@ -11,11 +11,8 @@
   <div class="kp-page-header__inner">
     <div class="tp-header">
       <h1 class="kp-page-header__title" data-kp-reveal="headline">Topics</h1>
-      <div class="tp-fresh">
-        <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="region" data-kp-refresh-region="#tp-kpis"
-             data-kp-look="menu" data-kp-refresh-hover="pause" data-kp-refresh-choices="0,15,30,60" data-kp-remember="kyu-topics-refresh"
-             data-tp-refresh></div>
-      </div>
+      {# The kit's one refresh control (chassis ux-chassis-10); topics-swap.js reads the page on its tick. #}
+      <div class="chassis-fresh"><div data-chassis-refresh data-chassis-refresh-default="30"></div></div>
       <p class="kp-lede">Every topic on this hub. A topic exists once something publishes to it; open one for its subscriptions, dead letters and the commands that work against it.</p>
     </div>
   </div>
@@ -23,7 +20,7 @@
 
 <div class="tp-stage" data-tp-stage data-kp-anchors="rows" data-kp-anchor-show="hover">
   <div class="kp-attention kp-attention--soft" role="region" aria-label="Needs attention" data-tp-attention></div>
-  {# The refresh swaps the children of this group. The rows ride along as one JSON block that the script reads and removes. #}
+  {# The kit's refresh tick swaps the children of this group. The rows ride along as one JSON block that the script reads and removes. #}
   <div class="kp-kpis" id="tp-kpis" role="group" aria-label="The hub right now" data-kp-kpis-columns="all 2 1" data-tp-kpis>
     <script type="application/json" data-tp-data>{{ topics_json | safe }}</script>
   </div>

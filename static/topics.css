@@ -55,11 +55,6 @@
     margin: 0;
 }
 
-/* The freshness line and the refresh control stand right under the title. */
-.tp-fresh {
-    min-inline-size: 0;
-}
-
 /* The topic cell: the mark and the name side by side. */
 .tp-topic {
     display: grid;
@@ -128,26 +123,6 @@
 /* The heat grid's own knob: its empty and failed states are as tall as the grid. */
 .tp-heat-stage [data-tp-heat] {
     --kp-heat-state-height: 13.5rem;
-}
-
-/* The freshness line and the refresh control stand right under the title. */
-.tp-fresh .kp-refresh__bar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    column-gap: var(--kp-space-md, 1rem);
-}
-
-@media (max-width: 39.99rem) {
-    .tp-fresh .kp-refresh__bar {
-        grid-template-columns: minmax(0, 1fr) auto;
-        row-gap: var(--kp-space-sm, 0.5rem);
-    }
-
-    .tp-fresh .kp-refresh__bar > .kp-refresh__line {
-        grid-column: 1 / -1;
-        grid-row: 2;
-    }
 }
 
 /* The whole row opens its topic. */

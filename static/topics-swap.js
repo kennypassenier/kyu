@@ -1,4 +1,4 @@
-// kyu: topics-swap.js, the automatic refresh: it swaps the key-figure group and the page follows from the data block that carries.
+// kyu: topics-swap.js, the kit's refresh tick: it swaps the key-figure group and the page follows from the data block that carries.
 
 import { tickExports, updateExports } from '/static/kp/dist/kp-themes.min.js';
 import { $$ } from './topics-util.js';
@@ -52,3 +52,15 @@ if (kpis) {
         swapping = false;
     }).observe(kpis, { childList: true });
 }
+
+/** The kit's refresh tick (chassis ux-chassis-10): read this page again and swap in its key-figure group; the
+ * observer above draws the rest. A failed read throws, and the kit's control says so with Retry now. */
+async function readAgain() {
+    const res = await fetch(location.pathname + location.search, { headers: { Accept: 'text/html' }, credentials: 'same-origin' });
+    if (!res.ok) throw new Error(`the page answered ${res.status}`);
+    const next = new DOMParser().parseFromString(await res.text(), 'text/html').getElementById('tp-kpis');
+    if (!next) throw new Error('the page had no key figures');
+    kpis?.replaceChildren(...next.childNodes);
+    window.chassisRefresh?.markFresh();
+}
+if (kpis) window.chassisRefresh?.onTick(readAgain);

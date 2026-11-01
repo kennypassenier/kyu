@@ -12,7 +12,7 @@
 // (/static/kp/dist/kp-themes.min.js) is imported, so it attaches the datatable, the menus,
 // the code blocks and the rest to markup that already exists.
 
-import { datatableExports, masterDetailExports, autoRefreshExports } from '/static/kp/dist/kp-themes.min.js';
+import { datatableExports, masterDetailExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$ } from './topic-util.js';
 import { S, SUBS } from './topic-state.js';
 import { renderHeader } from './topic-header.js';
@@ -29,7 +29,6 @@ import './topic-publish.js';
 import { load, reload, readRetention } from './topic-refresh.js';
 const { dataTable } = datatableExports;
 const { masterDetail, setPaneState } = masterDetailExports;
-const { refreshOf } = autoRefreshExports;
 
 for (const el of [subsTableEl, deadTableEl]) el.addEventListener('kp-datatable-retry', () => void reload(true));
 
@@ -74,20 +73,14 @@ updateCounts();
     }
 }
 
-const refreshEl = $('[data-kt-refresh]');
-refreshEl?.addEventListener('kp-refresh', (event) => {
-    const { done } = /** @type {CustomEvent} */ (event).detail;
-    load().then(
-        () => done(true),
-        () => done(false),
-    );
+// The kit's refresh tick reads the page again; a failed read throws, and the kit's control says so with Retry now.
+window.chassisRefresh?.onTick(async () => {
+    await load();
+    window.chassisRefresh?.markFresh();
 });
 
 // The first read is a real one, with the components' own loading and failed states: the page's server-drawn rows
-// stand behind the busy card until kyu has answered. Then the refresh control reads once more, so its freshness line
-// starts from a real read, not from "not updated yet".
-void reload(true).then(() => {
-    if (refreshEl) refreshOf(refreshEl)?.now('now');
-});
+// stand behind the busy card until kyu has answered. Then the freshness line starts from that read.
+void reload(true).then(() => window.chassisRefresh?.markFresh());
 await readRetention();
 renderProblems();

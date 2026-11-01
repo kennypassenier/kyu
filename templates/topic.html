@@ -31,11 +31,8 @@
             <span class="kp-badge kp-badge--destructive" data-kt-dead-badge{% if topic.dead == 0 %} hidden{% endif %}>{{ topic.dead }} dead</span>
           </div>
         </div>
-        {# One freshness line: the kit's refresh control in its menu look ("updated N s ago", every 30 s by default). #}
-        <div class="kt-fresh">
-          <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-look="menu" data-kp-refresh-hover="pause"
-               data-kp-refresh-choices="0,15,30,60" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
-        </div>
+        {# One freshness line: the kit's one refresh control (chassis ux-chassis-10); topic.js reads the page on its tick. #}
+        <div class="chassis-fresh"><div data-chassis-refresh data-chassis-refresh-default="30"></div></div>
         <p class="kp-lede">
           Publishers send messages to this topic and every subscription reads its own copy. Here you copy the commands
           that publish, receive and acknowledge, see who reads the topic and how far behind they are,
