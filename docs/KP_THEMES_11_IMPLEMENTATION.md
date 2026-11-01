@@ -127,3 +127,28 @@ figure with the node count because the graph had no height option. kp-themes
 12.2.0 adds `data-kp-graph-height` (200 to 1200 px, also `setGraphOptions`);
 once chassis-rs ships it, set the height from the node count instead and drop
 the width rule.
+
+Also with kp-themes 12.2.0 (kp-themes main 1a856f3c0): drop the menu re-attach in
+`static/topic-subs-menu.js` and the "Copy with token" label observer in the Topic
+page commands; the form summary now shows each field's current message.
+
+## Store on the kit (branch kit-store, waiting on chassis-rs)
+
+kyu's store runs on the kit Db/AppDb on branch `kit-store` (chassis rev 0b3e884).
+When chassis-rs kit-storage-2 lands: move the 2.x token import into
+`AppDbSpec::with_import` (one open at start), read the failure age from
+`Db::recent_write_failure_age`, drop the probe-skip workaround and kyu's own
+`on_flush` checkpoint. Merge to main only with a released chassis tag.
+
+Also with kp-themes 12.2.0: opt the subscription, dead-letter and backlog tables into
+`data-kp-row-actions="menu"` (one primary action, the rest in a menu on a phone)
+once its placement is confirmed in the 12.2.0 docs; drop the phone 44 px overrides
+kyu added if the kit's coarse-pointer hit areas cover them.
+
+## Waiting on kp-themes: the confirm accept label (2026-11-01)
+
+The status page's "Prune every dead letter" sets `data-kp-confirm-label="Delete
+N dead letters"`, but kp-themes 12.1 `confirm-dialog.js` reads that attribute
+only for a typed confirm (`data-kp-confirm-type`); a plain confirm shows the
+default "Yes, do it". The dialog text already names the count. Once kp-themes
+reads the label for every confirm, the accept button names it too; no kyu change.
