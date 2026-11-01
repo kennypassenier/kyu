@@ -131,7 +131,8 @@ local `[patch]` that is not committed:
   `window.chassisRefresh.onTick`; their own kp-refresh bars and layout rules are gone.
 - The hub diagram sets `data-kp-graph-height` from the node count (360 px for
   one, 40 px a node, 640 at most) instead of narrowing its width. Under 360 px
-  kp-themes cuts the top node's label (reported to kp-themes).
+  kp-themes cuts the top node's label (fixed on kp-themes main after 65baed252;
+  at the bump, drop the 360 px floor in `graphHeight`).
 - The More menu re-attach and the "Copy with token" label observer are gone.
 - Empty plates drop formal's ruled lines on every kyu page (`data-kp-empty-lines="off"`
   on `<html>`, set in `static/common.js`).
