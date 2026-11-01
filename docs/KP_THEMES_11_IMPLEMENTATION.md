@@ -133,6 +133,8 @@ local `[patch]` that is not committed:
   one, 40 px a node, 640 at most) instead of narrowing its width. Under 360 px
   kp-themes cuts the top node's label (reported to kp-themes).
 - The More menu re-attach and the "Copy with token" label observer are gone.
+- Empty plates drop formal's ruled lines on every kyu page (`data-kp-empty-lines="off"`
+  on `<html>`, set in `static/common.js`).
 - The dead-letter and backlog tables use `data-kp-row-actions="menu"`: Requeue
   or Attempts stays, Delete moves into the row menu (the backlog's Delete keeps
   its form through `form=`); the phone 44 px overrides for those rows are gone.

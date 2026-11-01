@@ -20,3 +20,6 @@ import './common-palette.js';
 import './common-keys.js';
 import './common-help.js';
 import './common-anchors.js';
+
+// kp-themes 12.2.0: kyu's empty plates go without formal's ruled lines, which read as a table still loading.
+document.documentElement.setAttribute('data-kp-empty-lines', 'off');
