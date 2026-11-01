@@ -130,7 +130,7 @@
         <button type="button" class="kp-button kp-button--destructive" data-kp-selection-action="delete">Delete from {{ subscription.name }}</button>
       </div>
     </div>
-    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu id="ky-backlog-table" data-kp-remember="kyu-backlog" data-kp-key="kyu-backlog" data-kp-busy-overlay>
+    <div class="kp-datatable" data-kp-datatable data-kp-cards data-kp-sort-multi data-kp-column-menu id="ky-backlog-table" data-kp-row-actions="menu" data-kp-remember="kyu-backlog" data-kp-key="kyu-backlog" data-kp-busy-overlay>
       <div class="kp-datatable__bar">
         <input class="kp-datatable__search kp-field__input" data-kp-datatable-search type="search" aria-label="Search the backlog" placeholder="Search the backlog">
       </div>
@@ -163,12 +163,13 @@
                   {% if item.payload.binary %}data-kp-binary-size="{{ item.payload.bytes }}"{% elif item.payload.truncated %}data-kp-truncated="{{ item.payload.text|length }}/{{ item.payload.bytes }}"{% endif %}><pre><code>{% if not item.payload.binary %}{{ item.payload.text }}{% endif %}</code></pre></figure>
               </td>
               <td data-label="Actions" class="ky-col-actions">
-                <div class="ky-row-actions">
-                  <button type="button" class="kp-button kp-button--sm" data-ky-attempts="{{ item.id }}" aria-label="Show the attempts of {{ item.id }}">Attempts</button>
-                  <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" class="ky-row-form">
+                {# One primary action and a row menu (kp-themes 12.2.0): Delete moves into the menu and keeps its form by id. #}
+                <div class="kp-table__actions">
+                  <button type="button" class="kp-button kp-button--sm" data-kp-row-primary data-ky-attempts="{{ item.id }}" aria-label="Show the attempts of {{ item.id }}">Attempts</button>
+                  <button type="submit" form="ky-delete-{{ item.id }}" class="kp-button kp-button--sm kp-button--destructive" data-ky-delete-one aria-label="Delete {{ item.id }}">Delete</button>
+                  <form method="post" action="/t/{{ topic_name }}/dashboard/delivery/delete" class="ky-row-form" id="ky-delete-{{ item.id }}" hidden>
                     <input type="hidden" name="subscription" value="{{ subscription.name }}">
                     <input type="hidden" name="id" value="{{ item.id }}">
-                    <button type="submit" class="kp-button kp-button--sm kp-button--destructive" data-ky-delete-one aria-label="Delete {{ item.id }}">Delete</button>
                   </form>
                 </div>
               </td>

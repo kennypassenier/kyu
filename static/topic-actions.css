@@ -20,18 +20,9 @@
     align-items: center;
     justify-items: stretch;
 }
-
-.kt-dead .kp-row-actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(max-content, 1fr));
-    gap: var(--kp-space-xs, 0.25rem);
-    align-items: center;
-    justify-items: stretch;
-}
 }
 
-.kt-subs .kp-row-actions > * ,
-.kt-dead .kp-row-actions > * {
+.kt-subs .kp-row-actions > * {
     min-inline-size: 0;
 }
 
@@ -52,8 +43,7 @@
         white-space: normal;
     }
 
-    .kt-subs .kp-row-actions,
-    .kt-dead .kp-row-actions {
+    .kt-subs .kp-row-actions {
         grid-template-columns: minmax(0, 1fr);
         justify-items: stretch;
         justify-content: stretch;
@@ -61,15 +51,12 @@
     }
 
     .kt-subs .kp-row-actions > *,
-    .kt-dead .kp-row-actions > *,
-    .kt-subs .kp-row-actions .kp-button,
-    .kt-dead .kp-row-actions .kp-button {
+    .kt-subs .kp-row-actions .kp-button {
         inline-size: 100%;
     }
 
     /* A thumb needs 44 px: the page's own buttons keep that height on a phone. */
     .kt-subs .kp-row-actions .kp-button,
-    .kt-dead .kp-row-actions .kp-button,
     .kt-step .kp-secret__actions .kp-button,
     .kt-publish .kp-button,
     .kt-detail-actions .kp-button {

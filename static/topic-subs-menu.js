@@ -1,23 +1,9 @@
 // kyu: topic-subs-menu.js, the "More" menu of a subscription row: jump to its dead letters or oldest message, copy its commands.
 
-import { overlaysExports, menuButtonExports } from '/static/kp/dist/kp-themes.min.js';
+import { overlaysExports } from '/static/kp/dist/kp-themes.min.js';
 import { S, ORIGIN, T, TOPIC } from './topic-state.js';
 import { subsCard } from './topic-subs.js';
 const { toast } = overlaysExports;
-const { attachMenuButtons } = menuButtonExports;
-
-// The table redraws its rows (sort, filter, refresh) and a redrawn row can lose the kit's click handler on its
-// More button. Attaching is idempotent, so a row's menu is attached the moment a pointer or the keyboard reaches it.
-for (const type of ['pointerdown', 'focusin']) {
-    subsCard.addEventListener(
-        type,
-        (event) => {
-            const wrapper = event.target instanceof Element ? event.target.closest('[data-kt-menu]') : null;
-            if (wrapper) attachMenuButtons(wrapper.parentElement ?? wrapper);
-        },
-        true,
-    );
-}
 
 /** Copy text; say what happened in a toast. @param {string} text @param {string} said */
 async function copyToast(text, said) {

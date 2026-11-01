@@ -120,17 +120,24 @@ rebuild. chassis-rs adds the pre-migration copy, the /healthz write probe,
 app-typed write errors and a configurable reader count; kyu moves its store
 onto the kit's `Db` in a later release (about 32 files, 108 call sites).
 
-## Waiting on kp-themes 12.2.0 (2026-11-01)
+## kp-themes 12.2.0 and the kit refresh control (branch next-chassis)
 
-The hub diagram (`static/common-uses-graph.js`, `static/kyu.css`) narrows the
-figure with the node count because the graph had no height option. kp-themes
-12.2.0 adds `data-kp-graph-height` (200 to 1200 px, also `setGraphOptions`);
-once chassis-rs ships it, set the height from the node count instead and drop
-the width rule.
+Built on branch `next-chassis` (on top of `kit-store`) and checked in Firefox
+against kp-themes main 674a1a188 vendored into chassis main 3cbae24 through a
+local `[patch]` that is not committed:
 
-Also with kp-themes 12.2.0 (kp-themes main 1a856f3c0): drop the menu re-attach in
-`static/topic-subs-menu.js` and the "Copy with token" label observer in the Topic
-page commands; the form summary now shows each field's current message.
+- Topics and Topic draw the kit's one refresh control (chassis ux-chassis-10,
+  `<div class="chassis-fresh"><div data-chassis-refresh>`) and read the page on
+  `window.chassisRefresh.onTick`; their own kp-refresh bars and layout rules are gone.
+- The hub diagram sets `data-kp-graph-height` from the node count (360 px for
+  one, 40 px a node, 640 at most) instead of narrowing its width. Under 360 px
+  kp-themes cuts the top node's label (reported to kp-themes).
+- The More menu re-attach and the "Copy with token" label observer are gone.
+- The dead-letter and backlog tables use `data-kp-row-actions="menu"`: Requeue
+  or Attempts stays, Delete moves into the row menu (the backlog's Delete keeps
+  its form through `form=`); the phone 44 px overrides for those rows are gone.
+
+Left: pin the released chassis tag (with kp-themes 12.2.0), then merge to main.
 
 ## Store on the kit (branch kit-store, waiting on a chassis-rs release)
 
@@ -144,11 +151,6 @@ every start for tokens missing by name, and must finish before the kit opens its
 client store, none of which fits `AppDbSpec::with_import` (once, one app-db
 transaction). Left: pin the released chassis tag, then merge to main.
 
-Also with kp-themes 12.2.0: opt the subscription, dead-letter and backlog tables into
-`data-kp-row-actions="menu"` (one primary action, the rest in a menu on a phone)
-once its placement is confirmed in the 12.2.0 docs; drop the phone 44 px overrides
-kyu added if the kit's coarse-pointer hit areas cover them.
-
 ## Waiting on kp-themes: the confirm accept label (2026-11-01)
 
 The status page's "Prune every dead letter" sets `data-kp-confirm-label="Delete
@@ -156,3 +158,4 @@ N dead letters"`, but kp-themes 12.1 `confirm-dialog.js` reads that attribute
 only for a typed confirm (`data-kp-confirm-type`); a plain confirm shows the
 default "Yes, do it". The dialog text already names the count. Once kp-themes
 reads the label for every confirm, the accept button names it too; no kyu change.
+Fixed on kp-themes main as c855e59da; arrives with kp-themes 12.2.0.

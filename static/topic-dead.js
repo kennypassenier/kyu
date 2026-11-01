@@ -48,7 +48,7 @@ function deadRow(d) {
         `<td data-label="Tries" class="kp-text-end">${num(d.attempts)}</td>` +
         `<td data-label="Why it died">${esc(whyDied(d))}</td>` +
         `<td data-label="Payload"></td>` +
-        `<td data-label="Actions"><div class="kp-row-actions"><button type="button" class="kp-button kp-button--sm" data-kp-action="requeue" data-kt-row="requeue" data-kp-flash-words="Requeued,Refused,Failed" data-kp-refusal="toast">Requeue</button><button type="button" class="kp-button kp-button--sm kp-button--destructive" data-kp-action="delete" data-kt-row="delete">Delete</button></div></td>`;
+        `<td data-label="Actions"><div class="kp-table__actions"><button type="button" class="kp-button kp-button--sm" data-kp-action="requeue" data-kt-row="requeue" data-kp-flash-words="Requeued,Refused,Failed" data-kp-refusal="toast">Requeue</button><button type="button" class="kp-button kp-button--sm kp-button--destructive" data-kp-action="delete" data-kt-row="delete">Delete</button></div></td>`;
     /** @type {HTMLElement} */ ($('td:nth-child(6)', tr)).append(cellFigure(d.payload));
     return tr;
 }

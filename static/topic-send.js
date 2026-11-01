@@ -9,16 +9,9 @@ const COPY_WITH_TOKEN = 'Copy with token';
 
 const send = /** @type {HTMLElement} */ ($('[data-kt-send]'));
 const ttl = Number(page.dataset.ktRevealSeconds ?? 10);
-const named = new WeakSet();
-/** The kit writes its own "Copy" back after every copy, so the name is kept by watching the button. @param {Element | null} copy */
+/** Name the field's button for what it does; kp-themes 12.2.0 puts this label back after each "Copied". @param {Element | null} copy */
 function nameCopyButton(copy) {
-    if (!copy || named.has(copy)) return;
-    named.add(copy);
-    const apply = () => {
-        if (copy.textContent === 'Copy') copy.textContent = COPY_WITH_TOKEN;
-    };
-    new MutationObserver(apply).observe(copy, { childList: true, characterData: true, subtree: true });
-    apply();
+    if (copy?.textContent === 'Copy') copy.textContent = COPY_WITH_TOKEN;
 }
 
 export function renderCommands() {

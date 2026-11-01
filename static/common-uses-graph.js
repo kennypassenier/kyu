@@ -30,6 +30,10 @@ function graphData(subs, bySize) {
     };
 }
 
+/** Pixel height for a picture of `nodes` subscriptions around the hub: 360 for one, growing 40 a node, at most 640.
+ * Not lower: under 360 px kp-themes (main 674a1a188) cuts the top node's label to its first letter (queued). */
+const graphHeight = (/** @type {number} */ nodes) => Math.min(640, 320 + 40 * Math.max(1, nodes));
+
 /**
  * The hub-and-ring picture of the same subscriptions: kyu in the middle, a node per subscription, the link
  * kind = the subscription's state. Node size is the package's `weight`: unset (all the same) or the backlog.
@@ -56,8 +60,8 @@ export function mountGraph(section, current) {
             graph.setGraphState(el, 'empty', 'Nothing to draw yet: no topic has a subscription.');
             return;
         }
-        // The picture is as wide, and so as tall, as its node count asks; kyu.css does the sizing.
-        el.style.setProperty('--kyu-graph-nodes', String(subs.length));
+        // The picture is as tall as its node count asks (kp-themes 12.2.0 graph height): a few nodes get a short one.
+        graph.setGraphOptions(el, { height: graphHeight(subs.length) });
         graph.setGraphData(el, graphData(subs, bySize));
     };
     section.addEventListener('click', (event) => {

@@ -77,18 +77,6 @@
     text-align: end;
 }
 
-.ky-row-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: stretch;
-    gap: var(--kp-space-xs, 0.25rem);
-}
-
-.ky-row-form {
-    display: grid;
-    margin: 0;
-}
-
 .ky-cell-when {
     display: grid;
     gap: 0;
