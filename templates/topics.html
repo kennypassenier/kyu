@@ -11,18 +11,17 @@
   <div class="kp-page-header__inner">
     <div class="tp-header">
       <h1 class="kp-page-header__title" data-kp-reveal="headline">Topics</h1>
+      <div class="tp-fresh">
+        <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="region" data-kp-refresh-region="#tp-kpis"
+             data-kp-look="menu" data-kp-refresh-hover="pause" data-kp-refresh-choices="0,15,30,60" data-kp-remember="kyu-topics-refresh"
+             data-tp-refresh></div>
+      </div>
       <p class="kp-lede">Every topic on this hub. A topic exists once something publishes to it; open one for its subscriptions, dead letters and the commands that work against it.</p>
-      <p class="tp-meta" data-tp-meta aria-live="polite"></p>
     </div>
   </div>
 </header>
 
 <div class="tp-stage" data-tp-stage data-kp-anchors="rows" data-kp-anchor-show="hover">
-  <div class="tp-live-bar">
-    <div class="kp-refresh" data-kp-refresh="0" data-kp-refresh-mode="region" data-kp-refresh-region="#tp-kpis"
-         data-kp-refresh-hover="pause" data-kp-refresh-choices="0,15,30,60,300" data-kp-remember="kyu-topics-refresh"
-         data-tp-refresh></div>
-  </div>
   <div class="kp-attention kp-attention--soft" role="region" aria-label="Needs attention" data-tp-attention></div>
   {# The refresh swaps the children of this group. The rows ride along as one JSON block that the script reads and removes. #}
   <div class="kp-kpis" id="tp-kpis" role="group" aria-label="The hub right now" data-kp-kpis-columns="all 2 1" data-tp-kpis>
@@ -101,6 +100,7 @@
       <button type="button" class="kp-button kp-button--sm" aria-pressed="false" data-tp-heat-metric="dead">Dead letters</button>
     </div>
     <div class="kp-heat" data-kp-heat data-kp-heat-toggle data-tp-heat></div>
+    <div class="tp-heat-days" data-tp-heat-days></div>
     <ul class="kp-heat__legend" aria-label="Legend" data-tp-heat-legend></ul>
     <p class="tp-readout" data-tp-heat-readout aria-live="polite">No hour pinned. Press a cell to pin its hour.</p>
    </div></div>

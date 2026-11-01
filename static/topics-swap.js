@@ -5,7 +5,7 @@ import { $$ } from './topics-util.js';
 import { M, ui, takeData, decideSlots } from './topics-state.js';
 import { kpis, kpiTiles, shown, remember } from './topics-kpis.js';
 import { drawBand } from './topics-attention.js';
-import { drawHubBar, drawMeta } from './topics-paint.js';
+import { drawHubBar } from './topics-paint.js';
 import { table, syncRows } from './topics-table.js';
 const { tickTo } = tickExports;
 const { update } = updateExports;
@@ -47,7 +47,6 @@ if (kpis) {
         remember();
         drawBand();
         drawHubBar();
-        drawMeta();
         syncRows();
         table()?.refresh();
         swapping = false;

@@ -3,6 +3,7 @@
 import { heatExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, $$, h, number, readJson } from './topics-util.js';
 import { M } from './topics-state.js';
+import { drawHeatDays, hubAt } from './topics-heat-list.js';
 const { setHeat, HEAT_PICK_EVENT, HEAT_RETRY_EVENT } = heatExports;
 
 /** A whole-hub hour with this many dead letters shows as completely full. */
@@ -104,6 +105,11 @@ export function drawHeat() {
         message: heat.state === 'empty' ? 'No history yet. kyu has not counted a full hour.' : 'Could not read the hourly counts',
         text: heat.state === 'error' ? 'The hub did not answer.' : undefined,
     });
+    const days = $('[data-tp-heat-days]');
+    const stage = $('[data-tp-heat-stage]');
+    if (days && heat.data && heat.state === 'ready') drawHeatDays(days, heat.data, heat.metric, heat.picked);
+    else days?.replaceChildren();
+    stage?.toggleAttribute('data-tp-days', heat.state === 'ready');
     const legend = $('[data-tp-heat-legend]');
     if (legend) {
         const item = (/** @type {string} */ tone, /** @type {string} */ text, /** @type {string} */ level = '') =>
@@ -130,20 +136,34 @@ export async function loadHeat() {
     drawHeat();
 }
 
-document.addEventListener(HEAT_PICK_EVENT, (event) => {
-    const detail = /** @type {CustomEvent} */ (event).detail;
+/** Pin an hour (or let go) and say what it held. @param {string | null} colKey */
+function pinHour(colKey) {
     const readout = $('[data-tp-heat-readout]');
-    if (!readout || !(event.target instanceof Element) || !event.target.matches('[data-tp-heat]')) return;
-    heat.picked = detail.picked ? detail.colKey : null;
+    if (!readout) return;
+    heat.picked = colKey;
     const data = heat.data;
-    const i = data ? data.hours.findIndex((ms) => new Date(ms).toISOString() === detail.colKey) : -1;
-    if (!detail.picked || !data || i < 0) {
+    const i = data && colKey ? data.hours.findIndex((ms) => new Date(ms).toISOString() === colKey) : -1;
+    if (!colKey || !data || i < 0) {
         readout.textContent = 'No hour pinned. Press a cell to pin its hour.';
         return;
     }
-    const published = data.topics.reduce((n, t) => n + (t.published[i] ?? 0), 0);
-    const dead = data.topics.reduce((n, t) => n + (t.dead[i] ?? 0), 0);
+    const published = hubAt(data, 'published', i);
+    const dead = hubAt(data, 'dead', i);
     readout.textContent = `${hourLabel(data.hours[i])}:00 pinned: ${number(published)} published across the hub, ${dead === 0 ? 'none died' : `${dead} died`}.`;
+}
+
+document.addEventListener(HEAT_PICK_EVENT, (event) => {
+    const detail = /** @type {CustomEvent} */ (event).detail;
+    if (!(event.target instanceof Element) || !event.target.matches('[data-tp-heat]')) return;
+    pinHour(detail.picked ? detail.colKey : null);
+});
+// At phone width the day list stands in for the grid: pressing an hour pins it, pressing it again lets go.
+$('[data-tp-heat-days]')?.addEventListener('click', (event) => {
+    const row = event.target instanceof Element ? event.target.closest('[data-tp-hour]') : null;
+    if (!row) return;
+    const hour = row.getAttribute('data-tp-hour');
+    pinHour(hour === heat.picked ? null : hour);
+    drawHeat();
 });
 for (const b of $$('[data-tp-heat-metric]')) {
     b.addEventListener('click', () => {

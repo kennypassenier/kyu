@@ -95,7 +95,12 @@ td.payload { max-width: 60rem; overflow-wrap: anywhere; }
 .kyu-uses__title, .kyu-uses__lead { margin: 0; }
 .kyu-uses__lead { max-inline-size: 80ch; }
 .kyu-uses__readout { margin: 0; font-size: 0.85rem; }
-.kyu-graph { min-block-size: 26rem; }
+.kyu-graph {
+    /* The package draws the picture as tall as its width asks (never under 420 px); the width follows the node count,
+       so a few nodes get the shortest picture and many nodes the full width. */
+    max-inline-size: min(100%, clamp(36rem, calc(28rem + var(--kyu-graph-nodes, 3) * 4rem), 100%));
+    margin-inline: auto;
+}
 
 /* The nav keeps its brand, links, Help, theme and Log out on ONE row at every
    width (the Help button used to push "Apps" onto a second line at 390 px):
