@@ -88,3 +88,20 @@
         row-gap: var(--kp-space-sm, 0.5rem);
     }
 }
+
+/* "Other..." opens its seconds field over the lead line instead of in the flow: the head keeps one height. */
+.kt-head--live > .kp-refresh {
+    position: relative;
+}
+
+.kt-head--live .kp-refresh__custom {
+    position: absolute;
+    inset-block-start: 100%;
+    inset-inline-end: 0;
+    z-index: var(--kp-z-sticky, 20);
+    padding: var(--kp-space-sm, 0.5rem);
+    border: 1px solid var(--border);
+    border-radius: var(--kp-radius-md, 0.5rem);
+    background: var(--card, var(--background));
+    box-shadow: var(--kp-shadow-md, 0 0.25rem 1rem rgb(0 0 0 / 0.15));
+}
