@@ -15,6 +15,7 @@ import { drawGauges } from './subscription-gauges.js';
 import { initBacklog } from './subscription-backlog.js';
 import { wireAttempts, holdAttempts, startAttempts } from './subscription-attempts.js';
 import { initUptime } from './subscription-uptime.js';
+import { initPolicy } from './subscription-policy.js';
 import './subscription-page.js';
 const { setStrings } = stringsExports;
 
@@ -38,6 +39,7 @@ onReady(() => {
     P.pageState = 'loading';
     drawGauges();
     initBacklog();
+    initPolicy();
     wireAttempts();
     holdAttempts();
     void initUptime();

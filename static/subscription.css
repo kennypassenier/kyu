@@ -158,3 +158,20 @@
 .ky-gantt-host {
     min-inline-size: 0;
 }
+
+/* The policy rows: value, "(default)" and Change share one row height, and the input that replaces them while a value
+   is typed takes the same height, so nothing below moves. Change sits at the row's end, one column for every row. */
+.ky-policy__value {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--kp-space-sm, 0.5rem);
+    min-block-size: 2.25rem;
+}
+
+.ky-policy__input {
+    min-block-size: 2.25rem;
+    block-size: 2.25rem;
+    inline-size: 100%;
+    box-sizing: border-box;
+}

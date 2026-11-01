@@ -106,7 +106,11 @@ pub async fn put_policy(
         .into_response())
 }
 
-fn policy_json(effective: Policy, stored: StoredPolicy, idle: (i64, i64)) -> serde_json::Value {
+pub(crate) fn policy_json(
+    effective: Policy,
+    stored: StoredPolicy,
+    idle: (i64, i64),
+) -> serde_json::Value {
     // Reporting both means the dashboard can show "30000 (default)" instead
     // of leaving you to guess where a number came from.
     json!({

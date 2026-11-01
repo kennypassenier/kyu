@@ -107,6 +107,13 @@ fn script_data(
         "dead": view.dead,
         "lease_ms": view.lease_ms,
         "max_attempts": view.max_attempts,
+        "policy": {
+            "lease_ms": view.lease_ms,
+            "max_attempts": view.max_attempts,
+            "backoff_ms": view.backoff_ms,
+            "ttl_ms": view.ttl_ms,
+        },
+        "explicit": view.explicit,
         "shown": rows.len(),
         "items": rows.iter().map(|row| json!({
             "id": row["id"],
