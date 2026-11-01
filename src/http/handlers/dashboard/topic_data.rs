@@ -105,6 +105,8 @@ pub(super) fn commands_json(
             "ack": snippets.ack.full,
         },
         "has_token": token.is_some_and(|t| !t.is_empty()),
+        // The bare token, for the page's Reveal: it shows the token alone, never a second copy of the command.
+        "token": token.unwrap_or_default(),
     })
 }
 

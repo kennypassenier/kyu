@@ -16,7 +16,7 @@ import { datatableExports, masterDetailExports } from '/static/kp/dist/kp-themes
 import { $, $$ } from './topic-util.js';
 import { S, SUBS } from './topic-state.js';
 import { renderHeader } from './topic-header.js';
-import { renderCommands, startOver } from './topic-send.js';
+import { renderCommands } from './topic-send.js';
 import { renderReaders } from './topic-readers.js';
 import { renderSubs, updateCounts, fixTooltips, subsBody, subsTableEl } from './topic-subs.js';
 import './topic-subs-menu.js';
@@ -88,5 +88,3 @@ refreshEl?.addEventListener('kp-refresh', (event) => {
     );
 });
 
-// A hash that names a dead letter lands on its row (the anchors module marks it).
-void startOver;
