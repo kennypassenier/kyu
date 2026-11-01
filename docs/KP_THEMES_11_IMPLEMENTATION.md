@@ -139,6 +139,10 @@ local `[patch]` that is not committed:
   or Attempts stays, Delete moves into the row menu (the backlog's Delete keeps
   its form through `form=`); the phone 44 px overrides for those rows are gone.
 
+At the bump, also check: Reveal on the Topic page's command steps no longer moves
+what stands under the secret field (kp-themes main 307992288 keeps kp-secret at a
+fixed height with the countdown inside; kyu has no workaround of its own to drop).
+
 Left: pin the released chassis tag (with kp-themes 12.2.0), then merge to main.
 
 ## Store on the kit (branch kit-store, waiting on a chassis-rs release)
