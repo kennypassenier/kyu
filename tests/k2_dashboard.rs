@@ -760,6 +760,10 @@ async fn k2_prune_every_dead_letter_clears_every_topic_in_one_confirmed_sweep() 
         status.contains("Prune every dead letter"),
         "the button is on the status page: {status}"
     );
+    assert!(
+        status.contains("data-kp-confirm-label=\"Delete 2 dead letters\""),
+        "the confirmation dialog names what goes and how many: {status}"
+    );
     let response = reqwest::Client::new()
         .post(hub.url("/dashboard/dead-letters/prune"))
         .header("cookie", hub.session_cookie())

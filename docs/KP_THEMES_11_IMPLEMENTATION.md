@@ -144,3 +144,11 @@ Also with kp-themes 12.2.0: opt the subscription, dead-letter and backlog tables
 `data-kp-row-actions="menu"` (one primary action, the rest in a menu on a phone)
 once its placement is confirmed in the 12.2.0 docs; drop the phone 44 px overrides
 kyu added if the kit's coarse-pointer hit areas cover them.
+
+## Waiting on kp-themes: the confirm accept label (2026-11-01)
+
+The status page's "Prune every dead letter" sets `data-kp-confirm-label="Delete
+N dead letters"`, but kp-themes 12.1 `confirm-dialog.js` reads that attribute
+only for a typed confirm (`data-kp-confirm-type`); a plain confirm shows the
+default "Yes, do it". The dialog text already names the count. Once kp-themes
+reads the label for every confirm, the accept button names it too; no kyu change.
