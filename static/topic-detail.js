@@ -1,12 +1,14 @@
 // kyu: topic-detail.js, the detail pane of the recent messages: facts, payload block, Open large and Replay.
 
-import { codeExports, flashExports } from '/static/kp/dist/kp-themes.min.js';
+import { codeExports, undoToastExports, overlaysExports } from '/static/kp/dist/kp-themes.min.js';
 import { $, make, dmy, bytesText } from './topic-util.js';
-import { S, MESSAGES, T, call, refusal } from './topic-state.js';
+import { S, MESSAGES, T, call, sentence } from './topic-state.js';
+import { payloadTitle } from './topic-dead-core.js';
 import { openPayload } from './topic-viewer.js';
 import { reload } from './topic-refresh.js';
 const { setCode } = codeExports;
-const { runFlashButton } = flashExports;
+const { undoToast } = undoToastExports;
+const { toast } = overlaysExports;
 
 export const recent = /** @type {HTMLElement} */ ($('[data-kt-recent]'));
 export const mdRoot = /** @type {HTMLElement} */ ($('[data-kt-md]', recent));
@@ -47,26 +49,39 @@ function factsBlock(m) {
     return facts;
 }
 
-/** The Replay button: publishes the same payload again. @param {any} m */
-function replayButton(m) {
-    const replay = make('button', 'kp-button kp-button--primary', 'Replay this message');
-    replay.type = 'button';
-    replay.setAttribute('data-kp-flash-button', '');
-    replay.setAttribute('data-kp-flash-words', 'Replayed,Refused,Failed');
-    replay.setAttribute('data-kp-flash-word', 'Replayed');
-    replay.setAttribute('data-kp-refusal', 'toast');
-    replay.addEventListener('click', () =>
-        runFlashButton(replay, async () => {
+/** How long Replay waits, so it can be taken back, before the message goes out. */
+const REPLAY_UNDO_MS = 6000;
+
+/** Replay with an Undo window, like delete: nothing is sent until it closes. @param {any} m */
+function replayWithUndo(m) {
+    const title = payloadTitle(m.payload) ?? 'this message';
+    undoToast(`Replaying ${title} to every subscription`, {
+        ms: REPLAY_UNDO_MS,
+        clock: 'ring',
+        mode: 'defer',
+        max: 3,
+        commit: async () => {
             const r = await call(`${T}/messages/${encodeURIComponent(m.id)}/replay`);
             if (!r.ok) {
-                return /** @type {any} */ (r).missing
-                    ? { error: 'Replay is not available on this hub yet.', remedy: 'Update kyu, or publish the payload again from the box below.' }
-                    : refusal(/** @type {any} */ (r));
+                throw new Error(
+                    /** @type {any} */ (r).missing
+                        ? 'Replay is not available on this hub yet. Update kyu, or publish the payload again from the box below.'
+                        : sentence(/** @type {any} */ (r)),
+                );
             }
+            toast(`Replayed ${title}. Every active subscription will receive it.`, { ms: 4000 });
             void reload();
-            return { word: 'Replayed', line: `Published again as ${r.json?.id ?? 'a new message'}. Every active subscription will receive it.` };
-        }),
-    );
+        },
+        undo: () => {},
+        restore: () => {},
+    });
+}
+
+/** The Replay button: a quiet one, since it sends to every subscription at once. @param {any} m */
+function replayButton(m) {
+    const replay = make('button', 'kp-button', 'Replay this message');
+    replay.type = 'button';
+    replay.addEventListener('click', () => replayWithUndo(m));
     return replay;
 }
 
