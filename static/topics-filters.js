@@ -67,6 +67,12 @@ document.addEventListener('click', (event) => {
         dt?.query('');
         for (const key of /** @type {const} */ (['backlog', 'dead'])) ui.pressed[key] = false;
     }
+    // The whole row opens its topic; its own links and buttons keep their own job.
+    const row = target?.closest('tr[data-tp-topic]');
+    if (row && !target?.closest('a, button') && !window.getSelection()?.toString()) {
+        const link = /** @type {HTMLAnchorElement | null} */ (row.querySelector('.tp-topic__link'));
+        if (link) link.click();
+    }
     const test = target?.closest('[data-tp-test]');
     if (test) void sendTest(/** @type {HTMLButtonElement} */ (test));
 });

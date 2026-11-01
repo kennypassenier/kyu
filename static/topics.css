@@ -35,11 +35,6 @@
     margin: 0;
 }
 
-.tp-live-bar {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-}
-
 .tp-table {
     display: grid;
     min-inline-size: 0;
@@ -60,15 +55,9 @@
     margin: 0;
 }
 
-.tp-meta {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
-    justify-content: start;
-    gap: var(--kp-space-xs, 0.25rem) var(--kp-space-sm, 0.5rem);
-    align-items: center;
-    min-block-size: 2rem;
-    color: var(--muted-foreground);
+/* The freshness line and the refresh control stand right under the title. */
+.tp-fresh {
+    min-inline-size: 0;
 }
 
 /* The topic cell: the mark and the name side by side. */
@@ -139,4 +128,154 @@
 /* The heat grid's own knob: its empty and failed states are as tall as the grid. */
 .tp-heat-stage [data-tp-heat] {
     --kp-heat-state-height: 13.5rem;
+}
+
+/* The freshness line and the refresh control stand right under the title. */
+.tp-fresh .kp-refresh__bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--kp-space-md, 1rem);
+}
+
+@media (max-width: 39.99rem) {
+    .tp-fresh .kp-refresh__bar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: var(--kp-space-sm, 0.5rem);
+    }
+
+    .tp-fresh .kp-refresh__bar > .kp-refresh__line {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+}
+
+/* The whole row opens its topic. */
+.tp-row {
+    cursor: pointer;
+}
+
+.tp-row:hover {
+    background: color-mix(in oklab, var(--primary) 6%, transparent);
+}
+
+/* The chip row keeps its height whether a filter is on or not, so the table never moves: the row is one fixed
+   line (chips scroll sideways), and with no chips the table's own wrap leaves the same room. */
+.tp-table .kp-datatable__pills {
+    box-sizing: border-box;
+    block-size: 3.5rem;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+}
+
+.tp-table .kp-datatable:not(:has(.kp-datatable__pills:not([hidden]))) > .kp-table-wrap {
+    margin-block-start: calc(3.5rem + 0.75rem); /* the row and the table's own 0.75rem gap */
+}
+
+/* A key figure that filters says so: the hint is a visible chip, and a filter that is on has a firm edge. */
+.kp-kpi--toggle > .kp-kpi__hint {
+    padding: 0 var(--kp-space-sm, 0.5rem);
+    border: 1px solid var(--border-strong, var(--border));
+    border-radius: var(--kp-radius-pill, 999px);
+    color: var(--foreground);
+}
+
+.kp-kpi--toggle[aria-pressed='true'] {
+    box-shadow: inset 0.25rem 0 0 var(--primary);
+}
+
+/* The heat map's phone form: a list per day, one 44 px row per hour. */
+.tp-heat-days {
+    display: none;
+}
+
+.tp-heat-day {
+    display: grid;
+    gap: var(--kp-space-xs, 0.25rem);
+}
+
+.tp-heat-day__title {
+    margin: var(--kp-space-sm, 0.5rem) 0 0;
+    font-size: var(--kp-text-sm, 0.875rem);
+    color: var(--muted-foreground);
+}
+
+.tp-heat-day__list {
+    display: grid;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.tp-heat-row {
+    display: grid;
+    grid-template-columns: 4rem minmax(0, 1fr) max-content;
+    gap: var(--kp-space-sm, 0.5rem);
+    align-items: center;
+    inline-size: 100%;
+    min-block-size: 2.75rem;
+    padding: 0 var(--kp-space-sm, 0.5rem);
+    border: 0;
+    border-block-end: 1px solid var(--border);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+}
+
+.tp-heat-row[aria-pressed='true'] {
+    background: color-mix(in oklab, var(--primary) 9%, var(--card));
+    box-shadow: inset 0.25rem 0 0 var(--primary);
+}
+
+.tp-heat-row__bar {
+    block-size: 0.5rem;
+    border-radius: var(--kp-radius-pill, 999px);
+    background: linear-gradient(to right, var(--chart-1) calc(var(--tp-share, 0) * 100%), var(--muted) 0);
+}
+
+.tp-heat-row[data-kp-tone='destructive'] .tp-heat-row__bar {
+    background: linear-gradient(to right, var(--destructive) calc(var(--tp-share, 0) * 100%), var(--muted) 0);
+}
+
+.tp-heat-row__count {
+    color: var(--muted-foreground);
+}
+
+@media (max-width: 39.99rem) {
+    .tp-heat-stage[data-tp-days] [data-tp-heat],
+    .tp-heat-stage[data-tp-days] [data-tp-heat-legend],
+    .tp-heat-stage[data-tp-days] .tp-readout:not([data-tp-heat-readout]) {
+        display: none;
+    }
+
+    .tp-heat-stage[data-tp-days] .tp-heat-days {
+        display: grid;
+        gap: var(--kp-space-sm, 0.5rem);
+    }
+
+    .tp-row .kp-button,
+    .tp-topic__link {
+        min-block-size: 2.75rem;
+    }
+
+    .tp-topic__link {
+        display: inline-flex;
+        align-items: center;
+    }
+}
+
+/* At phone width the toolbar's count line always takes its own row: "Filters (1)" is wider than "Filters", and the
+   line used to wrap under the buttons only once a filter was on (28 px shift). */
+@media (max-width: 39.99rem) {
+    .tp-table .kp-datatable__bar > .kp-datatable__status {
+        flex: 1 0 100%;
+    }
+}
+
+@media (max-width: 39.99rem) {
+    .tp-heat-controls .kp-button {
+        min-block-size: 2.75rem;
+    }
 }

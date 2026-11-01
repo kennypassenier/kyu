@@ -57,6 +57,7 @@ pub const PAGE_MODULES: &[(&str, &str)] = &[
     module!("topics-attention.js"),
     module!("topics-filters.js"),
     module!("topics-heat.js"),
+    module!("topics-heat-list.js"),
     module!("topics-kpis.js"),
     module!("topics-paint.js"),
     module!("topics-row.js"),
