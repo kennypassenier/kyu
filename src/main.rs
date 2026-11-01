@@ -68,9 +68,8 @@ async fn start() -> Result<ExitCode, ExitCode> {
     if let (Some(key), Some(hex)) = (config.auth.key(), secret_hex.as_deref()) {
         import_tokens(&state_dir, key, hex)?;
     }
-    let (engine, state, heartbeat) = assemble(&mut app, &config, db.clone());
+    let (engine, state, heartbeat) = assemble(&mut app, &config, db);
     start_sweeper(&mut app, &state, engine, heartbeat);
-    settle_store_on_stop(&mut app, db);
     Ok(app.run().await)
 }
 
@@ -190,27 +189,5 @@ fn start_sweeper(app: &mut App, state: &AppState, engine: Arc<Engine>, heartbeat
                 notifiers.wake(topic, std::slice::from_ref(subscription));
             }
         });
-    });
-}
-
-/// Checkpoints the write-ahead log at shutdown (W12). The backup pause
-/// (feat-backup-1, chassis 3.1.0) needs no hook of kyu's: the kit holds
-/// every write ticket the `Db` takes, waits for the ones in flight, then
-/// runs the same `wal_checkpoint(TRUNCATE)` on the app database itself,
-/// and falls back to stopping the unit when it is busy.
-///
-/// W12 · after the drain, settle the write-ahead log. Bounded by the kit's
-/// shutdown budget (KYU_SHUTDOWN_TIMEOUT_MS); a checkpoint that does not
-/// finish costs nothing but a file-level backup's restorability — WAL and
-/// synchronous=FULL keep the data intact either way.
-fn settle_store_on_stop(app: &mut App, db: AppDb) {
-    app.on_flush(move || match db.db().and_then(Db::checkpoint) {
-        Ok(()) => tracing::info!("store checkpointed; stopping"),
-        Err(error) => tracing::warn!(
-            %error,
-            "could not checkpoint the store; stopping anyway. The data is intact, but the \
-             write-ahead log is still on disk, so a file-level backup of the data directory \
-             may not restore. Take one with POST /api/backup instead."
-        ),
     });
 }

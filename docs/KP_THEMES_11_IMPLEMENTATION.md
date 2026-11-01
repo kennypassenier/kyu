@@ -132,13 +132,17 @@ Also with kp-themes 12.2.0 (kp-themes main 1a856f3c0): drop the menu re-attach i
 `static/topic-subs-menu.js` and the "Copy with token" label observer in the Topic
 page commands; the form summary now shows each field's current message.
 
-## Store on the kit (branch kit-store, waiting on chassis-rs)
+## Store on the kit (branch kit-store, waiting on a chassis-rs release)
 
-kyu's store runs on the kit Db/AppDb on branch `kit-store` (chassis rev 0b3e884).
-When chassis-rs kit-storage-2 lands: move the 2.x token import into
-`AppDbSpec::with_import` (one open at start), read the failure age from
-`Db::recent_write_failure_age`, drop the probe-skip workaround and kyu's own
-`on_flush` checkpoint. Merge to main only with a released chassis tag.
+kyu's store runs on the kit Db/AppDb on branch `kit-store`, pinned to chassis
+main 3cbae24 (kit-storage-2). Done there: `/healthz` asks both the failure record
+(`Db::recent_write_failure_age`, with its age) and the probe on every poll, and
+kyu's own `on_flush` checkpoint is gone (the kit folds the logs at stop;
+`w12_sigterm_exits_cleanly_and_leaves_the_files_standing_still` proves it).
+The 2.x token import stays kyu's own: it writes the kit's client file, runs on
+every start for tokens missing by name, and must finish before the kit opens its
+client store, none of which fits `AppDbSpec::with_import` (once, one app-db
+transaction). Left: pin the released chassis tag, then merge to main.
 
 Also with kp-themes 12.2.0: opt the subscription, dead-letter and backlog tables into
 `data-kp-row-actions="menu"` (one primary action, the rest in a menu on a phone)
