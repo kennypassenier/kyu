@@ -30,9 +30,8 @@ function graphData(subs, bySize) {
     };
 }
 
-/** Pixel height for a picture of `nodes` subscriptions around the hub: 360 for one, growing 40 a node, at most 640.
- * Not lower: under 360 px kp-themes (main 674a1a188) cuts the top node's label to its first letter (queued). */
-const graphHeight = (/** @type {number} */ nodes) => Math.min(640, 320 + 40 * Math.max(1, nodes));
+/** Pixel height for a picture of `nodes` subscriptions around the hub: 260 for one, growing 40 a node, at most 640. */
+const graphHeight = (/** @type {number} */ nodes) => Math.min(640, 220 + 40 * Math.max(1, nodes));
 
 /**
  * The hub-and-ring picture of the same subscriptions: kyu in the middle, a node per subscription, the link
