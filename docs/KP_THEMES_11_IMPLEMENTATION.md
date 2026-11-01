@@ -131,3 +131,11 @@ the width rule.
 Also with kp-themes 12.2.0 (kp-themes main 1a856f3c0): drop the menu re-attach in
 `static/topic-subs-menu.js` and the "Copy with token" label observer in the Topic
 page commands; the form summary now shows each field's current message.
+
+## Store on the kit (branch kit-store, waiting on chassis-rs)
+
+kyu's store runs on the kit Db/AppDb on branch `kit-store` (chassis rev 0b3e884).
+When chassis-rs kit-storage-2 lands: move the 2.x token import into
+`AppDbSpec::with_import` (one open at start), read the failure age from
+`Db::recent_write_failure_age`, drop the probe-skip workaround and kyu's own
+`on_flush` checkpoint. Merge to main only with a released chassis tag.
