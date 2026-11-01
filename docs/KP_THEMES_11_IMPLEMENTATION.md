@@ -114,3 +114,8 @@ kyu shares its own `kyu.db` with the kit (`App::app_db` over kyu's file, two
 kit tables beside kyu's schema). Kenny kept that for 5.0.0 and asked to put
 the question again at the next release: rebuild kyu's store on the kit's
 storage layer, or keep sharing, with real arguments for and against.
+
+Answered 2026-11-01 (Kenny, after 6.0.0): first complete the kit, then
+rebuild. chassis-rs adds the pre-migration copy, the /healthz write probe,
+app-typed write errors and a configurable reader count; kyu moves its store
+onto the kit's `Db` in a later release (about 32 files, 108 call sites).
