@@ -60,12 +60,14 @@ fn bulk_each(
             Err(EngineError::NoSuchDelivery { .. }) => {
                 refused.push(json!({
                     "id": id,
-                    "reason": "this subscription holds no such message: it was never \
-                               delivered to it, or it was already deleted",
+                    "reason": "That message is no longer on this subscription; the list is refreshed.",
                 }));
             }
-            Err(error @ EngineError::NotDead { .. }) => {
-                refused.push(json!({ "id": id, "reason": error.to_string() }));
+            Err(EngineError::NotDead { .. }) => {
+                refused.push(json!({
+                    "id": id,
+                    "reason": "That message is no longer a dead letter; the list is refreshed.",
+                }));
             }
             Err(other) => return Err(other),
         }

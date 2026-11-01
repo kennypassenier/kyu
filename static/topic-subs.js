@@ -72,6 +72,9 @@ filterGroup
 /** @param {any} s @param {string} state */
 function setSubState(s, state) {
     s.state = state;
+    // The page data keeps the state too: a dead-letter action redraws the table from it while an Undo window is open.
+    const mirror = S.data.subscriptions.find((/** @type {any} */ x) => x.name === s.name);
+    if (mirror) mirror.state = state;
     const tr = subsBody.querySelector(`tr[data-kt-sub="${CSS.escape(s.name)}"]`);
     if (tr instanceof HTMLElement) paintRow(tr, s);
     updateCounts();
