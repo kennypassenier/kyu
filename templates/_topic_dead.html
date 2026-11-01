@@ -1,8 +1,9 @@
-<section class="kt-dead" aria-labelledby="kt-dead-title" data-kt-dead data-kyu-tour="dead">
-    <div class="kt-head">
-      <h2 class="kp-card__title" id="kt-dead-title">Dead letters</h2>
-      <p class="kt-lead">These gave up. Nothing is lost: each one waits here until you requeue or delete it.</p>
+<section class="kp-card kt-dead" data-kp-state="ready" aria-labelledby="kt-dead-title" data-kt-dead data-kyu-tour="dead">
+    <div class="kp-card__header">
+      <h2 class="kp-card__title" id="kt-dead-title">Dead letters of {{ topic.name }}</h2>
     </div>
+    <p class="kp-card__body">These gave up. Nothing is lost: each one waits here until you requeue or delete it.</p>
+    <div class="kp-card__stage"><div class="kp-card__data kt-dead__data">
     <div class="kt-stage" data-kt-stage="problems" hidden>
       <div data-kt-filled><div class="kp-problems" data-kp-problems data-kp-problems-mode="each" data-kt-problems></div></div>
       <div data-kt-plate hidden></div>
@@ -54,4 +55,5 @@
     </div>
     <div data-kp-select-hint="kt-dead-table"></div>
     <p class="kt-note" data-kt-dead-note></p>
+    </div></div>
   </section>

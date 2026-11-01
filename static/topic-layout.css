@@ -1,9 +1,9 @@
 /* kyu: topic-layout.css, the Topic page on kp-themes 11.0.0.
    Everything with a kp- class is the package's. These kt- rules only compose the page on a grid,
    hold each region at one footprint in every state, and set the few widths the tables need.
-   Tokens only. */
+   Tokens only.
    This file holds the page grid, the section heads, the header and the one-footprint stage;
-   each region has its own topic-*.css beside it.
+   each region has its own topic-*.css beside it. */
 
 /* The page: one column of regions on a shared gap. */
 .kt-page {
@@ -38,9 +38,7 @@
     display: none;
 }
 
-.kt-dead,
-.kt-recent,
-.kt-publish {
+.kt-recent {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--kp-space-md, 1rem);
