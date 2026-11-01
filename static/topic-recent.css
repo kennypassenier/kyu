@@ -59,32 +59,3 @@
         grid-auto-columns: minmax(0, 1fr);
     }
 }
-
-/* The recent messages head: title and sentence on the left, the refresh control on the right, on one grid. */
-.kt-head--live {
-    grid-template-columns: minmax(max-content, 1fr) auto;
-    grid-template-areas: "title refresh" "lead lead";
-    column-gap: var(--kp-space-lg, 1.5rem);
-    align-items: start;
-}
-
-.kt-head--live > h2 {
-    grid-area: title;
-}
-
-.kt-head--live > .kt-lead {
-    grid-area: lead;
-}
-
-.kt-head--live > .kp-refresh {
-    grid-area: refresh;
-    align-self: center;
-}
-
-@media (max-width: 40rem) {
-    .kt-head--live {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "title" "lead" "refresh";
-        row-gap: var(--kp-space-sm, 0.5rem);
-    }
-}

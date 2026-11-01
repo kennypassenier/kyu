@@ -23,3 +23,33 @@
     color: var(--muted-foreground);
     font-size: var(--kp-text-sm, 0.8125rem);
 }
+
+/* The card's data area holds the alert, the selection bar and the table on one gap; a hidden alert leaves no gap. */
+.kt-dead__data {
+    display: grid;
+    gap: var(--kp-space-md, 1rem);
+    min-inline-size: 0;
+}
+
+.kt-dead__data > [hidden] {
+    display: none;
+}
+
+/* The selection bar takes no room of its own: it lies over the top of the table (on the search bar) while rows are
+   ticked, so an empty bar leaves no gap and ticking a row moves nothing. */
+.kt-dead [data-kt-selection] {
+    position: sticky;
+    block-size: 0;
+    min-block-size: 0;
+    overflow: visible;
+}
+
+.kt-dead [data-kt-selection] > .kp-selection__panel {
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: 0;
+    min-block-size: 4.5rem;
+    align-content: center;
+    background: var(--card, var(--background));
+    box-shadow: var(--kp-shadow-md, 0 0.25rem 1rem rgb(0 0 0 / 0.15));
+}

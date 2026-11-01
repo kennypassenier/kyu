@@ -59,3 +59,8 @@
         min-inline-size: 8rem;
     }
 }
+
+/* The state column is as wide as its longest word, so a row that changes state moves no other column. */
+.kt-subs td[data-label='State'] {
+    min-inline-size: 6.5rem;
+}

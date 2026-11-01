@@ -1,9 +1,23 @@
 // kyu: topic-subs-menu.js, the "More" menu of a subscription row: jump to its dead letters or oldest message, copy its commands.
 
-import { overlaysExports } from '/static/kp/dist/kp-themes.min.js';
+import { overlaysExports, menuButtonExports } from '/static/kp/dist/kp-themes.min.js';
 import { S, ORIGIN, T, TOPIC } from './topic-state.js';
 import { subsCard } from './topic-subs.js';
 const { toast } = overlaysExports;
+const { attachMenuButtons } = menuButtonExports;
+
+// The table redraws its rows (sort, filter, refresh) and a redrawn row can lose the kit's click handler on its
+// More button. Attaching is idempotent, so a row's menu is attached the moment a pointer or the keyboard reaches it.
+for (const type of ['pointerdown', 'focusin']) {
+    subsCard.addEventListener(
+        type,
+        (event) => {
+            const wrapper = event.target instanceof Element ? event.target.closest('[data-kt-menu]') : null;
+            if (wrapper) attachMenuButtons(wrapper.parentElement ?? wrapper);
+        },
+        true,
+    );
+}
 
 /** Copy text; say what happened in a toast. @param {string} text @param {string} said */
 async function copyToast(text, said) {
@@ -14,12 +28,32 @@ async function copyToast(text, said) {
         toast('Your browser blocked copying. Select the command on the page and press Ctrl+C.', { ms: 5000, live: 'assertive' });
     }
 }
+/**
+ * Delete lives in the row's menu; its typed confirmation is the row's own (hidden) Delete button, which the menu entry
+ * presses. When the dialog closes the focus goes back to the row's menu button, not to the hidden one.
+ * @param {string} name
+ */
+function openDeleteConfirm(name) {
+    const row = subsCard.querySelector(`tr[data-kt-sub="${CSS.escape(name)}"]`);
+    const hidden = row?.querySelector('[data-kt-delete]');
+    const back = row?.querySelector('[data-kt-menu] > .kp-button');
+    if (!(hidden instanceof HTMLElement)) return;
+    document.addEventListener(
+        'close',
+        () => {
+            if (back instanceof HTMLElement && back.isConnected) back.focus();
+        },
+        { capture: true, once: true },
+    );
+    hidden.click();
+}
 document.addEventListener('kp-menu-select', (event) => {
     const { value } = /** @type {CustomEvent} */ (event).detail;
     const name = /** @type {HTMLElement} */ (event.target).closest('[data-kt-menu]')?.getAttribute('data-kt-menu');
     if (!name || !subsCard.contains(/** @type {Node} */ (event.target))) return;
     const base = `curl -s -H "authorization: Bearer $KYU_TOKEN"`;
-    if (value === 'dead') {
+    if (value === 'delete') openDeleteConfirm(name);
+    else if (value === 'dead') {
         S.deadTable?.filter(2, [name]);
         document.getElementById('kt-dead-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else if (value === 'oldest') location.href = `${T}/subs/${encodeURIComponent(name)}`;

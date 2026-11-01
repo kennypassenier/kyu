@@ -1,12 +1,26 @@
-// kyu: topic-send.js, section 2 of the Topic page: the send-and-receive commands, the secret fields and the journey steps.
+// kyu: topic-send.js, section 2 of the Topic page: the send-and-receive commands, and the secret fields.
 
-import { steplistExports } from '/static/kp/dist/kp-themes.min.js';
-import { $, $$, dmy } from './topic-util.js';
+import { $, $$ } from './topic-util.js';
 import { S, page, withOrigin } from './topic-state.js';
-const { setStep } = steplistExports;
+
+// Two copy buttons stand in every step: the command block's own "Copy" (without the token) and the secret field's,
+// which puts the token in. The field's button is named for what it does.
+const COPY_WITH_TOKEN = 'Copy with token';
 
 const send = /** @type {HTMLElement} */ ($('[data-kt-send]'));
 const ttl = Number(page.dataset.ktRevealSeconds ?? 10);
+const named = new WeakSet();
+/** The kit writes its own "Copy" back after every copy, so the name is kept by watching the button. @param {Element | null} copy */
+function nameCopyButton(copy) {
+    if (!copy || named.has(copy)) return;
+    named.add(copy);
+    const apply = () => {
+        if (copy.textContent === 'Copy') copy.textContent = COPY_WITH_TOKEN;
+    };
+    new MutationObserver(apply).observe(copy, { childList: true, characterData: true, subtree: true });
+    apply();
+}
+
 export function renderCommands() {
     for (const block of $$('[data-kt-command]', send)) {
         const code = $('code', block);
@@ -14,29 +28,33 @@ export function renderCommands() {
     }
     for (const field of $$('[data-kt-secret]', send)) {
         field.setAttribute('data-kp-secret-ttl', String(ttl));
+        nameCopyButton($('[data-kp-secret-copy]', field));
         // Without a login token on this hub there is nothing to reveal or copy.
         if (S.data.commands.has_token) field.removeAttribute('data-kp-secret-disabled');
         else field.setAttribute('data-kp-secret-disabled', 'This hub has no login token to put in the command.');
     }
 }
 // The token is read from the page's data only when a field is asked to show or copy it.
+// Reveal shows the token alone (the command is already on the page above, masked); Copy with token copies the whole
+// working command. Copy of a field that is shown would copy what is shown, so it hides the field first.
 send.addEventListener('kp-secret-request', (event) => {
-    const { respond } = /** @type {CustomEvent} */ (event).detail;
+    const { respond, purpose } = /** @type {CustomEvent} */ (event).detail;
     const field = /** @type {HTMLElement} */ (event.target);
     event.preventDefault();
+    if (purpose === 'reveal') return respond(S.data.commands.token ?? '');
     respond(withOrigin(S.data.commands.working[field.dataset.ktSecret ?? ''] ?? ''));
 });
-const journey = /** @type {HTMLElement} */ ($('[data-kt-journey]', send));
-const STEPS = ['publish', 'receive', 'ack'];
-export const startOver = () => STEPS.forEach((id, i) => setStep(journey, id, { state: i === 0 ? 'current' : 'S.pending', time: '' }));
-send.addEventListener('kp-copy', (event) => {
-    const step = /** @type {HTMLElement} */ (event.target).closest('[data-kt-step]')?.getAttribute('data-kt-step');
-    if (!step) return;
-    setStep(journey, step, { state: 'done', time: dmy(Date.now()) });
-    const next = STEPS.find((id) => $(`[data-kp-step-id="${id}"]`, journey)?.getAttribute('data-state') !== 'done');
-    if (next) setStep(journey, next, { state: 'current' });
-});
-$('[data-kt-start-over]', send)?.addEventListener('click', startOver);
+send.addEventListener(
+    'click',
+    (event) => {
+        const target = event.target instanceof Element ? event.target : null;
+        const field = target?.closest('[data-kp-secret]');
+        if (!field || field.getAttribute('data-kp-secret-state') !== 'shown') return;
+        if (!target?.closest('[data-kp-secret-copy]')) return;
+        $('[data-kp-secret-reveal]', /** @type {HTMLElement} */ (field))?.click();
+    },
+    true,
+);
 {
     const words = $('[data-kt-ttl-words]', send);
     if (words) words.textContent = ttl === 0 ? 'until you press Hide' : `for ${ttl} seconds`;
