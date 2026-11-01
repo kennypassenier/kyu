@@ -50,11 +50,7 @@ impl chassis::StatusSection for TopicsSection {
             route: "/dashboard/dead-letters/prune".into(),
             method: "POST".into(),
             destructive: true,
-            confirm: Some(
-                "Delete every dead letter across every topic and subscription? \
-                 This cannot be undone."
-                    .into(),
-            ),
+            confirm: Some("Delete every dead letter across every topic and subscription?".into()),
             busy_label: Some("Pruning…".into()),
         }]
     }

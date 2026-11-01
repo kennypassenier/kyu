@@ -175,3 +175,13 @@
     inline-size: 100%;
     box-sizing: border-box;
 }
+
+/* The left column of the top row: the policy and the last 90 days stack beside the gauges, so both columns
+   carry content to the same depth instead of leaving a hole under the policy. */
+.ky-top__col {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--kp-space-xl, 2rem);
+    align-content: start;
+    min-inline-size: 0;
+}

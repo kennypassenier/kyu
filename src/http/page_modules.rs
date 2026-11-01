@@ -32,6 +32,7 @@ pub const PAGE_MODULES: &[(&str, &str)] = &[
     module!("subscription-page.js"),
     module!("subscription-policy.js"),
     module!("subscription-state.js"),
+    module!("subscription-test.js"),
     module!("subscription-uptime.js"),
     module!("subscription-util.js"),
     module!("topic-dead-actions.js"),

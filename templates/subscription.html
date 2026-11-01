@@ -45,6 +45,7 @@
 
 <div class="ky-sections">
 <div class="ky-top">
+<div class="ky-top__col">
 <section class="ky-sec" aria-labelledby="h-ky-section-policy">
   <div class="ky-sec__head">
     <h2 id="h-ky-section-policy">Policy</h2>
@@ -72,6 +73,17 @@
     </div>
   </div>
 </section>
+
+<section class="ky-sec" aria-labelledby="h-ky-section-uptime">
+  <div class="ky-sec__head">
+    <h2 id="h-ky-section-uptime">The last 90 days</h2>
+    <p>One cell a day: how many messages were delivered and how many died. A day is judged by what was delivered.</p>
+  </div>
+  <div id="ky-uptime" class="ky-comp">
+    <div class="kp-uptime" data-kp-uptime data-kp-uptime-label="{{ subscription.name }}" data-kp-uptime-count="90" data-kp-uptime-open="info" id="ky-uptime-strip" aria-label="Delivered and dead messages per day"></div>
+  </div>
+</section>
+</div>
 
 <section class="ky-sec" aria-labelledby="h-ky-section-gauges">
   <div class="ky-sec__head">
@@ -197,16 +209,6 @@
              data-kp-gantt-ghosts="1 1 1 1 1" aria-label="Delivery attempts of one message" id="ky-gantt"></section>
     <div class="kp-card kp-inspector ky-inspector-host" data-kp-requests data-kp-requests-open="failed"
          data-kp-secrets-in-copy="masked" id="ky-requests" aria-label="Delivery attempts of one message, as requests"></div>
-  </div>
-</section>
-
-<section class="ky-sec" aria-labelledby="h-ky-section-uptime">
-  <div class="ky-sec__head">
-    <h2 id="h-ky-section-uptime">The last 90 days</h2>
-    <p>One cell a day: how many messages were delivered and how many died. A day is judged by what was delivered.</p>
-  </div>
-  <div id="ky-uptime" class="ky-comp">
-    <div class="kp-uptime" data-kp-uptime data-kp-uptime-label="{{ subscription.name }}" data-kp-uptime-count="90" data-kp-uptime-open="info" id="ky-uptime-strip" aria-label="Delivered and dead messages per day"></div>
   </div>
 </section>
 </div>
