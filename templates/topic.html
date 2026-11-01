@@ -29,15 +29,20 @@
           <div class="kp-page-header__line">
             <h1 class="kp-page-header__title" data-kp-reveal="headline">{{ topic.name }}</h1>
             <span class="kp-badge kp-badge--destructive" data-kt-dead-badge{% if topic.dead == 0 %} hidden{% endif %}>{{ topic.dead }} dead</span>
-            <time class="kp-ago kp-page-header__meta" data-kp-ago data-kp-ago-verb="last message" data-kp-stale-after="86400" data-kt-last hidden></time>
           </div>
+        </div>
+        {# One freshness line: the kit's refresh control in its menu look ("updated N s ago", every 30 s by default). #}
+        <div class="kt-fresh">
+          <div class="kp-refresh" data-kp-refresh="30" data-kp-refresh-mode="event" data-kp-look="menu" data-kp-refresh-hover="pause"
+               data-kp-refresh-choices="0,15,30,60" data-kp-remember="kyu-topic-refresh" data-kt-refresh></div>
         </div>
         <p class="kp-lede">
           Publishers send messages to this topic and every subscription reads its own copy. Here you copy the commands
           that publish, receive and acknowledge, see who reads the topic and how far behind they are,
           and archive or delete a subscription you no longer use.
         </p>
-        <p class="kp-page-header__meta kt-facts" data-kt-facts>{{ topic.messages }} messages retained · backlog {{ topic.backlog }} · {{ topic.subscriptions }} subscriptions</p>
+        <p class="kp-page-header__meta kt-facts"><span data-kt-facts>{{ topic.messages }} messages retained · backlog {{ topic.backlog }} · {{ topic.subscriptions }} subscriptions</span>
+          <time class="kp-ago" data-kp-ago data-kp-ago-verb="last message" data-kp-stale-after="86400" data-kt-last hidden></time></p>
       </div>
       <div class="kp-page-header__actions kt-header__actions">
         <code id="kt-topic-url" class="kp-sr-only" data-kt-topic-url></code>

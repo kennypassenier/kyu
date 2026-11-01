@@ -48,12 +48,47 @@
 /* 1 · the header: the package's two-column header grid; kyu only stacks the title block. */
 .kt-header__main {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--kp-space-sm, 0.5rem);
     min-inline-size: 0;
 }
 
 .kt-facts {
     margin: 0;
+    white-space: normal;
+}
+
+/* The last message follows the facts on the same line and wraps with them. */
+.kt-facts [data-kt-last] {
+    white-space: normal;
+}
+
+.kt-facts [data-kt-last]:not([hidden])::before {
+    content: ' · ';
+}
+
+/* The one freshness line, right after the title: the kit's refresh control in its menu look, on one row. */
+.kt-fresh {
+    min-inline-size: 0;
+}
+
+.kt-fresh .kp-refresh__bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--kp-space-md, 1rem);
+}
+
+@media (max-width: 39.99rem) {
+    .kt-fresh .kp-refresh__bar {
+        grid-template-columns: minmax(0, 1fr) auto;
+        row-gap: var(--kp-space-sm, 0.5rem);
+    }
+
+    .kt-fresh .kp-refresh__bar > .kp-refresh__line {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
 }
 
 .kt-copy {
