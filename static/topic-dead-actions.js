@@ -47,16 +47,32 @@ async function requeueRow(button, row) {
     void reload();
 }
 
+/** Keep the dead-letter card at its present height while an Undo window is open, so the rows leaving
+ * (even the last one) move nothing below it; the returned function lets the card size itself again. */
+function holdFootprint() {
+    const card = /** @type {HTMLElement | null} */ (document.querySelector('[data-kt-dead] > .kp-card__stage'));
+    if (!card) return () => {};
+    card.style.minBlockSize = `${card.getBoundingClientRect().height}px`;
+    return () => {
+        card.style.minBlockSize = '';
+    };
+}
+
 /** Delete one dead letter: it leaves the table at once, the hub hears it when the Undo window closes. @param {HTMLElement} row */
 function deleteRowWithUndo(row) {
     const sub = row.dataset.ktSub ?? '';
     const id = row.dataset.ktId ?? '';
     const next = row.nextElementSibling;
     const title = deadLabel(S.data.dead_letters.find((/** @type {any} */ d) => d.subscription === sub && d.id === id));
+    const release = holdFootprint();
     row.remove();
     S.deadTable?.refresh();
     const taken = takeDead([{ subscription: sub, id }]);
-    const settle = holdPending();
+    const held = holdPending();
+    const settle = () => {
+        held();
+        release();
+    };
     const putBack = () => {
         deadBody.insertBefore(row, next && next.isConnected ? next : null);
         S.deadTable?.refresh();
@@ -109,10 +125,15 @@ function untick(rows) {
 function deleteSelected(rows, items, count, undoMs) {
     const places = rows.map((r) => r.nextElementSibling);
     untick(rows);
+    const release = holdFootprint();
     for (const r of rows) r.remove();
     S.deadTable?.refresh();
     const taken = takeDead(items);
-    const settle = holdPending();
+    const held = holdPending();
+    const settle = () => {
+        held();
+        release();
+    };
     const putBack = (/** @type {HTMLElement[]} */ list) => {
         for (const r of list) {
             const place = places[rows.indexOf(r)];
