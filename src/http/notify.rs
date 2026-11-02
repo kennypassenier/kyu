@@ -24,14 +24,35 @@ impl Notifiers {
         Self::default()
     }
 
-    pub fn for_subscription(&self, topic: &str, subscription: &str) -> Arc<Notify> {
+    /// Registers interest in one subscription. The returned guard holds the
+    /// notifier; when the last guard for a subscription drops, the map entry
+    /// goes with it, so names nobody is polling cost no memory.
+    pub fn for_subscription(self: &Arc<Self>, topic: &str, subscription: &str) -> Waiting {
         let key = (topic.to_string(), subscription.to_string());
+        let notify = self
+            .waiters
+            .lock()
+            .expect("the notifier lock is never poisoned")
+            .entry(key.clone())
+            .or_default()
+            .clone();
+        Waiting {
+            notifiers: self.clone(),
+            key,
+            notify,
+        }
+    }
+
+    /// How many subscriptions currently have a registered waiter.
+    pub fn len(&self) -> usize {
         self.waiters
             .lock()
             .expect("the notifier lock is never poisoned")
-            .entry(key)
-            .or_default()
-            .clone()
+            .len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Wakes one waiter per named subscription. One is right for both
@@ -47,5 +68,60 @@ impl Notifiers {
                 notify.notify_one();
             }
         }
+    }
+}
+
+/// One poll's hold on a subscription's [`Notify`]. Dropping it (on every
+/// exit path: answer, error, timeout, client disconnect) removes the map
+/// entry when no other poll shares it.
+pub struct Waiting {
+    notifiers: Arc<Notifiers>,
+    key: (String, String),
+    notify: Arc<Notify>,
+}
+
+impl Waiting {
+    pub fn notify(&self) -> &Notify {
+        &self.notify
+    }
+}
+
+impl Drop for Waiting {
+    fn drop(&mut self) {
+        let mut waiters = self
+            .notifiers
+            .waiters
+            .lock()
+            .expect("the notifier lock is never poisoned");
+        // Two owners means the map and this guard: nobody else is waiting.
+        // Checked under the lock, so a poll registering concurrently either
+        // already counts or finds the entry gone and creates a fresh one.
+        if waiters
+            .get(&self.key)
+            .is_some_and(|held| Arc::strong_count(held) == 2)
+        {
+            waiters.remove(&self.key);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_entry_lives_exactly_as_long_as_a_poll_holds_it() {
+        let notifiers = Arc::new(Notifiers::new());
+        let first = notifiers.for_subscription("t", "s");
+        let second = notifiers.for_subscription("t", "s");
+        assert_eq!(notifiers.len(), 1);
+        drop(first);
+        assert_eq!(notifiers.len(), 1, "a second poll still waits on it");
+        drop(second);
+        assert!(notifiers.is_empty(), "nobody holds it, so it is gone");
+        for name in 0..100 {
+            drop(notifiers.for_subscription("t", &format!("random-{name}")));
+        }
+        assert!(notifiers.is_empty(), "random names leave nothing behind");
     }
 }

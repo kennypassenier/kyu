@@ -109,7 +109,10 @@ pub async fn receive(
     let from_beginning = matches!(query.from.as_deref(), Some("beginning"));
 
     let deadline = Instant::now() + wait;
-    let notify = state.notifiers.for_subscription(&topic, &subscription);
+    // The guard unregisters the notifier on every exit, including the
+    // unknown-topic error of the first claim, so probing names grows nothing.
+    let waiting = state.notifiers.for_subscription(&topic, &subscription);
+    let notify = waiting.notify();
     // Only the first pass can create the subscription, so remember what it
     // said and report it however the poll ends.
     let mut created = None;
