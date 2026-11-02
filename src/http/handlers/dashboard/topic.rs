@@ -29,12 +29,12 @@ const DEAD_LETTERS_SHOWN: usize = 50;
 
 /// What the topic page renders: the topic, its subscriptions, recent
 /// messages, dead letters and the copy-paste commands.
-struct TopicPage {
+pub(super) struct TopicPage {
     topic: TopicView,
     subscriptions: Vec<SubscriptionView>,
     messages: Vec<MessageView>,
     dead_letters: Vec<DeadLetterView>,
-    snippets: dashboard::Snippets,
+    pub(super) snippets: dashboard::Snippets,
     /// Everything the page script draws from: the views above plus the raw
     /// Unix-millisecond stamps the views turn into words, and the commands.
     data: serde_json::Value,
@@ -51,7 +51,7 @@ fn stamped<R, V>(
 }
 
 /// The stamped views and counts the topic page is drawn from, in one read.
-fn load_topic_page(
+pub(super) fn load_topic_page(
     conn: &rusqlite::Connection,
     topic_name: &str,
     now: i64,

@@ -46,6 +46,28 @@ fn snippet(page: &str, form: &str, name: &str) -> String {
         .join(" ")
 }
 
+/// The working command of a step, from the token route a browser calls at Copy time.
+async fn working_command(hub: &KitHub, topic: &str, step: &str) -> String {
+    let response = hub
+        .form(&format!("/t/{topic}/dashboard/token?step={step}"), "")
+        .await;
+    assert_eq!(response.status(), 200, "the token route answers a session");
+    assert_eq!(
+        header(&response, "cache-control").as_deref(),
+        Some("no-store")
+    );
+    let json = body_json(response).await;
+    assert_eq!(json["token"], hub.token());
+    json["command"]
+        .as_str()
+        .expect("a command")
+        .replace("@@kyu-base@@", "")
+        .replace("\\\n", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 async fn topic_page(hub: &KitHub, topic: &str) -> String {
     hub.page(&format!("/t/{topic}/dashboard")).await
 }
@@ -524,7 +546,12 @@ async fn k2_the_snippets_the_dashboard_prints_actually_work() {
     // (S1: the example is the hub describing itself).
     let body = topic_page(&hub, "notify.kenny").await;
     let shown = snippet(&body, "shown", "receive_envelope");
-    let receive = snippet(&body, "working", "receive_envelope");
+    assert!(
+        !body.contains(hub.token()),
+        "the page never carries the login token"
+    );
+    assert!(!body.contains("\"working\""), "nor the working commands");
+    let receive = working_command(&hub, "notify.kenny", "receive_envelope").await;
     assert!(
         receive.starts_with("curl") && receive.contains("envelope=json"),
         "{receive}"
@@ -574,7 +601,11 @@ async fn k2_a_hostile_content_type_cannot_escape_the_dashboard_snippet() {
     let page = topic_page(&hub, "notify.kenny").await;
     // Both the on-screen form and the copied one are pasted into a shell.
     for form in ["shown", "working"] {
-        let publish = snippet(&page, form, "publish");
+        let publish = if form == "shown" {
+            snippet(&page, form, "publish")
+        } else {
+            working_command(&hub, "notify.kenny", "publish").await
+        };
         assert!(
             !publish.contains("evil.lan"),
             "an injection reached the {form} command: {publish}"

@@ -11,6 +11,7 @@ pub mod shell;
 pub mod stats;
 pub mod subscription;
 pub mod subscription_rows;
+pub mod token;
 pub mod topic;
 pub mod topic_data;
 pub mod topics;
@@ -24,5 +25,6 @@ pub use history::{AttemptsQuery, DaysQuery, dashboard_attempts, dashboard_daily}
 pub use policy_edit::dashboard_set_policy_field;
 pub use stats::{HoursQuery, dashboard_retention, dashboard_stats_hourly, dashboard_stats_totals};
 pub use subscription::dashboard_subscription;
+pub use token::dashboard_token;
 pub use topic::dashboard_topic;
 pub use topics::{apps_redirect, topics_page};
