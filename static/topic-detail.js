@@ -65,9 +65,10 @@ function replayWithUndo(m, button) {
     if (replaying.has(m.id)) return;
     replaying.add(m.id);
     button.disabled = true;
+    // The pane may have been redrawn meanwhile: free whichever Replay button of this message is on screen now.
     const settle = () => {
         replaying.delete(m.id);
-        button.disabled = false;
+        for (const b of detailBody.querySelectorAll('[data-kt-replay]')) /** @type {HTMLButtonElement} */ (b).disabled = false;
     };
     const title = payloadTitle(m.payload) ?? 'this message';
     undoToast(`Replaying ${title} to every subscription`, {
@@ -76,8 +77,13 @@ function replayWithUndo(m, button) {
         mode: 'defer',
         max: 3,
         commit: async () => {
-            const r = await call(`${T}/messages/${encodeURIComponent(m.id)}/replay`);
-            settle();
+            /** @type {Awaited<ReturnType<typeof call>>} */
+            let r;
+            try {
+                r = await call(`${T}/messages/${encodeURIComponent(m.id)}/replay`);
+            } finally {
+                settle();
+            }
             if (!r.ok) {
                 throw new Error(
                     /** @type {any} */ (r).missing
@@ -97,6 +103,8 @@ function replayWithUndo(m, button) {
 function replayButton(m) {
     const replay = make('button', 'kp-button', 'Replay this message');
     replay.type = 'button';
+    replay.setAttribute('data-kt-replay', '');
+    replay.disabled = replaying.has(m.id);
     replay.addEventListener('click', () => replayWithUndo(m, replay));
     return replay;
 }
@@ -127,7 +135,8 @@ function payloadSpec(m) {
 /** Draw the detail pane for a message id (the first message when the id is unknown). @param {string} id */
 export function fillDetail(id) {
     const m = MESSAGES.get(id) ?? [...MESSAGES.values()][0];
-    const sig = m ? `${m.id}:${JSON.stringify(m)}` : '';
+    // Stable fields only: the views' "3 minutes ago" texts change every read and must not redraw the pane.
+    const sig = m ? JSON.stringify([m.id, m.content_type, m.payload, m.note, m.published_ms, m.due_ms]) : '';
     if (!m || filledSig === sig) return;
     filledSig = sig;
     const heading = $('[data-kp-pane-heading]', mdRoot);

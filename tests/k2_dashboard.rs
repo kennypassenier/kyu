@@ -536,6 +536,52 @@ async fn k2_the_test_publish_form_puts_a_real_message_on_the_topic() {
 }
 
 #[tokio::test]
+async fn k2_the_token_route_refuses_a_post_without_a_session() {
+    let hub = spawn_kit().await;
+    let response = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("a client")
+        .post(hub.url("/t/notify.kenny/dashboard/token"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(response.status(), 303, "the token route needs a login");
+    assert!(
+        header(&response, "location")
+            .unwrap_or_default()
+            .contains("login"),
+        "and sends the browser to the login page"
+    );
+    let text = response.text().await.unwrap_or_default();
+    assert!(!text.contains(hub.token()), "nothing of the token leaks");
+    hub.shutdown().await;
+}
+
+#[tokio::test]
+async fn k2_the_token_route_refuses_a_cross_origin_post() {
+    let hub = spawn_kit().await;
+    for (name, value) in [
+        ("origin", "http://evil.example"),
+        ("sec-fetch-site", "cross-site"),
+    ] {
+        let response = reqwest::Client::new()
+            .post(hub.url("/t/notify.kenny/dashboard/token"))
+            .header("cookie", hub.session_cookie())
+            .header(name, value)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .send()
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 403, "{name}: {value} is refused");
+        let text = response.text().await.unwrap_or_default();
+        assert!(!text.contains(hub.token()), "nothing of the token leaks");
+    }
+    hub.shutdown().await;
+}
+
+#[tokio::test]
 async fn k2_the_snippets_the_dashboard_prints_actually_work() {
     let hub = spawn_kit().await;
     hub.publish("notify.kenny", "{}").await;
