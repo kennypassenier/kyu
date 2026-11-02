@@ -87,6 +87,7 @@ impl From<EngineError> for ApiError {
             EngineError::SubscriptionArchived { .. } | EngineError::NotArchived { .. } => {
                 StatusCode::CONFLICT
             }
+            EngineError::LimitReached { .. } => StatusCode::TOO_MANY_REQUESTS,
             EngineError::AppExists { .. } => StatusCode::CONFLICT,
             EngineError::UnknownApp { .. } => StatusCode::NOT_FOUND,
             EngineError::Unprotected => StatusCode::CONFLICT,

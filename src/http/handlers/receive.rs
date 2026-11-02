@@ -99,6 +99,9 @@ pub async fn receive(
     Query(query): Query<ReceiveQuery>,
 ) -> Result<Response, ApiError> {
     let app = caller.map(|Extension(caller)| polling_app(caller));
+    let _slot = state
+        .polls
+        .acquire(app.as_deref().unwrap_or("open"), state.max_concurrent_polls)?;
     let subscription = query
         .as_
         .clone()
@@ -109,7 +112,10 @@ pub async fn receive(
     let from_beginning = matches!(query.from.as_deref(), Some("beginning"));
 
     let deadline = Instant::now() + wait;
-    let notify = state.notifiers.for_subscription(&topic, &subscription);
+    // The guard unregisters the notifier on every exit, including the
+    // unknown-topic error of the first claim, so probing names grows nothing.
+    let waiting = state.notifiers.for_subscription(&topic, &subscription);
+    let notify = waiting.notify();
     // Only the first pass can create the subscription, so remember what it
     // said and report it however the poll ends.
     let mut created = None;
@@ -168,7 +174,7 @@ async fn claim(
     let topic = topic.to_string();
     let subscription = subscription.to_string();
     spawn_engine_write(move || {
-        engine.claim_next_as(&topic, &subscription, from_beginning, app.as_deref())
+        engine.poll_next_as(&topic, &subscription, from_beginning, app.as_deref())
     })
     .await
 }

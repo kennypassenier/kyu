@@ -565,7 +565,7 @@ fn l6_defaults_are_hub_wide_and_configurable() {
         retention_ms: None,
         idle_flag_ms: 60 * 60 * 1_000,
         idle_archive_ms: 2 * 60 * 60 * 1_000,
-        expired_event_window_ms: Defaults::default().expired_event_window_ms,
+        ..Defaults::default()
     });
     f.bootstrap("notify.kenny", "quick");
 

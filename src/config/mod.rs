@@ -13,6 +13,7 @@ use anyhow::{Context, Result, bail};
 use crate::engine::Defaults;
 
 mod auth;
+mod counts;
 mod retired;
 
 pub use auth::{Auth, MIN_TOKEN_LEN};
@@ -26,6 +27,10 @@ pub const HELP_EXTRA: &str = "The hub's own environment (read next to the knobs 
   KYU_IDLE_FLAG_MS     idle-subscription flag threshold in ms
   KYU_IDLE_ARCHIVE_MS  idle-subscription archive threshold in ms
   KYU_EXPIRED_EVENT_WINDOW_MS  one message.expired per subscription per this many ms (default a day)
+  KYU_BACKUP_KEEP      how many kyu.backup-*.db files to keep in the state dir (default 7; the same variable deploy/kyu-backup reads)
+  KYU_MAX_TOPICS       most topics the hub holds (default 1000); a publish creating one more answers 429
+  KYU_MAX_SUBSCRIPTIONS_PER_TOPIC  most subscriptions on one topic (default 100); a poll creating one more answers 429
+  KYU_MAX_CONCURRENT_POLLS  most polls one app may have open at once (default 50); one more answers 429
   KYU_DATA_DIR         retired in 4.0.0 (the 2.x name of KYU_STATE_DIR); set, it refuses to start
 Long polls (`GET /t/{topic}/next?wait=`) are exempt from the request timeout.
 --check reads the store (quick_check, schema) and writes nothing: a pending migration is
@@ -42,7 +47,17 @@ pub struct Config {
     pub defaults: Defaults,
     /// Who may talk to the hub (W2).
     pub auth: Auth,
+    /// How many `kyu.backup-*.db` files `POST /api/backup` leaves behind.
+    pub backup_keep: usize,
+    /// How many long polls one caller (app) may hold open at once.
+    pub max_concurrent_polls: usize,
 }
+
+/// The default for `KYU_BACKUP_KEEP`, equal to `deploy/kyu-backup`'s own.
+pub const DEFAULT_BACKUP_KEEP: usize = 7;
+
+/// The default for `KYU_MAX_CONCURRENT_POLLS`.
+pub const DEFAULT_MAX_CONCURRENT_POLLS: usize = 50;
 
 impl Config {
     /// The hub's own settings from the environment, on top of what the kit
@@ -79,12 +94,22 @@ impl Config {
                 std::env::var("KYU_EXPIRED_EVENT_WINDOW_MS").ok().as_deref(),
                 defaults.expired_event_window_ms,
             )?,
+            max_topics: counts::count_from_env("KYU_MAX_TOPICS", defaults.max_topics)?,
+            max_subscriptions_per_topic: counts::count_from_env(
+                "KYU_MAX_SUBSCRIPTIONS_PER_TOPIC",
+                defaults.max_subscriptions_per_topic,
+            )?,
         };
         Ok(Self {
             data_dir: state_dir.to_path_buf(),
             max_body_bytes,
             defaults,
             auth: Auth::parse(token, key)?,
+            backup_keep: counts::count_from_env("KYU_BACKUP_KEEP", DEFAULT_BACKUP_KEEP)?,
+            max_concurrent_polls: counts::count_from_env(
+                "KYU_MAX_CONCURRENT_POLLS",
+                DEFAULT_MAX_CONCURRENT_POLLS,
+            )?,
         })
     }
 }

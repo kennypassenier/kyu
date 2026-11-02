@@ -19,6 +19,7 @@ mod error;
 pub mod ids;
 pub mod names;
 pub mod policy;
+mod poll;
 mod publish;
 mod settle;
 mod store_access;
@@ -106,6 +107,12 @@ pub struct Defaults {
     /// 2026-09-18). A day: one line with a count says what a subscriber
     /// needs to know, and a subscription nobody polls expires everything.
     pub expired_event_window_ms: Millis,
+    /// The most topics the hub will hold; a publish that would create one
+    /// more is refused (`KYU_MAX_TOPICS`).
+    pub max_topics: usize,
+    /// The most subscriptions one topic will hold; a poll that would create
+    /// one more is refused (`KYU_MAX_SUBSCRIPTIONS_PER_TOPIC`).
+    pub max_subscriptions_per_topic: usize,
 }
 
 impl Default for Defaults {
@@ -115,6 +122,8 @@ impl Default for Defaults {
             idle_flag_ms: 7 * 24 * 60 * 60 * 1_000,
             idle_archive_ms: 30 * 24 * 60 * 60 * 1_000,
             expired_event_window_ms: 24 * 60 * 60 * 1_000,
+            max_topics: 1_000,
+            max_subscriptions_per_topic: 100,
         }
     }
 }
@@ -124,6 +133,9 @@ pub struct Engine {
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
     defaults: Defaults,
+    /// When each subscription's poll time was last written, so a busy
+    /// poller costs one write per [`poll::TOUCH_INTERVAL_MS`], not one per poll.
+    poll_touched: Mutex<std::collections::HashMap<(String, String), Millis>>,
 }
 
 impl Engine {
@@ -137,6 +149,7 @@ impl Engine {
             clock,
             ids: Mutex::new(MessageIds::new()),
             defaults,
+            poll_touched: Mutex::default(),
         }
     }
 

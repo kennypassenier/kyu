@@ -72,13 +72,13 @@ fn render_raw(claimed: Claimed) -> Response {
         axum::http::header::X_CONTENT_TYPE_OPTIONS,
         axum::http::HeaderValue::from_static("nosniff"),
     );
-    // attachment only for the types a browser would execute. A payload
+    // attachment for everything but the inert types. A payload
     // published as text/html would otherwise run in the hub's own origin
     // for anyone opening this URL — an iframe on a hostile page is
     // enough. Everything else still opens normally in a tab, which is
     // what the AR2 mini-round settled on: protection without making the
     // API unbrowsable.
-    if executes_in_a_browser(&content_type) {
+    if !is_inert_inline(&content_type) {
         headers.insert(
             header::CONTENT_DISPOSITION,
             axum::http::HeaderValue::from_static("attachment"),
@@ -132,14 +132,14 @@ fn render_envelope(claimed: Claimed, created: Option<&NewSubscription>) -> Respo
     response
 }
 
-/// Whether a browser would run this content type as code rather than show
-/// it as data (AR2 amendment, 2026-08-28).
+/// Whether a content type is inert enough to be shown inline (AR2
+/// amendment, 2026-08-28; inverted from a denylist of executable types).
 ///
-/// Deliberately a short, explicit list rather than a clever rule: the cost
-/// of a wrong entry is a payload that renders itself in the hub's origin, so
-/// the list errs towards including things. `nosniff` accompanies it, which
-/// is what stops a browser executing something that is not on the list.
-fn executes_in_a_browser(content_type: &str) -> bool {
+/// Deliberately a short, explicit allowlist: a type nobody thought about
+/// (a new markup format, a vendor type a browser renders) is handed over as
+/// a download rather than rendered in the hub's origin. `nosniff` accompanies
+/// it, so a browser cannot promote an allowed type to something else.
+fn is_inert_inline(content_type: &str) -> bool {
     let media = content_type
         .split(';')
         .next()
@@ -149,15 +149,16 @@ fn executes_in_a_browser(content_type: &str) -> bool {
 
     matches!(
         media.as_str(),
-        "text/html"
-            | "application/xhtml+xml"
-            | "image/svg+xml"
-            | "text/xml"
-            | "application/xml"
-            | "text/xsl"
-    ) || media.ends_with("+xml")
-        || media.contains("javascript")
-        || media.contains("ecmascript")
+        "application/json"
+            | "application/x-ndjson"
+            | "application/octet-stream"
+            | "text/plain"
+            | "text/csv"
+            | "image/png"
+            | "image/jpeg"
+            | "image/gif"
+            | "image/webp"
+    ) || media.ends_with("+json")
 }
 
 pub(crate) fn insert_str(headers: &mut HeaderMap, name: &'static str, value: &str) {

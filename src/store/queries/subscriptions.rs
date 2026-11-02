@@ -23,6 +23,17 @@ pub fn subscription_id_by_name(tx: &Transaction, topic_id: i64, name: &str) -> R
     .with_context(|| format!("cannot look up subscription {name:?}"))
 }
 
+pub fn count_subscriptions(tx: &Transaction, topic_id: i64) -> Result<usize> {
+    let count: i64 = tx
+        .query_row(
+            "SELECT count(*) FROM subscriptions WHERE topic_id = ?1",
+            [topic_id],
+            |row| row.get(0),
+        )
+        .context("cannot count the subscriptions on this topic")?;
+    Ok(count as usize)
+}
+
 pub fn create_subscription(
     tx: &Transaction,
     topic_id: i64,
