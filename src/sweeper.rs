@@ -8,8 +8,10 @@
 //! Shell rather than domain: the timer and the runtime live here, the
 //! decisions live in the engine (AR1).
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 use std::time::Duration;
 
 use tokio::task::JoinHandle;
@@ -26,26 +28,70 @@ pub const TICK: Duration = Duration::from_secs(1);
 /// mid-sweep has almost nothing to roll back (AR5, K12).
 pub const BATCH_LIMIT: usize = 500;
 
-/// When the sweeper last completed a pass.
+/// Back-to-back passes allowed within one tick. A backlog drains across
+/// ticks beyond this, so one tick can never monopolise the writer.
+pub const MAX_PASSES_PER_TICK: usize = 20;
+
+/// Consecutive failed ticks before the sweeper reports itself failing.
+pub const FAILING_AFTER: u32 = 3;
+
+/// When the sweeper last completed a pass successfully, and how it has been
+/// failing since.
 ///
 /// Shared with the health endpoint (W6): a hub whose sweeper has stopped
 /// still answers every request, but leases stop expiring and messages stop
 /// coming back — a failure that is invisible from the outside unless
 /// something watches for it.
 #[derive(Debug, Clone)]
-pub struct Heartbeat(Arc<AtomicI64>);
+pub struct Heartbeat(Arc<Beat>);
+
+#[derive(Debug)]
+struct Beat {
+    last_ms: AtomicI64,
+    failures: AtomicU32,
+    last_error: Mutex<Option<String>>,
+}
 
 impl Heartbeat {
     pub fn starting_at(now_ms: Millis) -> Self {
-        Self(Arc::new(AtomicI64::new(now_ms)))
+        Self(Arc::new(Beat {
+            last_ms: AtomicI64::new(now_ms),
+            failures: AtomicU32::new(0),
+            last_error: Mutex::new(None),
+        }))
     }
 
+    /// A pass completed: the sweeper is alive and any failure streak ends.
     pub fn beat(&self, now_ms: Millis) {
-        self.0.store(now_ms, Ordering::Relaxed);
+        self.0.last_ms.store(now_ms, Ordering::Relaxed);
+        self.0.failures.store(0, Ordering::Relaxed);
+    }
+
+    /// A tick failed. The heartbeat is deliberately not advanced.
+    pub fn record_failure(&self, error: String) {
+        self.0.failures.fetch_add(1, Ordering::Relaxed);
+        *self
+            .0
+            .last_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error);
+    }
+
+    pub fn consecutive_failures(&self) -> u32 {
+        self.0.failures.load(Ordering::Relaxed)
+    }
+
+    /// The error of the most recent failed tick, if any ever failed.
+    pub fn last_error(&self) -> Option<String> {
+        self.0
+            .last_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 
     pub fn last_beat_ms(&self) -> Millis {
-        self.0.load(Ordering::Relaxed)
+        self.0.last_ms.load(Ordering::Relaxed)
     }
 
     /// A sweeper that has missed several ticks is reported unhealthy. The
@@ -68,7 +114,7 @@ pub const STALE_AFTER_MS: Millis = 5_000;
 /// module stays independent of the HTTP layer.
 pub fn spawn<F>(engine: Arc<Engine>, heartbeat: Heartbeat, wake: F) -> JoinHandle<()>
 where
-    F: Fn(&[(String, String)]) + Send + 'static,
+    F: Fn(&[(String, String)]) + Send + Sync + 'static,
 {
     tokio::spawn(async move {
         let mut ticker = tokio::time::interval(TICK);
@@ -76,45 +122,57 @@ where
 
         loop {
             ticker.tick().await;
-            heartbeat.beat(engine.now_ms());
-
-            // Keep going while batches come back full: the tick paces idle
-            // polling, not the draining of a backlog.
-            loop {
-                let engine = engine.clone();
-                let swept = tokio::task::spawn_blocking(move || engine.sweep(BATCH_LIMIT)).await;
-
-                let report = match swept {
-                    Ok(Ok(report)) => report,
-                    Ok(Err(error)) => {
-                        // A failing sweep must not kill the task: the next
-                        // tick tries again, and the error is on the record.
-                        tracing::error!(error = ?error, "the sweep failed");
-                        break;
-                    }
-                    Err(join_error) => {
-                        tracing::error!(error = %join_error, "the sweep task failed to run");
-                        break;
-                    }
-                };
-
-                if report.changed() > 0 {
-                    tracing::info!(
-                        redelivered = report.redelivered,
-                        dead_lettered = report.dead_lettered,
-                        expired = report.expired,
-                        "sweep settled overdue deliveries"
-                    );
-                }
-
-                if !report.wake.is_empty() {
-                    wake(&report.wake);
-                }
-
-                if !report.more_work {
-                    break;
+            // A failed tick must not kill the task: the next tick tries
+            // again, the error is on the record, and the heartbeat stays
+            // put so health sees the streak.
+            match tick(&engine, &wake).await {
+                Ok(()) => heartbeat.beat(engine.now_ms()),
+                Err(error) => {
+                    tracing::error!(error = %error, "the sweep failed");
+                    heartbeat.record_failure(error);
                 }
             }
         }
     })
+}
+
+/// One tick: passes in a row while they keep changing things, at most
+/// [`MAX_PASSES_PER_TICK`]. The tick paces idle polling, not the draining
+/// of a backlog.
+async fn tick<F>(engine: &Arc<Engine>, wake: &F) -> Result<(), String>
+where
+    F: Fn(&[(String, String)]) + Sync,
+{
+    for _ in 0..MAX_PASSES_PER_TICK {
+        let worker = engine.clone();
+        let report = tokio::task::spawn_blocking(move || worker.sweep(BATCH_LIMIT))
+            .await
+            .map_err(|join| {
+                if join.is_panic() {
+                    "sweeper tick panicked in the sweep".to_string()
+                } else {
+                    format!("the sweep task failed to run: {join}")
+                }
+            })?
+            .map_err(|error| format!("{error:?}"))?;
+
+        if report.changed() > 0 {
+            tracing::info!(
+                redelivered = report.redelivered,
+                dead_lettered = report.dead_lettered,
+                expired = report.expired,
+                "sweep settled overdue deliveries"
+            );
+        }
+        if !report.wake.is_empty() {
+            catch_unwind(AssertUnwindSafe(|| wake(&report.wake)))
+                .map_err(|_| "sweeper tick panicked in the wake callback".to_string())?;
+        }
+        // Rows actually changed, not rows scanned: a full batch that settles
+        // Unchanged would otherwise spin.
+        if !(report.more_work && report.changed() > 0) {
+            return Ok(());
+        }
+    }
+    Ok(())
 }

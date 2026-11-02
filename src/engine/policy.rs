@@ -26,6 +26,13 @@ pub const DEFAULT_MAX_ATTEMPTS: i64 = 5;
 /// Base delay before a failed delivery is offered again.
 pub const DEFAULT_BACKOFF_MS: i64 = 1_000;
 
+/// Longest lease a subscription may ask for: one day. Lease and TTL are
+/// added to a timestamp in SQL, so an unbounded value would overflow it.
+pub const MAX_LEASE_MS: i64 = 24 * 60 * 60 * 1_000;
+
+/// Longest TTL a subscription may ask for: ten years.
+pub const MAX_TTL_MS: i64 = 3_650 * 24 * 60 * 60 * 1_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {
     pub lease_ms: i64,
@@ -91,6 +98,17 @@ pub fn validate(stored: StoredPolicy) -> Result<(), (&'static str, String)> {
                 .to_string(),
         ));
     }
+    if let Some(lease) = stored.lease_ms
+        && lease > MAX_LEASE_MS
+    {
+        return Err((
+            "lease_ms",
+            format!(
+                "a lease can be at most {MAX_LEASE_MS} ms (one day); a longer one would \
+                 keep a crashed consumer's message hidden for days"
+            ),
+        ));
+    }
     if let Some(attempts) = stored.max_attempts
         && attempts < 1
     {
@@ -117,6 +135,17 @@ pub fn validate(stored: StoredPolicy) -> Result<(), (&'static str, String)> {
             "a TTL must be longer than zero milliseconds; omit it entirely to keep \
              messages regardless of age"
                 .to_string(),
+        ));
+    }
+    if let Some(ttl) = stored.ttl_ms
+        && ttl > MAX_TTL_MS
+    {
+        return Err((
+            "ttl_ms",
+            format!(
+                "a TTL can be at most {MAX_TTL_MS} ms (3650 days); omit it entirely to \
+                 keep messages regardless of age"
+            ),
         ));
     }
     for (field, value) in [

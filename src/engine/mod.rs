@@ -140,6 +140,16 @@ impl Engine {
         }
     }
 
+    /// The id generator, recovered if a panic poisoned its lock. The guarded
+    /// state is a monotonic ULID generator whose every step leaves it valid,
+    /// so a poisoned lock is safe to reuse; failing instead would break
+    /// publish and sweep for the rest of the process.
+    fn lock_ids(&self) -> std::sync::MutexGuard<'_, MessageIds> {
+        self.ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     pub fn defaults(&self) -> Defaults {
         self.defaults
     }

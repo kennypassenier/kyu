@@ -28,7 +28,7 @@ impl Notifiers {
         let key = (topic.to_string(), subscription.to_string());
         self.waiters
             .lock()
-            .expect("the notifier lock is never poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .entry(key)
             .or_default()
             .clone()
@@ -41,7 +41,7 @@ impl Notifiers {
         let waiters = self
             .waiters
             .lock()
-            .expect("the notifier lock is never poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for subscription in subscriptions {
             if let Some(notify) = waiters.get(&(topic.to_string(), subscription.clone())) {
                 notify.notify_one();

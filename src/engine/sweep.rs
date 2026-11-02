@@ -6,7 +6,7 @@ use crate::store::queries::{self, Overdue};
 
 use super::clock::Millis;
 use super::ids::MessageIds;
-use super::settle::{Cause, Settled, apply};
+use super::settle::{Cause, Settled, announce, apply};
 use super::{Defaults, Engine, Result};
 
 impl Engine {
@@ -24,7 +24,7 @@ impl Engine {
             // Locking the id generator inside the store transaction is safe
             // in one direction only: publish takes the generator and releases
             // it *before* the store, so the two can never wait on each other.
-            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            let mut ids = self.lock_ids();
             let mut pass = Pass {
                 tx,
                 ids: &mut ids,
@@ -78,8 +78,7 @@ impl Pass<'_> {
     fn settle_leases(&mut self) -> Result<()> {
         let overdue = queries::overdue_claims(self.tx, self.now, self.limit)?;
         let stale = queries::pending_past_ttl(self.tx, self.now, self.limit)?;
-        self.note_batch(overdue.len());
-        self.note_batch(stale.len());
+        let (scanned, before) = (overdue.len().max(stale.len()), self.report.changed());
 
         for delivery in overdue {
             self.settle_overdue(&delivery)?;
@@ -92,32 +91,29 @@ impl Pass<'_> {
                 queries::note_expiry(self.tx, delivery.sub_id, 1)?;
             }
         }
+        // A full batch only means more work if something in it changed; a
+        // batch of rows that all settled Unchanged would be rescanned forever.
+        if self.report.changed() > before {
+            self.note_batch(scanned);
+        }
         Ok(())
     }
 
     fn settle_overdue(&mut self, delivery: &Overdue) -> Result<()> {
-        match apply(self.tx, delivery, self.now, Cause::LeaseExpired)? {
+        let settled = apply(self.tx, delivery, self.now, Cause::LeaseExpired)?;
+        match settled {
             Settled::Redelivered => {
                 self.report.redelivered += 1;
                 self.report
                     .wake
                     .push((delivery.topic.clone(), delivery.subscription.clone()));
             }
-            Settled::DeadLettered => {
-                self.report.dead_lettered += 1;
-                self.emit(&Event::DeadLettered {
-                    topic: delivery.topic.clone(),
-                    subscription: delivery.subscription.clone(),
-                    message_id: queries::message_id_of(self.tx, delivery.msg_seq)?,
-                    attempts: delivery.attempts + 1,
-                })?;
-            }
-            Settled::Expired => {
-                self.report.expired += 1;
-                queries::note_expiry(self.tx, delivery.sub_id, 1)?;
-            }
+            Settled::DeadLettered => self.report.dead_lettered += 1,
+            Settled::Expired => self.report.expired += 1,
             Settled::Unchanged => {}
         }
+        let woken = announce(self.tx, self.ids, self.now, delivery, settled)?;
+        self.report.wake_events(woken);
         Ok(())
     }
 

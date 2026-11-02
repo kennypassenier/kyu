@@ -520,3 +520,199 @@ fn l4_an_ack_that_lands_during_a_sweep_wins() {
         "an acked message must never be resurrected by the sweeper"
     );
 }
+
+// ─── Announcements: a nack settles like a sweep and says so ─────────────────
+
+impl Fixture {
+    /// How many hub events of `kind` sit on `kyu.events`.
+    fn events_of(&self, kind: &str) -> i64 {
+        self.store.with_conn(|conn| {
+            conn.query_row(
+                "SELECT count(*) FROM messages m JOIN topics t ON t.id = m.topic_id
+                  WHERE t.name = 'kyu.events'
+                    AND CAST(m.payload AS TEXT) LIKE ?1",
+                [format!("%\"{kind}\"%")],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("an event count")
+        })
+    }
+
+    fn unannounced_expiries(&self, subscription: &str) -> i64 {
+        self.store.with_conn(|conn| {
+            conn.query_row(
+                "SELECT expired_unannounced FROM subscriptions WHERE name = ?1",
+                [subscription],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("the subscription must exist")
+        })
+    }
+}
+
+#[test]
+fn l4_a_nack_to_the_dead_letters_is_announced_like_a_sweep_would() {
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    let id = f.publish("jobs.transcode", "not json");
+    f.claim("jobs.transcode", "worker");
+
+    f.engine
+        .nack("jobs.transcode", "worker", &id, true)
+        .expect("the nack");
+
+    assert_eq!(f.events_of("message.dead_lettered"), 1);
+}
+
+#[test]
+fn l4_a_nack_on_the_last_attempt_is_announced_as_dead_lettered() {
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    f.engine
+        .set_policy(
+            "jobs.transcode",
+            "worker",
+            StoredPolicy {
+                max_attempts: Some(1),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("the policy");
+    let id = f.publish("jobs.transcode", r#"{"job":1}"#);
+    f.claim("jobs.transcode", "worker");
+
+    let settled = f
+        .engine
+        .nack("jobs.transcode", "worker", &id, false)
+        .expect("the nack");
+
+    assert_eq!(settled, Settled::DeadLettered);
+    assert_eq!(f.events_of("message.dead_lettered"), 1);
+}
+
+#[test]
+fn l4_a_nack_past_the_ttl_counts_towards_the_expiry_announcement() {
+    let f = fixture();
+    f.bootstrap("speak.kenny_pc", "tts");
+    f.engine
+        .set_policy(
+            "speak.kenny_pc",
+            "tts",
+            StoredPolicy {
+                ttl_ms: Some(600_000),
+                lease_ms: Some(1_800_000),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("the policy");
+    let id = f.publish("speak.kenny_pc", r#"{"say":"hallo"}"#);
+    f.claim("speak.kenny_pc", "tts");
+    f.clock.advance(700_000);
+
+    let settled = f
+        .engine
+        .nack("speak.kenny_pc", "tts", &id, false)
+        .expect("the nack");
+
+    assert_eq!(settled, Settled::Expired);
+    assert_eq!(f.unannounced_expiries("tts"), 1);
+    f.engine.sweep(100).expect("a sweep");
+    assert_eq!(f.events_of("message.expired"), 1);
+}
+
+// ─── A message past its TTL is never claimed, even before the sweeper runs ──
+
+#[test]
+fn l4_a_message_past_its_ttl_cannot_be_claimed_before_the_sweeper_expires_it() {
+    let f = fixture();
+    f.bootstrap("speak.kenny_pc", "tts");
+    f.engine
+        .set_policy(
+            "speak.kenny_pc",
+            "tts",
+            StoredPolicy {
+                ttl_ms: Some(600_000),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("the policy");
+    let id = f.publish("speak.kenny_pc", r#"{"say":"hallo"}"#);
+
+    f.clock.advance(599_999);
+    assert_eq!(f.claim("speak.kenny_pc", "tts"), Some(id.clone()));
+    f.engine
+        .nack("speak.kenny_pc", "tts", &id, false)
+        .expect("the nack puts it back");
+
+    f.clock.advance(60_001);
+    assert_eq!(
+        f.claim("speak.kenny_pc", "tts"),
+        None,
+        "no sweep has run, yet the stale message must not be handed out"
+    );
+}
+
+// ─── Policy bounds: lease and TTL are added to timestamps in SQL ────────────
+
+#[test]
+fn l4_a_lease_or_ttl_that_would_overflow_a_timestamp_is_refused() {
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    for (field, policy) in [
+        (
+            "lease_ms",
+            StoredPolicy {
+                lease_ms: Some(i64::MAX),
+                ..StoredPolicy::default()
+            },
+        ),
+        (
+            "ttl_ms",
+            StoredPolicy {
+                ttl_ms: Some(i64::MAX),
+                ..StoredPolicy::default()
+            },
+        ),
+    ] {
+        let error = f
+            .engine
+            .set_policy("jobs.transcode", "worker", policy)
+            .expect_err("must be refused");
+        assert!(
+            matches!(&error, kyu::engine::EngineError::InvalidPolicy { field: got, .. } if *got == field),
+            "{field}: {error:?}"
+        );
+    }
+}
+
+// ─── The sweeper heartbeat reports a failing sweep ──────────────────────────
+
+#[test]
+fn l4_a_sweeper_that_keeps_failing_reports_failing_with_the_last_error() {
+    use chassis::Subsystem;
+    use kyu::kit::SweeperSubsystem;
+    use kyu::sweeper::{FAILING_AFTER, Heartbeat};
+
+    let f = fixture();
+    let heartbeat = Heartbeat::starting_at(f.engine.now_ms());
+    let subsystem = SweeperSubsystem {
+        engine: Arc::new(Engine::new(f.store.clone(), f.clock.clone())),
+        heartbeat: heartbeat.clone(),
+    };
+
+    for n in 1..FAILING_AFTER {
+        heartbeat.record_failure(format!("disk on fire {n}"));
+        assert!(subsystem.check().ok, "a single failure is not yet an alarm");
+    }
+    heartbeat.record_failure("disk on fire last".to_string());
+    let status = subsystem.check();
+    assert!(!status.ok);
+    assert!(
+        status.detail.contains("disk on fire last"),
+        "{}",
+        status.detail
+    );
+
+    heartbeat.beat(f.engine.now_ms());
+    assert!(subsystem.check().ok, "a successful pass ends the streak");
+}

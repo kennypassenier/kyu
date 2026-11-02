@@ -45,6 +45,9 @@ pub fn insert_pending_delivery(tx: &Transaction, msg_seq: i64, sub_id: i64) -> R
 /// Ordering is by `msg_seq`, the insertion sequence — never by the ULID,
 /// because a clock that steps backwards after a power cut would otherwise
 /// reorder the queue (AR7).
+///
+/// A message past its subscription's TTL, measured from `published_at` as
+/// the sweeper does, is never claimed, even before the sweeper expires it.
 pub fn claim_next(
     tx: &Transaction,
     sub_id: i64,
@@ -59,8 +62,10 @@ pub fn claim_next(
                     SELECT d.msg_seq, d.sub_id
                       FROM deliveries d
                       JOIN messages m ON m.seq = d.msg_seq
+                      JOIN subscriptions s ON s.id = d.sub_id
                      WHERE d.sub_id = ?1
                        AND d.state = 'pending'
+                       AND (s.ttl_ms IS NULL OR m.published_at + s.ttl_ms > ?2)
                        AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= ?2)
                        AND (m.due_at IS NULL OR m.due_at <= ?2)
                      ORDER BY d.msg_seq

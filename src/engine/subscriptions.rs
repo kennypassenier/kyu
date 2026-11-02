@@ -25,7 +25,7 @@ impl Engine {
 
             queries::set_subscription_state(tx, sub_id, "active")?;
             queries::touch_subscription_poll(tx, sub_id, now)?;
-            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            let mut ids = self.lock_ids();
             events::emit(
                 tx,
                 &mut ids,
@@ -52,7 +52,7 @@ impl Engine {
             }
             queries::set_subscription_state(tx, sub_id, "archived")?;
             let lapsed = queries::lapse_outstanding(tx, sub_id, now)?;
-            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            let mut ids = self.lock_ids();
             events::emit(
                 tx,
                 &mut ids,
