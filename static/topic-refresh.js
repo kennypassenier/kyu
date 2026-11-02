@@ -23,17 +23,18 @@ export async function readRetention() {
     }
 }
 
-/** Fetch this page again and take its data block. */
+/** Fetch this page again and take its data block. Resolves to whether it read: false while an Undo window is open. */
 export async function load() {
-    if (S.pending > 0) return;
+    if (S.pending > 0) return false;
     const res = await fetch(location.pathname + location.search, { headers: { Accept: 'text/html' }, credentials: 'same-origin' });
     if (!res.ok) throw new Error(`the page answered ${res.status}`);
     const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
     const block = doc.getElementById('kyu-topic-data');
     if (!block) throw new Error('the page had no data');
-    if (S.pending > 0) return;
+    if (S.pending > 0) return false;
     S.data = JSON.parse(block.textContent ?? '{}');
     apply();
+    return true;
 }
 
 /** Resolve once the payload block shows its failed plate (it draws after its loading card has closed), or after 1 s. */

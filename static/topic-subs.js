@@ -4,7 +4,7 @@ import { cardStateExports, undoToastExports, overlaysExports, segmentedExports }
 import { $, $$, make, plural } from './topic-util.js';
 import { S, SUBS, T, TOPIC, call, sentence, holdPending } from './topic-state.js';
 import { reconcile } from './topic-reconcile.js';
-import { subRow, paintRow } from './topic-subs-rows.js';
+import { subRow, paintRow, patchRow, dropLoses } from './topic-subs-rows.js';
 import { reload } from './topic-refresh.js';
 const { setCardState } = cardStateExports;
 const { undoToast } = undoToastExports;
@@ -29,7 +29,8 @@ export function updateCounts() {
 export function renderSubs() {
     SUBS.clear();
     for (const s of S.data.subscriptions) SUBS.set(s.name, { ...s });
-    const added = reconcile(subsBody, [...SUBS.values()], (s) => s.name, subRow);
+    const added = reconcile(subsBody, [...SUBS.values()], (s) => s.name, subRow, patchRow);
+    dropLoses(new Set(SUBS.keys()));
     fixTooltips(added);
     updateCounts();
     if (SUBS.size === 0)
@@ -124,6 +125,7 @@ async function deleteSub(s) {
     }
     subsBody.querySelector(`tr[data-kt-sub="${CSS.escape(s.name)}"]`)?.remove();
     SUBS.delete(s.name);
+    dropLoses(new Set(SUBS.keys()));
     updateCounts();
     S.subsTable?.refresh();
     if (SUBS.size === 0) setCardState(subsCard, 'empty', { title: 'Nothing has polled this topic yet', text: `A subscription shows up here the first time something polls ${TOPIC}.` });

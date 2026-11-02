@@ -35,7 +35,7 @@ function backlogItems() {
             key: `backlog-${t.name}`,
             severity: /** @type {const} */ ('warning'),
             title: `${t.name}: ${number(t.backlog)} messages waiting`,
-            text: 'No subscription has taken them yet; they are safe and will be delivered in order.',
+            text: 'These are waiting for their subscriptions to take them; they are safe and will be delivered in order.',
             action: show(t.name, 'Show the topic'),
         }));
 }

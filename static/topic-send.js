@@ -1,6 +1,6 @@
 // kyu: topic-send.js, section 2 of the Topic page: the send-and-receive commands, and the secret fields.
 
-import { $, $$ } from './topic-util.js';
+import { $, $$, plural } from './topic-util.js';
 import { S, page, withOrigin } from './topic-state.js';
 
 // Two copy buttons stand in every step: the command block's own "Copy" (without the token) and the secret field's,
@@ -50,5 +50,5 @@ send.addEventListener(
 );
 {
     const words = $('[data-kt-ttl-words]', send);
-    if (words) words.textContent = ttl === 0 ? 'until you press Hide' : `for ${ttl} seconds`;
+    if (words) words.textContent = ttl === 0 ? 'until you press Hide' : `for ${plural(ttl, 'second', 'seconds')}`;
 }

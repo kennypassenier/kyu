@@ -24,10 +24,15 @@ export function setDetailCode(state, message) {
     if (state === 'ready') setCode(fig, spec);
     else setCode(fig, { ...spec, state, message });
 }
-let filledId = '';
-/** Forget which message the pane shows, so the next fillDetail draws it again. */
-export function resetDetail() {
-    filledId = '';
+/** The message the pane shows, as its id and data; the pane is drawn again only when this changes. */
+let filledSig = '';
+/** Empty the pane when no message is left, so the old one and its Replay button do not stay. */
+export function clearDetail() {
+    filledSig = '';
+    detailCode = null;
+    const heading = $('[data-kp-pane-heading]', mdRoot);
+    if (heading) heading.textContent = '';
+    detailBody.replaceChildren();
 }
 
 /** The facts list of a message. @param {any} m */
@@ -52,8 +57,18 @@ function factsBlock(m) {
 /** How long Replay waits, so it can be taken back, before the message goes out. */
 const REPLAY_UNDO_MS = 6000;
 
-/** Replay with an Undo window, like delete: nothing is sent until it closes. @param {any} m */
-function replayWithUndo(m) {
+/** Messages whose Replay waits in an Undo window, so one message is never replayed twice at once. @type {Set<string>} */
+const replaying = new Set();
+
+/** Replay with an Undo window, like delete: nothing is sent until it closes. @param {any} m @param {HTMLButtonElement} button */
+function replayWithUndo(m, button) {
+    if (replaying.has(m.id)) return;
+    replaying.add(m.id);
+    button.disabled = true;
+    const settle = () => {
+        replaying.delete(m.id);
+        button.disabled = false;
+    };
     const title = payloadTitle(m.payload) ?? 'this message';
     undoToast(`Replaying ${title} to every subscription`, {
         ms: REPLAY_UNDO_MS,
@@ -62,6 +77,7 @@ function replayWithUndo(m) {
         max: 3,
         commit: async () => {
             const r = await call(`${T}/messages/${encodeURIComponent(m.id)}/replay`);
+            settle();
             if (!r.ok) {
                 throw new Error(
                     /** @type {any} */ (r).missing
@@ -72,8 +88,8 @@ function replayWithUndo(m) {
             toast(`Replayed ${title}. Every active subscription will receive it.`, { ms: 4000 });
             void reload();
         },
-        undo: () => {},
-        restore: () => {},
+        undo: settle,
+        restore: settle,
     });
 }
 
@@ -81,7 +97,7 @@ function replayWithUndo(m) {
 function replayButton(m) {
     const replay = make('button', 'kp-button', 'Replay this message');
     replay.type = 'button';
-    replay.addEventListener('click', () => replayWithUndo(m));
+    replay.addEventListener('click', () => replayWithUndo(m, replay));
     return replay;
 }
 
@@ -111,8 +127,9 @@ function payloadSpec(m) {
 /** Draw the detail pane for a message id (the first message when the id is unknown). @param {string} id */
 export function fillDetail(id) {
     const m = MESSAGES.get(id) ?? [...MESSAGES.values()][0];
-    if (!m || filledId === m.id) return;
-    filledId = m.id;
+    const sig = m ? `${m.id}:${JSON.stringify(m)}` : '';
+    if (!m || filledSig === sig) return;
+    filledSig = sig;
     const heading = $('[data-kp-pane-heading]', mdRoot);
     if (heading) heading.textContent = `Message ${m.id}`;
     detailBody.replaceChildren();

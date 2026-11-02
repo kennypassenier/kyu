@@ -45,16 +45,21 @@ const toggleTile = (key, label, tone, n, words, hint) =>
         kpiTrend(key, words),
     );
 
+/** What the Backlog tile says about its own value. @param {{ backlog: number, inflight: number }} t */
+function backlogWords(t) {
+    if (t.backlog > 0) return `${number(t.inflight)} more in flight`;
+    return t.inflight > 0 ? `nothing is waiting, ${number(t.inflight)} in flight` : 'nothing is waiting';
+}
+
 /** The key-figure tiles as markup. */
 export function kpiTiles() {
     const t = totals();
-    const calm = t.backlog + t.dead === 0;
     const hint = filterHint();
     return [
         plainTile('topics', 'Topics', 'topics', t.topics, `${plural(t.subscriptions, 'subscription', 'subscriptions')} in all`),
         plainTile('messages', 'Messages', 'messages', t.messages, 'kept across all topics'),
-        toggleTile('backlog', 'Backlog', calm ? '' : 'warning', t.backlog, calm ? 'nothing is waiting' : `${number(t.inflight)} more in flight`, hint),
-        toggleTile('dead', 'Dead', calm ? '' : 'destructive', t.dead, t.dead === 0 ? 'nothing needs a decision' : `${number(t.lapsed)} lapsed, not dead yet`, hint),
+        toggleTile('backlog', 'Backlog', t.backlog > 0 ? 'warning' : '', t.backlog, backlogWords(t), hint),
+        toggleTile('dead', 'Dead', t.dead > 0 ? 'destructive' : '', t.dead, t.dead === 0 ? 'nothing needs a decision' : `${number(t.lapsed)} lapsed, not dead yet`, hint),
     ];
 }
 

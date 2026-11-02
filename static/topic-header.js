@@ -15,7 +15,7 @@ export function renderHeader() {
         badge.textContent = `${num(t.dead)} dead`;
     }
     const facts = $('[data-kt-facts]', header);
-    if (facts) facts.textContent = `${num(t.messages)} messages retained · backlog ${num(t.backlog)} · ${plural(t.subscriptions, 'subscription', 'subscriptions')}`;
+    if (facts) facts.textContent = `${plural(t.messages, 'message', 'messages')} retained · backlog ${num(t.backlog)} · ${plural(t.subscriptions, 'subscription', 'subscriptions')}`;
     const last = $('[data-kt-last]', header);
     if (last) {
         last.hidden = !t.last_published_ms;

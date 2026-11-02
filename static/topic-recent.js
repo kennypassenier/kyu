@@ -1,10 +1,10 @@
 // kyu: topic-recent.js, section 6 of the Topic page: the recent-messages list and its master-detail pane wiring.
 
 import { masterDetailExports, statePlateExports } from '/static/kp/dist/kp-themes.min.js';
-import { $, make, num, iso, bytesText } from './topic-util.js';
+import { $, make, num, plural, iso, bytesText } from './topic-util.js';
 import { S, MESSAGES, TOPIC } from './topic-state.js';
 import { stage } from './topic-stage.js';
-import { recent, mdRoot, fillDetail, resetDetail } from './topic-detail.js';
+import { recent, mdRoot, fillDetail, clearDetail } from './topic-detail.js';
 import { reload } from './topic-refresh.js';
 const { masterDetail, setPaneState } = masterDetailExports;
 const { statePlate } = statePlateExports;
@@ -41,18 +41,18 @@ export function renderRecent() {
     const list = S.data.messages;
     MESSAGES.clear();
     for (const m of list) MESSAGES.set(m.id, m);
-    resetDetail();
     const count = $('[data-kt-recent-count]', recent);
-    if (count) count.textContent = list.length ? `The newest ${num(list.length)} of ${num(S.data.topic.messages)} messages retained on ${TOPIC}.` : '';
+    if (count) count.textContent = list.length ? `The newest ${num(list.length)} of ${plural(S.data.topic.messages, 'message', 'messages')} retained on ${TOPIC}.` : '';
+    const wanted = new Set(list.map((/** @type {any} */ m) => m.id));
+    for (const li of [...items.children]) if (!wanted.has(/** @type {HTMLElement} */ (li).dataset.kpKey)) li.remove();
     if (list.length === 0) {
+        clearDetail();
         recentStage.plate(statePlate(document, { kind: 'empty', title: 'No messages yet', text: `Messages published to ${TOPIC} show here.` }), 'none');
         return;
     }
     recentStage.ready();
     const known = new Set([...items.children].map((li) => /** @type {HTMLElement} */ (li).dataset.kpKey));
     const fresh = list.filter((/** @type {any} */ m) => !known.has(m.id));
-    const wanted = new Set(list.map((/** @type {any} */ m) => m.id));
-    for (const li of [...items.children]) if (!wanted.has(/** @type {HTMLElement} */ (li).dataset.kpKey)) li.remove();
     const first = known.size === 0;
     // Newest first: new arrivals go to the head.
     const lis = fresh.map(messageItem);
@@ -62,8 +62,10 @@ export function renderRecent() {
     if (S.booted) {
         for (const li of lis) S.attachAll?.(li);
         const md = masterDetail(mdRoot);
-        if (md && md.key() === null) md.select(list[0].id);
-        else if (md) fillDetail(String(md.key()));
+        const open = md?.key();
+        // A selection that was pruned moves to the first message, so the heading and the selection agree.
+        if (md && (open == null || !MESSAGES.has(String(open)))) md.select(list[0].id);
+        else if (md) fillDetail(String(open));
     }
 }
 
