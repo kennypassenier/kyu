@@ -50,6 +50,8 @@ struct Beat {
     last_ms: AtomicI64,
     failures: AtomicU32,
     last_error: Mutex<Option<String>>,
+    /// When the clock last looked wrong, and why.
+    clock_skew: Mutex<Option<(Millis, String)>>,
 }
 
 impl Heartbeat {
@@ -58,6 +60,7 @@ impl Heartbeat {
             last_ms: AtomicI64::new(now_ms),
             failures: AtomicU32::new(0),
             last_error: Mutex::new(None),
+            clock_skew: Mutex::new(None),
         }))
     }
 
@@ -75,6 +78,27 @@ impl Heartbeat {
             .last_error
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error);
+    }
+
+    /// A sweep skipped its deletions because the clock looked wrong.
+    pub fn note_clock_skew(&self, now_ms: Millis, reason: String) {
+        *self
+            .0
+            .clock_skew
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((now_ms, reason));
+    }
+
+    /// The reason the clock looked wrong, while the note is recent enough
+    /// for an operator to still want to see it.
+    pub fn clock_skew(&self, now_ms: Millis) -> Option<String> {
+        let held = self
+            .0
+            .clock_skew
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (at, reason) = held.as_ref()?;
+        (now_ms.saturating_sub(*at) < CLOCK_NOTE_HOLD_MS).then(|| reason.clone())
     }
 
     pub fn consecutive_failures(&self) -> u32 {
@@ -106,6 +130,10 @@ impl Heartbeat {
 /// unhealthy: five ticks.
 pub const STALE_AFTER_MS: Millis = 5_000;
 
+/// How long a clock warning stays on /healthz after the sweep that raised
+/// it: a skewed sweep passes in a second, and an operator looks hours later.
+pub const CLOCK_NOTE_HOLD_MS: Millis = 60 * 60 * 1_000;
+
 /// Runs until the returned handle is dropped or aborted.
 ///
 /// `wake` is called with the subscriptions that gained a message again, so
@@ -125,7 +153,7 @@ where
             // A failed tick must not kill the task: the next tick tries
             // again, the error is on the record, and the heartbeat stays
             // put so health sees the streak.
-            match tick(&engine, &wake).await {
+            match tick(&engine, &heartbeat, &wake).await {
                 Ok(()) => heartbeat.beat(engine.now_ms()),
                 Err(error) => {
                     tracing::error!(error = %error, "the sweep failed");
@@ -139,7 +167,7 @@ where
 /// One tick: passes in a row while they keep changing things, at most
 /// [`MAX_PASSES_PER_TICK`]. The tick paces idle polling, not the draining
 /// of a backlog.
-async fn tick<F>(engine: &Arc<Engine>, wake: &F) -> Result<(), String>
+async fn tick<F>(engine: &Arc<Engine>, heartbeat: &Heartbeat, wake: &F) -> Result<(), String>
 where
     F: Fn(&[(String, String)]) + Sync,
 {
@@ -156,6 +184,9 @@ where
             })?
             .map_err(|error| format!("{error:?}"))?;
 
+        if let Some(reason) = &report.clock_skew {
+            heartbeat.note_clock_skew(engine.now_ms(), reason.clone());
+        }
         if report.changed() > 0 {
             tracing::info!(
                 redelivered = report.redelivered,

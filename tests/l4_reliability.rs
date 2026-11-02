@@ -785,3 +785,61 @@ fn l4_retention_never_collects_a_message_that_is_still_a_dead_letter() {
         "once nothing needs the message, retention takes it"
     );
 }
+
+// ─── A wrong clock must not delete by age ───────────────────────────────────
+
+#[test]
+fn l4_a_clock_jump_skips_retention_for_that_sweep_and_says_so() {
+    use chassis::Subsystem;
+    use kyu::kit::SweeperSubsystem;
+    use kyu::sweeper::Heartbeat;
+
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    let id = f.publish("jobs.transcode", r#"{"job":1}"#);
+    f.claim("jobs.transcode", "worker");
+    f.engine
+        .ack("jobs.transcode", "worker", &id)
+        .expect("the ack");
+    assert!(
+        f.engine
+            .sweep(100)
+            .expect("a first sweep")
+            .clock_skew
+            .is_none()
+    );
+
+    // A year forward in one step: everything now looks ancient.
+    f.clock.advance(365 * DAY);
+    let jumped = f.engine.sweep(100).expect("the sweep after the jump");
+    assert_eq!(jumped.collected, 0, "no deletion on a clock nobody trusts");
+    let reason = jumped.clock_skew.expect("the jump is reported");
+    assert!(reason.contains("jumped forward"), "{reason}");
+
+    f.clock.advance(1_000);
+    let settled = f.engine.sweep(100).expect("the next sweep");
+    assert!(settled.clock_skew.is_none());
+    assert!(settled.collected >= 1, "a sane step resumes the collection");
+
+    let heartbeat = Heartbeat::starting_at(f.engine.now_ms());
+    let subsystem = SweeperSubsystem {
+        engine: Arc::new(Engine::new(f.store.clone(), f.clock.clone())),
+        heartbeat: heartbeat.clone(),
+    };
+    assert!(subsystem.check().ok);
+    heartbeat.note_clock_skew(f.engine.now_ms(), reason.clone());
+    let status = subsystem.check();
+    assert!(!status.ok);
+    assert!(status.detail.contains(&reason), "{}", status.detail);
+}
+
+#[test]
+fn l4_a_clock_behind_the_newest_message_skips_retention() {
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    f.publish("jobs.transcode", r#"{"job":1}"#);
+    f.clock.advance(-60_000);
+    let report = f.engine.sweep(100).expect("a sweep");
+    let reason = report.clock_skew.expect("the skew is reported");
+    assert!(reason.contains("behind the newest"), "{reason}");
+}

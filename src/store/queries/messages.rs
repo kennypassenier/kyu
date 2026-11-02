@@ -67,6 +67,18 @@ pub fn collect_retained(
     Ok(deleted)
 }
 
+/// The newest `published_at` among the most recent messages by insertion
+/// order (a bounded look, so the once-a-second sweep never scans the table).
+pub fn newest_published_at(tx: &Transaction) -> Result<Option<Millis>> {
+    tx.query_row(
+        "SELECT max(published_at)
+           FROM (SELECT published_at FROM messages ORDER BY seq DESC LIMIT 1000)",
+        [],
+        |row| row.get(0),
+    )
+    .context("cannot read the newest publication time")
+}
+
 pub fn message_id_of(tx: &Transaction, msg_seq: i64) -> Result<String> {
     tx.query_row("SELECT id FROM messages WHERE seq = ?1", [msg_seq], |row| {
         row.get(0)

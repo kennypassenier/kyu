@@ -46,6 +46,16 @@ Payloads and tokens are in none of them except the dashboard, on purpose.
 
 **Proven by:** `l5_healthz_goes_unhealthy_when_the_sweeper_stops`.
 
+A sweeper that keeps failing reports `failing` after three failed sweeps, with
+the last error. A clock that jumped more than an hour forward since the
+previous sweep, or that is behind the newest published message, makes the
+sweeper skip retention, history pruning, dedup pruning and idle archiving for
+that sweep and report `degraded` on `/healthz` for an hour; leases and TTL keep
+settling. Check the host's clock.
+
+**Proven by (clock):** `l4_a_clock_jump_skips_retention_for_that_sweep_and_says_so`,
+`l4_a_clock_behind_the_newest_message_skips_retention`.
+
 ## Publishing is refused
 
 | Symptom | Likely cause | How you confirm | Fix |

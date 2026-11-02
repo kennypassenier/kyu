@@ -12,6 +12,7 @@
 mod apps;
 mod claim;
 pub mod clock;
+mod clockguard;
 pub mod days;
 mod dead;
 pub mod dedup;
@@ -24,12 +25,14 @@ mod settle;
 mod store_access;
 mod subscriptions;
 mod sweep;
+mod sweep_report;
 
 pub use apps::App;
+pub use clockguard::{CLOCK_JUMP_LIMIT_MS, ClockSkew};
 pub use error::EngineError;
 use error::{Result, check_name};
 pub use settle::Settled;
-pub use sweep::SweepReport;
+pub use sweep_report::SweepReport;
 
 use std::sync::{Arc, Mutex};
 
@@ -123,6 +126,7 @@ pub struct Engine {
     db: AppDb,
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
+    clock_guard: clockguard::ClockGuard,
     defaults: Defaults,
 }
 
@@ -136,6 +140,7 @@ impl Engine {
             db,
             clock,
             ids: Mutex::new(MessageIds::new()),
+            clock_guard: clockguard::ClockGuard::default(),
             defaults,
         }
     }

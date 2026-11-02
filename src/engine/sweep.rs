@@ -5,9 +5,10 @@ use crate::store::dedup as store_dedup;
 use crate::store::queries::{self, Overdue};
 
 use super::clock::Millis;
+use super::clockguard::CLOCK_JUMP_LIMIT_MS;
 use super::ids::MessageIds;
 use super::settle::{Cause, Settled, announce, apply};
-use super::{Defaults, Engine, Result};
+use super::{Defaults, Engine, Result, SweepReport};
 
 impl Engine {
     /// K5, K6, K7. One pass of the background work: expired leases return
@@ -25,6 +26,11 @@ impl Engine {
             // in one direction only: publish takes the generator and releases
             // it *before* the store, so the two can never wait on each other.
             let mut ids = self.lock_ids();
+            let skew = self.clock_guard.inspect(
+                now,
+                CLOCK_JUMP_LIMIT_MS,
+                queries::newest_published_at(tx)?,
+            );
             let mut pass = Pass {
                 tx,
                 ids: &mut ids,
@@ -35,11 +41,12 @@ impl Engine {
             };
             pass.settle_leases()?;
             pass.announce_expiries()?;
-            pass.idle_lifecycle()?;
-            // K9 · retention, last: everything above may have settled a
-            // delivery that was the only reason to keep a message.
-            pass.collect_retained()?;
-            pass.prune_history()?;
+            match skew {
+                // A wrong clock must not archive subscriptions or delete
+                // anything by age; leases and TTL settling above still ran.
+                Some(skew) => pass.report.clock_skew = Some(skew.reason),
+                None => pass.age_based_steps()?,
+            }
 
             let mut report = pass.report;
             report.wake.sort();
@@ -61,6 +68,16 @@ struct Pass<'a> {
 }
 
 impl Pass<'_> {
+    /// Everything that archives or deletes by age, which only runs while the
+    /// clock is believed.
+    fn age_based_steps(&mut self) -> Result<()> {
+        self.idle_lifecycle()?;
+        // K9 · retention, last: everything above may have settled a
+        // delivery that was the only reason to keep a message.
+        self.collect_retained()?;
+        self.prune_history()
+    }
+
     /// Writes one event to `kyu.events` and remembers who to wake.
     fn emit(&mut self, event: &Event) -> Result<()> {
         let woken = events::emit(self.tx, self.ids, self.now, event)?;
@@ -197,43 +214,5 @@ impl Pass<'_> {
         self.note_batch(pruned);
         self.note_batch(pruned_keys);
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SweepReport {
-    pub redelivered: usize,
-    pub dead_lettered: usize,
-    pub expired: usize,
-    /// Messages retention collected (K9).
-    pub collected: usize,
-    /// Subscriptions newly flagged as idle (K11).
-    pub flagged: usize,
-    /// Subscriptions archived, and the deliveries that lapsed with them.
-    pub archived: usize,
-    pub lapsed: usize,
-    /// Subscriptions with a message waiting again, so their waiting pollers
-    /// can be woken instead of sitting out their timeout (AR5).
-    pub wake: Vec<(String, String)>,
-    /// A batch was filled, so another pass should follow immediately.
-    pub more_work: bool,
-}
-
-impl SweepReport {
-    /// Records subscriptions of the events topic that gained a message.
-    fn wake_events(&mut self, subscriptions: Vec<String>) {
-        for subscription in subscriptions {
-            self.wake
-                .push((crate::events::EVENTS_TOPIC.to_string(), subscription));
-        }
-    }
-
-    pub fn changed(&self) -> usize {
-        self.redelivered
-            + self.dead_lettered
-            + self.expired
-            + self.collected
-            + self.flagged
-            + self.archived
     }
 }

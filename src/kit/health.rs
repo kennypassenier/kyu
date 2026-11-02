@@ -72,6 +72,13 @@ impl Subsystem for SweeperSubsystem {
             ));
         }
         let now = self.engine.now_ms();
+        if let Some(reason) = self.heartbeat.clock_skew(now) {
+            return SubsystemStatus::failing(format!(
+                "degraded: {reason}. Retention, history pruning and idle archiving are \
+                 skipped while the clock looks wrong, so nothing is deleted by mistake. \
+                 Check the host's clock (NTP); the hub resumes by itself once it is sane"
+            ));
+        }
         if self.heartbeat.is_alive(now) {
             return SubsystemStatus::ok("alive");
         }
