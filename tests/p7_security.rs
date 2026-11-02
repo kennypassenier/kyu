@@ -196,3 +196,29 @@ async fn p7_sec3_every_executable_type_is_forced_to_download() {
         );
     }
 }
+
+#[tokio::test]
+async fn p7_sec3_a_type_nobody_listed_is_downloaded_not_shown() {
+    // The rule is an allowlist: what is not known to be inert is a download.
+    let (hub, _dir) = spawn().await;
+    publish_with_type(&hub, "notify.kenny", "application/json", "{}").await;
+    let _ = reqwest::get(hub.url("/t/notify.kenny/next?as=probe&wait=0")).await;
+
+    for content_type in ["application/pdf", "application/x-made-up", "text/markdown"] {
+        publish_with_type(&hub, "notify.kenny", content_type, "x").await;
+        let response = reqwest::get(hub.url("/t/notify.kenny/next?as=probe&wait=0"))
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 200, "{content_type}");
+        assert!(
+            response
+                .headers()
+                .get("content-disposition")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .contains("attachment"),
+            "{content_type} is not on the inert list and must be downloaded: {:?}",
+            response.headers()
+        );
+    }
+}
