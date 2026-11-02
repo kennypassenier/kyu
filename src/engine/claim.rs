@@ -51,7 +51,8 @@ impl Engine {
                     existing: queries::topic_names(tx)?,
                 });
             };
-            let (sub_id, created) = find_or_create(tx, topic_id, subscription, now)?;
+            let cap = self.defaults.max_subscriptions_per_topic;
+            let (sub_id, created) = find_or_create(tx, topic_id, subscription, now, cap)?;
             mark_polled(tx, sub_id, topic, subscription, now)?;
             let backfilled = if from_beginning {
                 backfill(tx, topic_id, sub_id, topic, subscription)?
@@ -115,9 +116,17 @@ fn find_or_create(
     topic_id: i64,
     subscription: &str,
     now: Millis,
+    cap: usize,
 ) -> Result<(i64, Option<NewSubscription>)> {
     if let Some(id) = queries::subscription_id_by_name(tx, topic_id, subscription)? {
         return Ok((id, None));
+    }
+    if queries::count_subscriptions(tx, topic_id)? >= cap {
+        return Err(EngineError::LimitReached {
+            what: "subscriptions on this topic",
+            limit: cap,
+            setting: "KYU_MAX_SUBSCRIPTIONS_PER_TOPIC",
+        });
     }
     let id = queries::create_subscription(tx, topic_id, subscription, now)?;
     let created = NewSubscription {

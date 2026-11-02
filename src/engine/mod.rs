@@ -106,6 +106,12 @@ pub struct Defaults {
     /// 2026-09-18). A day: one line with a count says what a subscriber
     /// needs to know, and a subscription nobody polls expires everything.
     pub expired_event_window_ms: Millis,
+    /// The most topics the hub will hold; a publish that would create one
+    /// more is refused (`KYU_MAX_TOPICS`).
+    pub max_topics: usize,
+    /// The most subscriptions one topic will hold; a poll that would create
+    /// one more is refused (`KYU_MAX_SUBSCRIPTIONS_PER_TOPIC`).
+    pub max_subscriptions_per_topic: usize,
 }
 
 impl Default for Defaults {
@@ -115,6 +121,8 @@ impl Default for Defaults {
             idle_flag_ms: 7 * 24 * 60 * 60 * 1_000,
             idle_archive_ms: 30 * 24 * 60 * 60 * 1_000,
             expired_event_window_ms: 24 * 60 * 60 * 1_000,
+            max_topics: 1_000,
+            max_subscriptions_per_topic: 100,
         }
     }
 }

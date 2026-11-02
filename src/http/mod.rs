@@ -7,6 +7,7 @@ pub mod error;
 pub mod handlers;
 pub mod notify;
 pub mod page_modules;
+pub mod polls;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -60,6 +61,9 @@ pub struct AppState {
     pub auth: Arc<Auth>,
     /// How many backup files `POST /api/backup` keeps (`KYU_BACKUP_KEEP`).
     pub backup_keep: usize,
+    /// How many polls one caller may hold open (`KYU_MAX_CONCURRENT_POLLS`).
+    pub max_concurrent_polls: usize,
+    pub polls: Arc<polls::Polls>,
 }
 
 impl AppState {
@@ -82,6 +86,8 @@ impl AppState {
             heartbeat,
             auth: Arc::new(auth),
             backup_keep: crate::config::DEFAULT_BACKUP_KEEP,
+            max_concurrent_polls: crate::config::DEFAULT_MAX_CONCURRENT_POLLS,
+            polls: Arc::new(polls::Polls::new()),
         }
     }
 }

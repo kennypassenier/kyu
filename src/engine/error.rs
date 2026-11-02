@@ -62,6 +62,13 @@ pub enum EngineError {
         state: String,
     },
 
+    #[error("the hub already holds {limit} {what}, its limit")]
+    LimitReached {
+        what: &'static str,
+        limit: usize,
+        setting: &'static str,
+    },
+
     #[error("an app named {name:?} already exists")]
     AppExists { name: String },
 
@@ -87,6 +94,11 @@ impl EngineError {
     /// response body (AR4).
     pub fn remedy(&self) -> String {
         match self {
+            Self::LimitReached { setting, limit, .. } => format!(
+                "reuse an existing name or delete ones nobody uses, or raise {setting} \
+                 (currently {limit}) and restart the hub. The limit stops a loop with \
+                 generated names from growing the store without end."
+            ),
             Self::AppExists { .. } => "pick another name, or revoke the existing app first. \
                  Revoked names become available again."
                 .to_string(),

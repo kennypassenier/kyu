@@ -23,6 +23,19 @@ pub fn create_topic(tx: &Transaction, name: &str, now: Millis) -> Result<i64> {
     Ok(tx.last_insert_rowid())
 }
 
+/// Topics callers created. kyu's own event topics are not counted: a cap
+/// that its own bookkeeping could eat would refuse the caller's topic.
+pub fn count_topics(tx: &Transaction) -> Result<usize> {
+    let count: i64 = tx
+        .query_row(
+            "SELECT count(*) FROM topics WHERE substr(name, 1, 4) <> 'kyu.'",
+            [],
+            |row| row.get(0),
+        )
+        .context("cannot count the topics")?;
+    Ok(count as usize)
+}
+
 pub fn topic_names(tx: &Transaction) -> Result<Vec<String>> {
     let mut statement = tx
         .prepare("SELECT name FROM topics ORDER BY name")

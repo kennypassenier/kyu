@@ -99,6 +99,9 @@ pub async fn receive(
     Query(query): Query<ReceiveQuery>,
 ) -> Result<Response, ApiError> {
     let app = caller.map(|Extension(caller)| polling_app(caller));
+    let _slot = state
+        .polls
+        .acquire(app.as_deref().unwrap_or("open"), state.max_concurrent_polls)?;
     let subscription = query
         .as_
         .clone()

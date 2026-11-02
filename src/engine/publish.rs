@@ -67,7 +67,16 @@ impl Engine {
         let stored = self.write(|tx| -> Result<std::result::Result<Vec<String>, String>> {
             let topic_id = match queries::topic_id_by_name(tx, topic)? {
                 Some(id) => id,
-                None => queries::create_topic(tx, topic, now)?,
+                None => {
+                    if queries::count_topics(tx)? >= self.defaults.max_topics {
+                        return Err(EngineError::LimitReached {
+                            what: "topics",
+                            limit: self.defaults.max_topics,
+                            setting: "KYU_MAX_TOPICS",
+                        });
+                    }
+                    queries::create_topic(tx, topic, now)?
+                }
             };
             if let Some(dedup) = dedup
                 && let Some(original) = damp(tx, topic_id, topic, dedup, &id, now)?
