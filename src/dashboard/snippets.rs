@@ -86,7 +86,7 @@ impl Snippets {
         Self {
             publish: Snippet::new(
                 format!(
-                    "curl -s {auth}-H 'content-type: {content_type}' \\\n     -d '{payload}' \\\n     {base_url}/t/{topic}"
+                    "curl -s {auth}-H 'content-type: {content_type}' \\\n     --data-raw '{payload}' \\\n     {base_url}/t/{topic}"
                 ),
                 token,
             ),
@@ -184,6 +184,26 @@ mod tests {
         assert!(snippets.receive_envelope.full.contains("envelope=json"));
         assert!(snippets.ack.full.contains("as=printer"));
         assert!(snippets.bootstrap_note.is_none());
+    }
+
+    #[test]
+    fn l7_a_payload_starting_with_at_is_sent_as_text_not_read_as_a_file() {
+        let payload = PayloadView::of(b"@/etc/passwd");
+        let snippets = Snippets::build(
+            "http://hub.lan",
+            "t",
+            Some("s"),
+            Some(&payload),
+            None,
+            None,
+            None,
+        );
+        assert!(
+            snippets.publish.full.contains("--data-raw '@/etc/passwd'")
+                && !snippets.publish.full.contains(" -d "),
+            "curl -d would upload the file: {}",
+            snippets.publish.full
+        );
     }
 
     #[test]
