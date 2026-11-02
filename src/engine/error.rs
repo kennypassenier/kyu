@@ -42,6 +42,17 @@ pub enum EngineError {
         state: String,
     },
 
+    #[error(
+        "message {id:?} is on attempt {current} for {subscription:?}, not attempt {given}: \
+         the delivery you hold was handed out again"
+    )]
+    StaleAttempt {
+        id: String,
+        subscription: String,
+        given: i64,
+        current: i64,
+    },
+
     #[error("message {id:?} is {state}, not in the dead-letter list of {subscription:?}")]
     NotDead {
         id: String,
@@ -137,6 +148,12 @@ impl EngineError {
                 "the delivery is {state}: acknowledging only settles a message this \
                  subscription currently holds. Poll for it, handle it, then acknowledge the \
                  id that poll returned."
+            ),
+            Self::StaleAttempt { given, current, .. } => format!(
+                "the lease on attempt {given} ran out and the message was offered again as \
+                 attempt {current}, so this ack or nack speaks for a delivery that no longer \
+                 exists. Drop it: the current attempt settles the message. Omit `attempt` to \
+                 settle whatever attempt is current."
             ),
             Self::NotDead { state, .. } => format!(
                 "only a dead-lettered message can be requeued, and this one is {state}. \

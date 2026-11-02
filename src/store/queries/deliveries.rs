@@ -102,6 +102,21 @@ pub fn claim_next(
     Ok(Some(message))
 }
 
+/// The attempt number now in flight for a delivery (failed attempts plus
+/// one): the number the consumer was sent as `kyu-attempt`.
+pub fn current_attempt(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Option<i64>> {
+    tx.query_row(
+        "SELECT d.attempts + 1
+           FROM deliveries d
+           JOIN messages m ON m.seq = d.msg_seq
+          WHERE m.id = ?1 AND d.sub_id = ?2",
+        (message_id, sub_id),
+        |row| row.get(0),
+    )
+    .optional()
+    .context("cannot read the delivery's attempt")
+}
+
 /// Settles a claimed delivery. The UPDATE is guarded by the current state,
 /// so an illegal transition cannot happen (AR9); when it matches nothing,
 /// a second query explains why.

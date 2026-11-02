@@ -82,6 +82,7 @@ impl From<EngineError> for ApiError {
             | EngineError::NoSuchMessage { .. } => StatusCode::NOT_FOUND,
             EngineError::AlreadyAcked { .. }
             | EngineError::NotClaimed { .. }
+            | EngineError::StaleAttempt { .. }
             | EngineError::NotDead { .. } => StatusCode::CONFLICT,
             EngineError::InvalidPolicy { .. } => StatusCode::BAD_REQUEST,
             EngineError::SubscriptionArchived { .. } | EngineError::NotArchived { .. } => {

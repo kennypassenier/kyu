@@ -4,6 +4,7 @@ use crate::store::queries::{
     self, DeadLetter, DeleteOutcome, NackOutcome, Overdue, RequeueOutcome,
 };
 
+use super::claim::check_attempt;
 use super::clock::Millis;
 use super::settle::{Cause, Settled, announce, apply, record_dead};
 use super::{Engine, EngineError, Result};
@@ -33,10 +34,24 @@ impl Engine {
         message_id: &str,
         dead: bool,
     ) -> Result<Settled> {
+        self.nack_attempt(topic, subscription, message_id, dead, None)
+    }
+
+    /// W5. Like [`Engine::nack`], refused unless `attempt` (when given) is
+    /// still the attempt in flight.
+    pub fn nack_attempt(
+        &self,
+        topic: &str,
+        subscription: &str,
+        message_id: &str,
+        dead: bool,
+        attempt: Option<i64>,
+    ) -> Result<Settled> {
         let now = self.clock.now_ms();
 
         self.write(|tx| -> Result<Settled> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            check_attempt(tx, message_id, subscription, sub_id, attempt)?;
 
             match queries::nack_claimed(tx, message_id, sub_id)? {
                 NackOutcome::NoSuchDelivery => {
