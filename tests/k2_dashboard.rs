@@ -46,6 +46,28 @@ fn snippet(page: &str, form: &str, name: &str) -> String {
         .join(" ")
 }
 
+/// The working command of a step, from the token route a browser calls at Copy time.
+async fn working_command(hub: &KitHub, topic: &str, step: &str) -> String {
+    let response = hub
+        .form(&format!("/t/{topic}/dashboard/token?step={step}"), "")
+        .await;
+    assert_eq!(response.status(), 200, "the token route answers a session");
+    assert_eq!(
+        header(&response, "cache-control").as_deref(),
+        Some("no-store")
+    );
+    let json = body_json(response).await;
+    assert_eq!(json["token"], hub.token());
+    json["command"]
+        .as_str()
+        .expect("a command")
+        .replace("@@kyu-base@@", "")
+        .replace("\\\n", " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 async fn topic_page(hub: &KitHub, topic: &str) -> String {
     hub.page(&format!("/t/{topic}/dashboard")).await
 }
@@ -514,6 +536,52 @@ async fn k2_the_test_publish_form_puts_a_real_message_on_the_topic() {
 }
 
 #[tokio::test]
+async fn k2_the_token_route_refuses_a_post_without_a_session() {
+    let hub = spawn_kit().await;
+    let response = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("a client")
+        .post(hub.url("/t/notify.kenny/dashboard/token"))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .send()
+        .await
+        .expect("a response");
+    assert_eq!(response.status(), 303, "the token route needs a login");
+    assert!(
+        header(&response, "location")
+            .unwrap_or_default()
+            .contains("login"),
+        "and sends the browser to the login page"
+    );
+    let text = response.text().await.unwrap_or_default();
+    assert!(!text.contains(hub.token()), "nothing of the token leaks");
+    hub.shutdown().await;
+}
+
+#[tokio::test]
+async fn k2_the_token_route_refuses_a_cross_origin_post() {
+    let hub = spawn_kit().await;
+    for (name, value) in [
+        ("origin", "http://evil.example"),
+        ("sec-fetch-site", "cross-site"),
+    ] {
+        let response = reqwest::Client::new()
+            .post(hub.url("/t/notify.kenny/dashboard/token"))
+            .header("cookie", hub.session_cookie())
+            .header(name, value)
+            .header("content-type", "application/x-www-form-urlencoded")
+            .send()
+            .await
+            .expect("a response");
+        assert_eq!(response.status(), 403, "{name}: {value} is refused");
+        let text = response.text().await.unwrap_or_default();
+        assert!(!text.contains(hub.token()), "nothing of the token leaks");
+    }
+    hub.shutdown().await;
+}
+
+#[tokio::test]
 async fn k2_the_snippets_the_dashboard_prints_actually_work() {
     let hub = spawn_kit().await;
     hub.publish("notify.kenny", "{}").await;
@@ -524,7 +592,12 @@ async fn k2_the_snippets_the_dashboard_prints_actually_work() {
     // (S1: the example is the hub describing itself).
     let body = topic_page(&hub, "notify.kenny").await;
     let shown = snippet(&body, "shown", "receive_envelope");
-    let receive = snippet(&body, "working", "receive_envelope");
+    assert!(
+        !body.contains(hub.token()),
+        "the page never carries the login token"
+    );
+    assert!(!body.contains("\"working\""), "nor the working commands");
+    let receive = working_command(&hub, "notify.kenny", "receive_envelope").await;
     assert!(
         receive.starts_with("curl") && receive.contains("envelope=json"),
         "{receive}"
@@ -574,7 +647,11 @@ async fn k2_a_hostile_content_type_cannot_escape_the_dashboard_snippet() {
     let page = topic_page(&hub, "notify.kenny").await;
     // Both the on-screen form and the copied one are pasted into a shell.
     for form in ["shown", "working"] {
-        let publish = snippet(&page, form, "publish");
+        let publish = if form == "shown" {
+            snippet(&page, form, "publish")
+        } else {
+            working_command(&hub, "notify.kenny", "publish").await
+        };
         assert!(
             !publish.contains("evil.lan"),
             "an injection reached the {form} command: {publish}"

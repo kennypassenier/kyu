@@ -1,7 +1,7 @@
 // kyu: topic-send.js, section 2 of the Topic page: the send-and-receive commands, and the secret fields.
 
-import { $, $$ } from './topic-util.js';
-import { S, page, withOrigin } from './topic-state.js';
+import { $, $$, plural } from './topic-util.js';
+import { S, T, page, call, sentence, withOrigin } from './topic-state.js';
 
 // Two copy buttons stand in every step: the command block's own "Copy" (without the token) and the secret field's,
 // which puts the token in. The field's button is named for what it does.
@@ -27,15 +27,23 @@ export function renderCommands() {
         else field.setAttribute('data-kp-secret-disabled', 'This hub has no login token to put in the command.');
     }
 }
-// The token is read from the page's data only when a field is asked to show or copy it.
+/** Ask the hub for the token (and a step's working command) at the moment it is needed: the page never carries them.
+ * @param {string} [step] */
+async function askToken(step) {
+    const r = await call(`${T}/token${step ? `?step=${encodeURIComponent(step)}` : ''}`);
+    if (!r.ok) throw new Error(sentence(/** @type {any} */ (r)));
+    return /** @type {{ token: string, command?: string }} */ (/** @type {any} */ (r).json);
+}
 // Reveal shows the token alone (the command is already on the page above, masked); Copy with token copies the whole
 // working command. Copy of a field that is shown would copy what is shown, so it hides the field first.
 send.addEventListener('kp-secret-request', (event) => {
-    const { respond, purpose } = /** @type {CustomEvent} */ (event).detail;
+    const { respond, fail, purpose } = /** @type {CustomEvent} */ (event).detail;
     const field = /** @type {HTMLElement} */ (event.target);
     event.preventDefault();
-    if (purpose === 'reveal') return respond(S.data.commands.token ?? '');
-    respond(withOrigin(S.data.commands.working[field.dataset.ktSecret ?? ''] ?? ''));
+    const reveal = purpose === 'reveal';
+    askToken(reveal ? undefined : (field.dataset.ktSecret ?? ''))
+        .then((answer) => respond(reveal ? answer.token : withOrigin(answer.command ?? '')))
+        .catch(fail);
 });
 send.addEventListener(
     'click',
@@ -50,5 +58,5 @@ send.addEventListener(
 );
 {
     const words = $('[data-kt-ttl-words]', send);
-    if (words) words.textContent = ttl === 0 ? 'until you press Hide' : `for ${ttl} seconds`;
+    if (words) words.textContent = ttl === 0 ? 'until you press Hide' : `for ${plural(ttl, 'second', 'seconds')}`;
 }

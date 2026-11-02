@@ -1,5 +1,6 @@
 //! Builds the JSON the topic page's script draws from: stamped views, the
-//! copy-paste commands (token masked as shown, real as copied) and snippets.
+//! copy-paste commands (token masked; the real token and commands come from
+//! the token route, never from the page) and snippets.
 
 use serde_json::json;
 
@@ -86,7 +87,7 @@ pub(super) fn with_stamps<T: serde::Serialize>(
         .collect()
 }
 
-/// The commands as the page shows them (token masked) and as they work.
+/// The commands as the page shows them (token masked). The working ones never ride in the page.
 pub(super) fn commands_json(
     snippets: &dashboard::Snippets,
     token: Option<&str>,
@@ -98,15 +99,7 @@ pub(super) fn commands_json(
             "receive_envelope": shown_command(&snippets.receive_envelope.full, token),
             "ack": shown_command(&snippets.ack.full, token),
         },
-        "working": {
-            "publish": snippets.publish.full,
-            "receive_raw": snippets.receive_raw.full,
-            "receive_envelope": snippets.receive_envelope.full,
-            "ack": snippets.ack.full,
-        },
         "has_token": token.is_some_and(|t| !t.is_empty()),
-        // The bare token, for the page's Reveal: it shows the token alone, never a second copy of the command.
-        "token": token.unwrap_or_default(),
     })
 }
 

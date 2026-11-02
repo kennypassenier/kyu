@@ -75,8 +75,7 @@ updateCounts();
 
 // The kit's refresh tick reads the page again; a failed read throws, and the kit's control says so with Retry now.
 window.chassisRefresh?.onTick(async () => {
-    await load();
-    window.chassisRefresh?.markFresh();
+    if (await load()) window.chassisRefresh?.markFresh();
 });
 
 // The first read is a real one, with the components' own loading and failed states: the page's server-drawn rows

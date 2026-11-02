@@ -8,7 +8,7 @@ const { setMenu } = menuButtonExports;
 /** @param {any} s */
 function policyHtml(s) {
     const lease = `lease ${span(s.lease_ms)}${s.explicit.lease_ms == null ? ' <i>(default)</i>' : ''}`;
-    const tries = `${s.max_attempts} attempts${s.explicit.max_attempts == null ? ' <i>(default)</i>' : ''}`;
+    const tries = `${plural(s.max_attempts, 'attempt', 'attempts')}${s.explicit.max_attempts == null ? ' <i>(default)</i>' : ''}`;
     const ttlText = s.ttl_ms ? `, ttl ${span(s.ttl_ms)}` : '';
     return `${lease}, ${tries}${ttlText}`;
 }
@@ -65,6 +65,27 @@ export function subRow(s) {
         </td>`;
     paintRow(tr, s);
     return tr;
+}
+
+/** Drop the delete-confirmation templates of subscriptions that left. @param {Set<string>} names */
+export function dropLoses(names) {
+    for (const t of document.querySelectorAll('template[id^="kt-loses-"]')) if (!names.has(t.id.slice('kt-loses-'.length))) t.remove();
+}
+
+/** Update a changed row's figures in place: the row, its menu, its focus and an open delete confirmation stay.
+ * @param {HTMLTableRowElement} tr @param {any} s */
+export function patchRow(tr, s) {
+    const fresh = subRow(s);
+    // Name, state and actions cells are kept; paintRow brings the state and buttons in step.
+    for (let i = 2; i <= 7; i += 1) {
+        const mine = tr.cells[i];
+        const theirs = fresh.cells[i];
+        if (mine.innerHTML !== theirs.innerHTML) mine.innerHTML = theirs.innerHTML;
+        const sort = theirs.getAttribute('data-kp-sort-value');
+        if (sort === null) mine.removeAttribute('data-kp-sort-value');
+        else mine.setAttribute('data-kp-sort-value', sort);
+    }
+    paintRow(tr, s);
 }
 
 /** What deleting would lose, as the typed confirmation lists it. @param {any} s */
@@ -140,5 +161,11 @@ export function paintRow(tr, s, filterState = s.state) {
     del.disabled = !archived;
     losesTemplate(s);
     const wrapper = $('[data-kt-menu]', tr);
-    if (wrapper) setMenu(wrapper, menuGroups(s));
+    if (!wrapper) return;
+    // A menu that did not change is left alone, so an open one is not closed by a refresh.
+    const groups = menuGroups(s);
+    const sig = JSON.stringify(groups);
+    if (wrapper.dataset.ktMenuSig === sig) return;
+    wrapper.dataset.ktMenuSig = sig;
+    setMenu(wrapper, groups);
 }

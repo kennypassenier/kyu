@@ -101,12 +101,13 @@ function deleteRowWithUndo(row) {
 // The selection bar: requeue or delete the ticked rows.
 selectionBar.addEventListener('kp-selection-action', (event) => {
     const detail = /** @type {CustomEvent} */ (event).detail;
+    // "All matching" means every row the table holds, as on the subscription page.
     /** @type {string[]} */
-    const keys = detail.keys;
+    const keys = detail.matching ? $$('tr[data-kp-row-key]', deadBody).map((r) => r.getAttribute('data-kp-row-key') ?? '') : detail.keys;
     const rows = $$('tr', deadBody).filter((r) => keys.includes(r.getAttribute('data-kp-row-key') ?? ''));
     const items = rows.map((r) => ({ subscription: r.dataset.ktSub ?? '', id: r.dataset.ktId ?? '' }));
-    if (detail.action === 'delete') deleteSelected(rows, items, keys.length, detail.undoMs ?? UNDO_MS);
-    else requeueSelected(rows, items, keys.length);
+    if (detail.action === 'delete') deleteSelected(rows, items, items.length, detail.undoMs ?? UNDO_MS);
+    else requeueSelected(rows, items, items.length);
 });
 
 /** Untick the rows' boxes so the selection bar forgets them. @param {HTMLElement[]} rows */

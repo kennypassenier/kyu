@@ -168,6 +168,10 @@ pub fn pages(state: AppState) -> Router {
             post(handlers::dashboard_bulk_delete),
         )
         .route(
+            "/t/{topic}/dashboard/token",
+            post(handlers::dashboard_token),
+        )
+        .route(
             "/t/{topic}/dashboard/messages/{id}/replay",
             post(handlers::dashboard_replay),
         )
@@ -195,7 +199,18 @@ pub fn pages(state: AppState) -> Router {
             "/dashboard/dead-letters/prune",
             post(handlers::dashboard_prune_dead_letters),
         )
+        .layer(axum::middleware::map_response(no_store))
         .with_state(state)
+}
+
+/// Dashboard answers are never kept by a browser or a proxy: they are per
+/// session, and the token route's answer carries the login token.
+async fn no_store(mut response: axum::response::Response) -> axum::response::Response {
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }
 
 /// The files the hub's pages need beyond the kit's assets (kyu.css and the

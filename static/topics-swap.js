@@ -1,7 +1,7 @@
 // kyu: topics-swap.js, the kit's refresh tick: it swaps the key-figure group and the page follows from the data block that carries.
 
 import { tickExports, updateExports } from '/static/kp/dist/kp-themes.min.js';
-import { $$ } from './topics-util.js';
+import { $, $$ } from './topics-util.js';
 import { M, ui, takeData, decideSlots } from './topics-state.js';
 import { kpis, kpiTiles, shown, remember } from './topics-kpis.js';
 import { drawBand } from './topics-attention.js';
@@ -31,25 +31,44 @@ function animateTiles(group, before) {
     }
 }
 
+/** Replace the tiles and give a focused filter tile's focus to its successor. @param {HTMLElement} group @param {Node[]} tiles */
+function replaceTiles(group, tiles) {
+    const active = document.activeElement;
+    const filter = active && group.contains(active) ? active.getAttribute('data-tp-filter') : null;
+    group.replaceChildren(...tiles);
+    if (filter) $(`[data-tp-filter="${filter}"]`, group)?.focus();
+}
+
 let swapping = false;
+/** The error of the last swap the observer ran, for readAgain to throw; null when it went well. @type {unknown} */
+let swapFailure = null;
+/** Draw the page from the data block a read carried. @param {HTMLElement} group */
+function swapFrom(group) {
+    const data = takeData();
+    if (!data) return;
+    const before = new Map(shown);
+    M.model = data;
+    decideSlots();
+    replaceTiles(group, kpiTiles());
+    animateTiles(group, before);
+    remember();
+    drawBand();
+    drawHubBar();
+    syncRows();
+    table()?.refresh();
+}
 // The automatic refresh swaps the key-figure group; the rest follows from the block it carries.
 if (kpis) {
     new MutationObserver(() => {
         if (swapping || !ui.ready) return;
-        const data = takeData();
-        if (!data) return;
         swapping = true;
-        const before = new Map(shown);
-        M.model = data;
-        decideSlots();
-        kpis.replaceChildren(...kpiTiles());
-        animateTiles(kpis, before);
-        remember();
-        drawBand();
-        drawHubBar();
-        syncRows();
-        table()?.refresh();
-        swapping = false;
+        try {
+            swapFrom(kpis);
+        } catch (error) {
+            swapFailure = error;
+        } finally {
+            swapping = false;
+        }
     }).observe(kpis, { childList: true });
 }
 
@@ -60,7 +79,11 @@ async function readAgain() {
     if (!res.ok) throw new Error(`the page answered ${res.status}`);
     const next = new DOMParser().parseFromString(await res.text(), 'text/html').getElementById('tp-kpis');
     if (!next) throw new Error('the page had no key figures');
-    kpis?.replaceChildren(...next.childNodes);
+    swapFailure = null;
+    if (kpis) replaceTiles(kpis, [...next.childNodes]);
+    // The observer runs in a microtask queued by the swap above; let it finish before saying the page is fresh.
+    await Promise.resolve();
+    if (swapFailure) throw swapFailure;
     window.chassisRefresh?.markFresh();
 }
 if (kpis) window.chassisRefresh?.onTick(readAgain);
