@@ -753,3 +753,35 @@ fn l4_a_delayed_message_gets_its_full_ttl_from_the_moment_it_is_due() {
     assert_eq!(f.engine.sweep(100).expect("a sweep").expired, 1);
     assert_eq!(f.state_of(&id, "tts"), "expired");
 }
+
+// ─── Retention keeps a message while it is a dead letter ────────────────────
+
+const DAY: i64 = 86_400_000;
+
+#[test]
+fn l4_retention_never_collects_a_message_that_is_still_a_dead_letter() {
+    let f = fixture();
+    f.bootstrap("jobs.transcode", "worker");
+    let id = f.publish("jobs.transcode", "not json");
+    f.claim("jobs.transcode", "worker");
+    f.engine
+        .nack("jobs.transcode", "worker", &id, true)
+        .expect("the nack");
+
+    f.clock.advance(8 * DAY);
+    f.engine.sweep(100).expect("a sweep");
+    let letters = f
+        .engine
+        .dead_letters("jobs.transcode", "worker", 10)
+        .expect("the dead letters");
+    assert_eq!(letters.len(), 1, "the dead letter keeps its payload");
+
+    f.engine
+        .delete_delivery("jobs.transcode", "worker", &id)
+        .expect("the delete");
+    f.clock.advance(1_000);
+    assert!(
+        f.engine.sweep(100).expect("a sweep").collected >= 1,
+        "once nothing needs the message, retention takes it"
+    );
+}
