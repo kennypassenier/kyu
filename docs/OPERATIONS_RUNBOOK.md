@@ -30,11 +30,13 @@ call.
 **As a plain binary under systemd** — what Kenny actually runs, on LXC 109
 (`109-app-kyu`, `10.10.10.9`). No Docker on the box at all:
 
-1. Take the binary from the GitHub release (3.0.0: a glibc binary for
-   Debian trixie, signed — `kyu`, `SHA256SUMS`, `SHA256SUMS.minisig`,
-   `VERSION`) and install it at the kit's path:
+1. Take the binary from the GitHub release (a statically linked musl binary
+   that runs on any x86-64 Linux, signed — `kyu`, `SHA256SUMS`,
+   `SHA256SUMS.minisig`, `VERSION`) and install it at the kit's path. With no
+   tag, `gh release download` takes the latest release; add `v<version>` as
+   the first argument to pin one:
    ```bash
-   gh release download v3.0.0 -R kennypassenier/kyu -p kyu -p SHA256SUMS -p SHA256SUMS.minisig
+   gh release download -R kennypassenier/kyu -p kyu -p SHA256SUMS -p SHA256SUMS.minisig
    minisign -Vm SHA256SUMS -P "$(cat RELEASE_PUBKEY)" && sha256sum -c SHA256SUMS
    scp kyu root@<proxmox>:/tmp/kyu
    ssh root@<proxmox> 'pct exec 109 -- install -d -o kyu -g kyu /opt/kyu/bin && pct push 109 /tmp/kyu /opt/kyu/bin/kyu --perms 755 --user kyu --group kyu'
@@ -52,14 +54,17 @@ call.
    `kyu update` (see §4).
 2. A system user that owns only its data, and a config file only it can read:
    ```bash
-   adduser --system --group --home /var/lib/kyu --no-create-home kyu
-   install -d -o kyu -g kyu -m 0750 /var/lib/kyu
-   install -d -o root -g kyu -m 0750 /etc/kyu
+   adduser --system --group --home /appdata/kyu/kyu-config --no-create-home kyu
+   install -d -o kyu -g kyu -m 0750 /appdata/kyu/kyu-config
    umask 077
-   printf 'KYU_TOKEN=%s\nKYU_SECRET_KEY=%s\nKYU_LISTEN=0.0.0.0:8080\nKYU_STATE_DIR=/var/lib/kyu\nKYU_LOG=info\n' \
-     "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /etc/kyu/kyu.env
-   chown root:kyu /etc/kyu/kyu.env && chmod 0640 /etc/kyu/kyu.env
+   printf 'KYU_TOKEN=%s\nKYU_SECRET_KEY=%s\nKYU_LISTEN=0.0.0.0:8080\nKYU_STATE_DIR=/appdata/kyu/kyu-config\nKYU_LOG=info\n' \
+     "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" > /appdata/kyu/kyu-config/kyu.env
+   chown root:kyu /appdata/kyu/kyu-config/kyu.env && chmod 0640 /appdata/kyu/kyu-config/kyu.env
    ```
+   These are the paths `deploy/kyu.service` and `deploy/service.yml` use
+   (`EnvironmentFile=/appdata/kyu/kyu-config/kyu.env`,
+   `KYU_STATE_DIR=/appdata/kyu/kyu-config`); a host that keeps them elsewhere
+   changes them in the unit files too (see `deploy/README.md`).
 3. `kyu.service` with `Restart=always` and `StartLimitIntervalSec=0` — the
    second matters as much as the first, because systemd otherwise gives up
    after a few restarts in a short window and turns a transient fault into a
@@ -299,7 +304,7 @@ depends on what broke:
   container; everything comes back with it.
 - **The data is wrong but the container is fine** — a bad migration, a
   message you should not have deleted → the newest
-  `/var/lib/kyu/kyu.backup-*.db`, written nightly at 03:00 by
+  `/appdata/kyu/kyu-config/kyu.backup-*.db`, written nightly at 03:00 by
   `kyu-backup.timer` and integrity-checked by the hub before it was
   reported. Follow step 2 above: stop the service, put it in place of
   `kyu.db`, delete the `-wal` and `-shm`, start again.
@@ -316,18 +321,108 @@ the hub itself opened and checked.
 compose file and restart. App tokens keep working; you just log in with the
 new value.
 
-**The encryption key (`KYU_SECRET_KEY`) — destructive.** Every stored app
-token becomes unreadable. The apps page will list them as `unreadable`.
-Recovery: revoke each one there and generate a replacement, then update the
-apps that used them.
+**The encryption key (`KYU_SECRET_KEY`) — destructive unless you re-seal.**
+The key seals the app tokens, sessions and passkeys the kit keeps in
+`kyu-kit.db`, and the 2.x `apps` table in `kyu.db`. Changing it in the
+environment file without re-sealing leaves those unreadable: the kit's
+message is `a client's token cannot be decrypted with the current secret
+key` and names the way out. The way out is the kit's `rekey`, run once with
+the service stopped, the previous key in `KYU_OLD_SECRET_KEY` and the new one
+in `KYU_SECRET_KEY`:
+
+```bash
+systemctl stop kyu
+# put the NEW pair in kyu.env first, then (as the kyu user, same environment):
+KYU_OLD_SECRET_KEY=<the previous key> kyu rekey
+systemctl start kyu
+```
+
+It needs the **previous** key. If that is gone, see §5b.
 
 That asymmetry is the entire reason these are two variables rather than one
 derived from the other: rotating a leaked password must not silently take
 every integration down with it.
 
-**Proven by:** `p7_another_key_cannot_open_it_and_says_what_to_do` (the error
-names the variable and says to revoke and regenerate),
-`p7_a_token_without_a_key_refuses_to_start_and_hands_over_a_key`.
+**Proven by:** `p7_another_key_cannot_open_it_and_says_what_to_do` (the 2.x
+`apps` table's error names the variable and says to revoke and regenerate) and
+`p7_a_token_without_a_key_refuses_to_start_and_hands_over_a_key`, both unit
+tests in `src/crypto.rs` and `src/config/auth.rs`. The `rekey` command and the
+kit's error text are read from chassis-rs (`app/rekey.rs`, `core/crypto.rs`);
+no kyu test runs `rekey`.
+
+### 5b · The key is gone
+
+*Question this section answers: if `KYU_SECRET_KEY` were gone tomorrow, where
+are the other copies and how does one go back in?* Nothing below has been
+drilled on CT 109; each step is derived from the code named beside it, and the
+drill is still owed.
+
+**Where copies of the key are, and what each survives**
+
+| Copy | Survives | Does not survive |
+|---|---|---|
+| `/appdata/kyu/kyu-config/kyu.env` on CT 109 (`EnvironmentFile=` of `deploy/kyu.service`) | a restart, an update | deleting or overwriting that file; losing the container |
+| The running hub's own environment: `/proc/<MainPID>/environ`, readable by root | the env file being deleted while the hub is still up | any restart of the hub: do this *before* you restart it |
+| The Proxmox backup job `kyu-109` (nightly 03:30, 7 daily + 4 weekly, §4): each archive holds the whole container, so it holds `kyu.env` as it was that night | losing the file or the container | a key that was changed after the newest archive you can still read |
+| Docker route: the file `compose.yml`'s `env_file:` names (`/etc/kyu/kyu.env` in `deploy/compose.example.yml`; the homelab's `stacks/<name>/kyu/.env`) | | restic: it walks `kyu-config`, not these files |
+| Any copy outside this repository (a password manager, a sealed note) | | **This runbook does not know of one. If it exists, write where here.** |
+
+**What is *not* a copy.** `POST /api/backup` and the 03:00 `kyu-backup.timer`
+write `kyu.backup-*.db`, which is `kyu.db` only (`src/http/handlers/backup.rs`
+copies the one database at `db.path()`): the key is in none of them, and
+`kyu-kit.db` is not in them either. Restoring one of those brings back topics,
+messages and subscriptions, never the key.
+
+**Recipe A, a copy survives.** Do these in order; nothing here deletes.
+
+1. If the hub is still running, read the key out of it before anything
+   restarts it, straight into a new file rather than onto the screen:
+   ```bash
+   pid=$(systemctl show -p MainPID --value kyu)
+   tr '\0' '\n' < /proc/$pid/environ | grep '^KYU_SECRET_KEY=' > /root/kyu-key.recovered
+   chmod 600 /root/kyu-key.recovered
+   ```
+   (on CT 109: `pct exec 109 -- sh -c '…'`, as root.)
+2. If the hub is down, restore the newest archive of `kyu-109` that still
+   carries the old key into a **scratch** container, copy only the file out,
+   and destroy the scratch container:
+   ```bash
+   pvesm list local --content backup | grep 109        # pick an archive
+   pct restore 999 <archive-volid> --storage <storage>  # 999: any unused id
+   pct pull 999 /appdata/kyu/kyu-config/kyu.env /root/kyu.env.recovered
+   pct destroy 999
+   ```
+3. Put the `KYU_SECRET_KEY=` line into `/appdata/kyu/kyu-config/kyu.env`
+   (0640 root:kyu), then `systemctl start kyu` (the unit runs
+   `kyu --check` first, as `ExecStartPre`).
+4. Verify: `curl -sf $HUB/healthz` says `"status":"ok"`, an existing app's
+   token still works against `$HUB/t/<topic>/next?as=<sub>&wait=0`.
+
+**Recipe B, no copy survives anywhere.** The messages are safe (`kyu.db`
+holds them in the clear); what is lost is every sealed credential. Nothing is
+deleted, only moved aside, so a copy turning up later still helps.
+
+1. `systemctl stop kyu`.
+2. Move the kit database aside with its log files:
+   ```bash
+   cd /appdata/kyu/kyu-config
+   for f in kyu-kit.db kyu-kit.db-wal kyu-kit.db-shm; do [ -e $f ] && mv $f $f.lost-key; done
+   ```
+   It holds the sealed app tokens and sessions the new key cannot open
+   (`core/crypto.rs`: `… cannot be decrypted with the current secret key`).
+3. Make a new pair on a terminal (it refuses a pipe) and replace both lines
+   in `kyu.env`: `kyu gen-secret`.
+   `KYU_TOKEN` changes too, so every script that used it must be told.
+4. `systemctl start kyu` (its `ExecStartPre` is `kyu --check`). The start recreates
+   `kyu-kit.db`. The 2.x `apps` table in `kyu.db` is still sealed under the
+   lost key; the start-up import skips tokens it cannot open
+   (`src/engine/apps.rs` `list_apps`, `src/kit/import.rs`), so it adds nothing.
+5. Log in with the new token, open **Apps**, and issue a fresh token for each
+   program that published or polled (kyu-runner and newsflash among them; the
+   Apps list is empty after step 4, so the names come from your own notes);
+   put each in that program's environment
+   file and restart it. Until then each gets a `401` from the hub.
+6. Verify: `/healthz` is ok, and each re-issued program polls successfully.
 
 ## 6 · Add or revoke an app
 
@@ -343,8 +438,11 @@ names the variable and says to revoke and regenerate),
 
 A revoked name becomes available again; a live one is refused with `409`.
 
-**Proven by:** `p7_an_app_token_works_and_stops_working_the_moment_it_is_revoked`,
-`p7_two_apps_cannot_share_a_name_and_a_revoked_name_can_be_reused`.
+**Proven by:** the kit's own suite (chassis-rs, e.g. `k38_issue_reveal_and_revoke_a_client_at_another_service`
+in its `tests/admin_api.rs`), which owns revocation since 3.0.0, and `kit_smoke_login_client_token_api_call_and_dashboard` in
+`tests/kit_smoke.rs`, which issues a client token and calls the API with it.
+(The 2.x tests `p7_an_app_token_works_and_stops_working_the_moment_it_is_revoked`
+and `p7_two_apps_cannot_share_a_name_and_a_revoked_name_can_be_reused` no longer exist.)
 
 ---
 

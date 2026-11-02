@@ -13,7 +13,7 @@ absent for that reason. Kenny closed it at the Phase 7 hardening gate and
 it is now built — the door, per-app tokens managed from the dashboard, a
 login page, and masked copy-paste commands. It arrived after L8 rather
 than in a milestone of its own; see FEATURES.md for the specified shape
-and `tests/p7_auth.rs` for what is proven.
+and `tests/k2_dashboard.rs` for what is proven today (the original `tests/p7_auth.rs` was removed in 3.0.0, when the kit took over the door).
 
 ## Status table
 
