@@ -78,12 +78,13 @@ fn assemble(app: &mut App, config: &Config, db: AppDb) -> (Arc<Engine>, AppState
     let clock = SystemClock;
     let heartbeat = Heartbeat::starting_at(clock.now_ms());
     let engine = Arc::new(Engine::with_defaults(db, Arc::new(clock), config.defaults));
-    let state = AppState::with_auth(
+    let mut state = AppState::with_auth(
         engine.clone(),
         Limits::from_config(config),
         heartbeat.clone(),
         config.auth.clone(),
     );
+    state.backup_keep = config.backup_keep;
     mount(app, state.clone(), engine.clone(), heartbeat.clone());
     (engine, state, heartbeat)
 }

@@ -56,6 +56,8 @@ pub struct AppState {
     pub heartbeat: Heartbeat,
     /// The door policy (W2). `Arc` because every request reads it.
     pub auth: Arc<Auth>,
+    /// How many backup files `POST /api/backup` keeps (`KYU_BACKUP_KEEP`).
+    pub backup_keep: usize,
 }
 
 impl AppState {
@@ -77,6 +79,7 @@ impl AppState {
             limits,
             heartbeat,
             auth: Arc::new(auth),
+            backup_keep: crate::config::DEFAULT_BACKUP_KEEP,
         }
     }
 }
