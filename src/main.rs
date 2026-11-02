@@ -86,6 +86,7 @@ fn assemble(app: &mut App, config: &Config, db: AppDb) -> (Arc<Engine>, AppState
     );
     state.backup_keep = config.backup_keep;
     state.max_concurrent_polls = config.max_concurrent_polls;
+    state.shutdown = Some(app.shutdown_signal());
     mount(app, state.clone(), engine.clone(), heartbeat.clone());
     (engine, state, heartbeat)
 }

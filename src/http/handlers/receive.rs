@@ -149,7 +149,7 @@ pub async fn receive(
         }
 
         let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
+        if remaining.is_zero() || stopping(&state) {
             // Nothing waiting. 204 rather than an error: an empty topic is
             // the normal state of a healthy queue.
             return Ok(empty_poll(created.as_ref(), backfilled, &subscription));
@@ -159,6 +159,7 @@ pub async fn receive(
         tokio::select! {
             _ = waiter => {}
             _ = tokio::time::sleep(recheck) => {}
+            _ = until_stop(&state) => {}
         }
     }
 }
@@ -177,4 +178,21 @@ async fn claim(
         engine.poll_next_as(&topic, &subscription, from_beginning, app.as_deref())
     })
     .await
+}
+
+/// Whether the service has begun to stop; a poll then answers 204 at once
+/// rather than holding the drain until its wait runs out.
+fn stopping(state: &AppState) -> bool {
+    state
+        .shutdown
+        .as_ref()
+        .is_some_and(|s| s.is_shutting_down())
+}
+
+/// Resolves when the service starts to stop; never without a kit app.
+async fn until_stop(state: &AppState) {
+    match &state.shutdown {
+        Some(signal) => signal.wait().await,
+        None => std::future::pending().await,
+    }
 }

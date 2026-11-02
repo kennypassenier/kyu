@@ -64,6 +64,10 @@ pub struct AppState {
     /// How many polls one caller may hold open (`KYU_MAX_CONCURRENT_POLLS`).
     pub max_concurrent_polls: usize,
     pub polls: Arc<polls::Polls>,
+    /// Fires when the service starts to stop, so a long poll answers at
+    /// once instead of holding the drain (chassis `App::shutdown_signal`).
+    /// `None` in tests that mount the router without a kit app.
+    pub shutdown: Option<chassis::ShutdownSignal>,
 }
 
 impl AppState {
@@ -88,6 +92,7 @@ impl AppState {
             backup_keep: crate::config::DEFAULT_BACKUP_KEEP,
             max_concurrent_polls: crate::config::DEFAULT_MAX_CONCURRENT_POLLS,
             polls: Arc::new(polls::Polls::new()),
+            shutdown: None,
         }
     }
 }
