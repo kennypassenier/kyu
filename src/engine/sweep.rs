@@ -5,9 +5,10 @@ use crate::store::dedup as store_dedup;
 use crate::store::queries::{self, Overdue};
 
 use super::clock::Millis;
+use super::clockguard::CLOCK_JUMP_LIMIT_MS;
 use super::ids::MessageIds;
-use super::settle::{Cause, Settled, apply};
-use super::{Defaults, Engine, Result};
+use super::settle::{Cause, Settled, announce, apply};
+use super::{Defaults, Engine, Result, SweepReport};
 
 impl Engine {
     /// K5, K6, K7. One pass of the background work: expired leases return
@@ -24,7 +25,12 @@ impl Engine {
             // Locking the id generator inside the store transaction is safe
             // in one direction only: publish takes the generator and releases
             // it *before* the store, so the two can never wait on each other.
-            let mut ids = self.ids.lock().expect("the id lock is never poisoned");
+            let mut ids = self.lock_ids();
+            let skew = self.clock_guard.inspect(
+                now,
+                CLOCK_JUMP_LIMIT_MS,
+                queries::newest_published_at(tx)?,
+            );
             let mut pass = Pass {
                 tx,
                 ids: &mut ids,
@@ -32,14 +38,16 @@ impl Engine {
                 limit: batch_limit,
                 defaults: self.defaults,
                 report: SweepReport::default(),
+                clock_trusted: skew.is_none(),
             };
             pass.settle_leases()?;
             pass.announce_expiries()?;
-            pass.idle_lifecycle()?;
-            // K9 · retention, last: everything above may have settled a
-            // delivery that was the only reason to keep a message.
-            pass.collect_retained()?;
-            pass.prune_history()?;
+            match skew {
+                // A wrong clock must not archive subscriptions or delete
+                // anything by age; leases and TTL settling above still ran.
+                Some(skew) => pass.report.clock_skew = Some(skew.reason),
+                None => pass.age_based_steps()?,
+            }
 
             let mut report = pass.report;
             report.wake.sort();
@@ -58,9 +66,22 @@ struct Pass<'a> {
     limit: usize,
     defaults: Defaults,
     report: SweepReport,
+    /// False while the clock looks wrong: TTL expiry is a decision by age
+    /// too, so a wrong clock must not expire messages either.
+    clock_trusted: bool,
 }
 
 impl Pass<'_> {
+    /// Everything that archives or deletes by age, which only runs while the
+    /// clock is believed.
+    fn age_based_steps(&mut self) -> Result<()> {
+        self.idle_lifecycle()?;
+        // K9 · retention, last: everything above may have settled a
+        // delivery that was the only reason to keep a message.
+        self.collect_retained()?;
+        self.prune_history()
+    }
+
     /// Writes one event to `kyu.events` and remembers who to wake.
     fn emit(&mut self, event: &Event) -> Result<()> {
         let woken = events::emit(self.tx, self.ids, self.now, event)?;
@@ -77,9 +98,12 @@ impl Pass<'_> {
     /// TTL expire.
     fn settle_leases(&mut self) -> Result<()> {
         let overdue = queries::overdue_claims(self.tx, self.now, self.limit)?;
-        let stale = queries::pending_past_ttl(self.tx, self.now, self.limit)?;
-        self.note_batch(overdue.len());
-        self.note_batch(stale.len());
+        let stale = if self.clock_trusted {
+            queries::pending_past_ttl(self.tx, self.now, self.limit)?
+        } else {
+            Vec::new()
+        };
+        let (scanned, before) = (overdue.len().max(stale.len()), self.report.changed());
 
         for delivery in overdue {
             self.settle_overdue(&delivery)?;
@@ -92,32 +116,29 @@ impl Pass<'_> {
                 queries::note_expiry(self.tx, delivery.sub_id, 1)?;
             }
         }
+        // A full batch only means more work if something in it changed; a
+        // batch of rows that all settled Unchanged would be rescanned forever.
+        if self.report.changed() > before {
+            self.note_batch(scanned);
+        }
         Ok(())
     }
 
     fn settle_overdue(&mut self, delivery: &Overdue) -> Result<()> {
-        match apply(self.tx, delivery, self.now, Cause::LeaseExpired)? {
+        let settled = apply(self.tx, delivery, self.now, Cause::LeaseExpired)?;
+        match settled {
             Settled::Redelivered => {
                 self.report.redelivered += 1;
                 self.report
                     .wake
                     .push((delivery.topic.clone(), delivery.subscription.clone()));
             }
-            Settled::DeadLettered => {
-                self.report.dead_lettered += 1;
-                self.emit(&Event::DeadLettered {
-                    topic: delivery.topic.clone(),
-                    subscription: delivery.subscription.clone(),
-                    message_id: queries::message_id_of(self.tx, delivery.msg_seq)?,
-                    attempts: delivery.attempts + 1,
-                })?;
-            }
-            Settled::Expired => {
-                self.report.expired += 1;
-                queries::note_expiry(self.tx, delivery.sub_id, 1)?;
-            }
+            Settled::DeadLettered => self.report.dead_lettered += 1,
+            Settled::Expired => self.report.expired += 1,
             Settled::Unchanged => {}
         }
+        let woken = announce(self.tx, self.ids, self.now, delivery, settled)?;
+        self.report.wake_events(woken);
         Ok(())
     }
 
@@ -201,43 +222,5 @@ impl Pass<'_> {
         self.note_batch(pruned);
         self.note_batch(pruned_keys);
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SweepReport {
-    pub redelivered: usize,
-    pub dead_lettered: usize,
-    pub expired: usize,
-    /// Messages retention collected (K9).
-    pub collected: usize,
-    /// Subscriptions newly flagged as idle (K11).
-    pub flagged: usize,
-    /// Subscriptions archived, and the deliveries that lapsed with them.
-    pub archived: usize,
-    pub lapsed: usize,
-    /// Subscriptions with a message waiting again, so their waiting pollers
-    /// can be woken instead of sitting out their timeout (AR5).
-    pub wake: Vec<(String, String)>,
-    /// A batch was filled, so another pass should follow immediately.
-    pub more_work: bool,
-}
-
-impl SweepReport {
-    /// Records subscriptions of the events topic that gained a message.
-    fn wake_events(&mut self, subscriptions: Vec<String>) {
-        for subscription in subscriptions {
-            self.wake
-                .push((crate::events::EVENTS_TOPIC.to_string(), subscription));
-        }
-    }
-
-    pub fn changed(&self) -> usize {
-        self.redelivered
-            + self.dead_lettered
-            + self.expired
-            + self.collected
-            + self.flagged
-            + self.archived
     }
 }

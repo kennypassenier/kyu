@@ -26,6 +26,13 @@ pub const DEFAULT_MAX_ATTEMPTS: i64 = 5;
 /// Base delay before a failed delivery is offered again.
 pub const DEFAULT_BACKOFF_MS: i64 = 1_000;
 
+/// Longest lease a subscription may ask for: one day. Lease and TTL are
+/// added to a timestamp in SQL, so an unbounded value would overflow it.
+pub const MAX_LEASE_MS: i64 = 24 * 60 * 60 * 1_000;
+
+/// Longest TTL a subscription may ask for: ten years.
+pub const MAX_TTL_MS: i64 = 3_650 * 24 * 60 * 60 * 1_000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Policy {
     pub lease_ms: i64,
@@ -68,12 +75,13 @@ impl Policy {
         self.backoff_ms.saturating_mul(attempts.max(1))
     }
 
-    /// Whether a message published at `published_at` has outlived this
+    /// Whether a message whose TTL started at `ttl_from` (its due time when
+    /// it was delayed, else its publication time) has outlived this
     /// subscription's TTL by `now`.
-    pub fn is_past_ttl(&self, published_at: Millis, now: Millis) -> bool {
+    pub fn is_past_ttl(&self, ttl_from: Millis, now: Millis) -> bool {
         match self.ttl_ms {
             None => false,
-            Some(ttl) => published_at.saturating_add(ttl) <= now,
+            Some(ttl) => ttl_from.saturating_add(ttl) <= now,
         }
     }
 }
@@ -89,6 +97,17 @@ pub fn validate(stored: StoredPolicy) -> Result<(), (&'static str, String)> {
             "a lease must be longer than zero milliseconds, or a message would be \
              handed to the next consumer the instant it is claimed"
                 .to_string(),
+        ));
+    }
+    if let Some(lease) = stored.lease_ms
+        && lease > MAX_LEASE_MS
+    {
+        return Err((
+            "lease_ms",
+            format!(
+                "a lease can be at most {MAX_LEASE_MS} ms (one day); a longer one would \
+                 keep a crashed consumer's message hidden for days"
+            ),
         ));
     }
     if let Some(attempts) = stored.max_attempts
@@ -117,6 +136,17 @@ pub fn validate(stored: StoredPolicy) -> Result<(), (&'static str, String)> {
             "a TTL must be longer than zero milliseconds; omit it entirely to keep \
              messages regardless of age"
                 .to_string(),
+        ));
+    }
+    if let Some(ttl) = stored.ttl_ms
+        && ttl > MAX_TTL_MS
+    {
+        return Err((
+            "ttl_ms",
+            format!(
+                "a TTL can be at most {MAX_TTL_MS} ms (3650 days); omit it entirely to \
+                 keep messages regardless of age"
+            ),
         ));
     }
     for (field, value) in [
@@ -186,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn l4_ttl_is_measured_from_publication() {
+    fn l4_ttl_is_measured_from_where_it_starts() {
         let policy = Policy {
             ttl_ms: Some(600_000),
             ..Policy::default()

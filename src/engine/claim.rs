@@ -87,9 +87,23 @@ impl Engine {
     /// K3. Settles a message for one subscription only — an ack speaks for
     /// the consumer that sends it and for nobody else (G3).
     pub fn ack(&self, topic: &str, subscription: &str, message_id: &str) -> Result<()> {
+        self.ack_attempt(topic, subscription, message_id, None)
+    }
+
+    /// K3. Like [`Engine::ack`], but when `attempt` is given the ack is
+    /// refused unless it is still the attempt in flight: a consumer whose
+    /// lease ran out must not settle the delivery that replaced its own.
+    pub fn ack_attempt(
+        &self,
+        topic: &str,
+        subscription: &str,
+        message_id: &str,
+        attempt: Option<i64>,
+    ) -> Result<()> {
         let now = self.clock.now_ms();
         self.write(|tx| -> Result<()> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            check_attempt(tx, message_id, subscription, sub_id, attempt)?;
 
             match queries::ack(tx, message_id, sub_id)? {
                 AckOutcome::Acked => {
@@ -199,4 +213,26 @@ fn backfill(
         );
     }
     Ok(backfilled)
+}
+
+/// Refuses a settle that names an attempt other than the one in flight.
+/// `None` skips the check, so callers that never send `attempt` behave as
+/// they always did.
+pub(super) fn check_attempt(
+    tx: &rusqlite::Transaction,
+    message_id: &str,
+    subscription: &str,
+    sub_id: i64,
+    given: Option<i64>,
+) -> Result<()> {
+    let Some(given) = given else { return Ok(()) };
+    match queries::current_attempt(tx, message_id, sub_id)? {
+        Some(current) if current != given => Err(EngineError::StaleAttempt {
+            id: message_id.to_string(),
+            subscription: subscription.to_string(),
+            given,
+            current,
+        }),
+        _ => Ok(()),
+    }
 }

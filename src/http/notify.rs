@@ -32,7 +32,7 @@ impl Notifiers {
         let notify = self
             .waiters
             .lock()
-            .expect("the notifier lock is never poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .entry(key.clone())
             .or_default()
             .clone();
@@ -47,7 +47,7 @@ impl Notifiers {
     pub fn len(&self) -> usize {
         self.waiters
             .lock()
-            .expect("the notifier lock is never poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .len()
     }
 
@@ -62,7 +62,7 @@ impl Notifiers {
         let waiters = self
             .waiters
             .lock()
-            .expect("the notifier lock is never poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         for subscription in subscriptions {
             if let Some(notify) = waiters.get(&(topic.to_string(), subscription.clone())) {
                 notify.notify_one();
@@ -92,7 +92,7 @@ impl Drop for Waiting {
             .notifiers
             .waiters
             .lock()
-            .expect("the notifier lock is never poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // Two owners means the map and this guard: nobody else is waiting.
         // Checked under the lock, so a poll registering concurrently either
         // already counts or finds the entry gone and creates a fresh one.

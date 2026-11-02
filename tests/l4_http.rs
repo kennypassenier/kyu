@@ -400,3 +400,36 @@ async fn l4_requeueing_something_that_is_not_dead_is_refused() {
     );
     assert!(json["remedy"].as_str().unwrap_or_default().len() > 20);
 }
+
+#[tokio::test]
+async fn l4_a_late_ack_for_a_superseded_attempt_is_refused() {
+    let (hub, _dir) = spawn().await;
+    bootstrap(&hub, "jobs.transcode", "worker").await;
+    set_policy(&hub, "jobs.transcode", "worker", r#"{"backoff_ms":0}"#).await;
+    let id = publish(&hub, "jobs.transcode", r#"{"job":1}"#).await;
+    let first = receive(&hub, "jobs.transcode", "worker").await;
+    assert_eq!(header(&first, "kyu-attempt").as_deref(), Some("1"));
+
+    // The hand-back stands in for a lease that ran out: attempt 2 now exists.
+    let client = reqwest::Client::new();
+    let post = |path: String| client.post(hub.url(&path)).send();
+    let nacked = post(format!("/t/jobs.transcode/nack/{id}?as=worker&attempt=1"))
+        .await
+        .expect("a response");
+    assert_eq!(nacked.status(), 200);
+    let second = receive(&hub, "jobs.transcode", "worker").await;
+    assert_eq!(header(&second, "kyu-attempt").as_deref(), Some("2"));
+
+    let late = post(format!("/t/jobs.transcode/ack/{id}?as=worker&attempt=1"))
+        .await
+        .expect("a response");
+    assert_eq!(late.status(), 409);
+    let body = body_json(late).await;
+    assert!(body.to_string().contains("attempt 2"), "{body}");
+
+    let current = post(format!("/t/jobs.transcode/ack/{id}?as=worker&attempt=2"))
+        .await
+        .expect("a response");
+    assert_eq!(current.status(), 200);
+    hub.shutdown().await;
+}

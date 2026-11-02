@@ -16,9 +16,12 @@ use crate::http::handlers::engine_call::spawn_engine_write;
 pub struct AckQuery {
     #[serde(rename = "as")]
     pub as_: String,
+    /// The `kyu-attempt` the message arrived with. When given, an ack for a
+    /// delivery that has since been handed out again is refused with 409.
+    pub attempt: Option<i64>,
 }
 
-/// K3 · `POST /t/{topic}/ack/{id}?as={subscription}`
+/// K3 · `POST /t/{topic}/ack/{id}?as={subscription}[&attempt=N]`
 pub async fn ack(
     State(state): State<AppState>,
     Path((topic, id)): Path<(String, String)>,
@@ -29,8 +32,12 @@ pub async fn ack(
     let subscription = query.as_.clone();
     let id_for_engine = id.clone();
 
-    spawn_engine_write(move || engine.ack(&topic_for_engine, &subscription, &id_for_engine))
-        .await?;
+    let attempt = query.attempt;
+
+    spawn_engine_write(move || {
+        engine.ack_attempt(&topic_for_engine, &subscription, &id_for_engine, attempt)
+    })
+    .await?;
 
     tracing::info!(topic = %topic, subscription = %query.as_, id = %id, "message acknowledged");
 
@@ -44,6 +51,8 @@ pub struct NackQuery {
     /// `true` sends the message straight to the dead-letter list instead of
     /// spending its remaining attempts on a payload that cannot work.
     pub dead: Option<bool>,
+    /// The `kyu-attempt` the message arrived with; see [`AckQuery::attempt`].
+    pub attempt: Option<i64>,
 }
 
 /// The word the nack answer uses for what happened to the message.
@@ -56,7 +65,7 @@ fn outcome_name(settled: &Settled) -> &'static str {
     }
 }
 
-/// W5 · `POST /t/{topic}/nack/{id}?as={subscription}[&dead=true]`
+/// W5 · `POST /t/{topic}/nack/{id}?as={subscription}[&dead=true][&attempt=N]`
 pub async fn nack(
     State(state): State<AppState>,
     Path((topic, id)): Path<(String, String)>,
@@ -67,17 +76,19 @@ pub async fn nack(
         .clone()
         .ok_or_else(ApiError::missing_subscription)?;
     let dead = query.dead.unwrap_or(false);
+    let attempt = query.attempt;
 
     let engine = state.engine.clone();
     let topic_for_engine = topic.clone();
     let subscription_for_engine = subscription.clone();
     let id_for_engine = id.clone();
     let settled = spawn_engine_write(move || {
-        engine.nack(
+        engine.nack_attempt(
             &topic_for_engine,
             &subscription_for_engine,
             &id_for_engine,
             dead,
+            attempt,
         )
     })
     .await?;

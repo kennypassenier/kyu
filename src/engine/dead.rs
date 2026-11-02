@@ -1,9 +1,28 @@
 //! Failure paths a caller drives: nack (W5) and the dead-letter list (K6).
 
-use crate::store::queries::{self, DeadLetter, DeleteOutcome, NackOutcome, RequeueOutcome};
+use crate::store::queries::{
+    self, DeadLetter, DeleteOutcome, NackOutcome, Overdue, RequeueOutcome,
+};
 
-use super::settle::{Cause, Settled, apply, record_dead};
+use super::claim::check_attempt;
+use super::clock::Millis;
+use super::settle::{Cause, Settled, announce, apply, record_dead};
 use super::{Engine, EngineError, Result};
+
+/// The straight-to-dead path of a nack: no retry, whatever attempts remain.
+fn nack_to_dead(
+    tx: &rusqlite::Transaction,
+    delivery: &Overdue,
+    now: Millis,
+) -> anyhow::Result<Settled> {
+    let attempts = delivery.attempts + 1;
+    if !queries::mark_dead(tx, delivery.msg_seq, delivery.sub_id, attempts, now)? {
+        return Ok(Settled::Unchanged);
+    }
+    record_dead(tx, delivery, now, "nacked straight to the dead letters")?;
+    Ok(Settled::DeadLettered)
+}
+
 impl Engine {
     /// W5. The consumer says it failed, instead of leaving the lease to run
     /// out. `dead` sends the message straight to the dead-letter list: a
@@ -15,10 +34,24 @@ impl Engine {
         message_id: &str,
         dead: bool,
     ) -> Result<Settled> {
+        self.nack_attempt(topic, subscription, message_id, dead, None)
+    }
+
+    /// W5. Like [`Engine::nack`], refused unless `attempt` (when given) is
+    /// still the attempt in flight.
+    pub fn nack_attempt(
+        &self,
+        topic: &str,
+        subscription: &str,
+        message_id: &str,
+        dead: bool,
+        attempt: Option<i64>,
+    ) -> Result<Settled> {
         let now = self.clock.now_ms();
 
         self.write(|tx| -> Result<Settled> {
             let sub_id = self.resolve_subscription(tx, topic, subscription)?;
+            check_attempt(tx, message_id, subscription, sub_id, attempt)?;
 
             match queries::nack_claimed(tx, message_id, sub_id)? {
                 NackOutcome::NoSuchDelivery => {
@@ -40,14 +73,15 @@ impl Engine {
             let delivery = queries::delivery_of(tx, message_id, sub_id)?
                 .ok_or_else(|| anyhow::anyhow!("the delivery vanished mid-transaction"))?;
 
-            if dead {
-                if queries::mark_dead(tx, delivery.msg_seq, sub_id, delivery.attempts + 1, now)? {
-                    record_dead(tx, &delivery, now, "nacked straight to the dead letters")?;
-                }
-                return Ok(Settled::DeadLettered);
-            }
-
-            Ok(apply(tx, &delivery, now, Cause::Nack)?)
+            let settled = if dead {
+                nack_to_dead(tx, &delivery, now)?
+            } else {
+                apply(tx, &delivery, now, Cause::Nack)?
+            };
+            // Same announcement as the sweeper makes for a lease that ran out.
+            let mut ids = self.lock_ids();
+            announce(tx, &mut ids, now, &delivery, settled)?;
+            Ok(settled)
         })
     }
 

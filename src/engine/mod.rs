@@ -12,6 +12,7 @@
 mod apps;
 mod claim;
 pub mod clock;
+mod clockguard;
 pub mod days;
 mod dead;
 pub mod dedup;
@@ -25,12 +26,14 @@ mod settle;
 mod store_access;
 mod subscriptions;
 mod sweep;
+mod sweep_report;
 
 pub use apps::App;
+pub use clockguard::{CLOCK_JUMP_LIMIT_MS, ClockSkew};
 pub use error::EngineError;
 use error::{Result, check_name};
 pub use settle::Settled;
-pub use sweep::SweepReport;
+pub use sweep_report::SweepReport;
 
 use std::sync::{Arc, Mutex};
 
@@ -132,6 +135,7 @@ pub struct Engine {
     db: AppDb,
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
+    clock_guard: clockguard::ClockGuard,
     defaults: Defaults,
     /// When each subscription's poll time was last written, so a busy
     /// poller costs one write per [`poll::TOUCH_INTERVAL_MS`], not one per poll.
@@ -148,9 +152,20 @@ impl Engine {
             db,
             clock,
             ids: Mutex::new(MessageIds::new()),
+            clock_guard: clockguard::ClockGuard::default(),
             defaults,
             poll_touched: Mutex::default(),
         }
+    }
+
+    /// The id generator, recovered if a panic poisoned its lock. The guarded
+    /// state is a monotonic ULID generator whose every step leaves it valid,
+    /// so a poisoned lock is safe to reuse; failing instead would break
+    /// publish and sweep for the rest of the process.
+    fn lock_ids(&self) -> std::sync::MutexGuard<'_, MessageIds> {
+        self.ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn defaults(&self) -> Defaults {

@@ -1,8 +1,10 @@
 //! The one place a failed delivery's fate is decided (AR9).
 
+use crate::events::{self, Event};
 use crate::store::queries::{self, Overdue};
 
 use super::clock::Millis;
+use super::ids::MessageIds;
 use super::policy::Policy;
 
 /// Where a delivery ended up after failing (AR9).
@@ -29,7 +31,7 @@ pub(super) fn apply(
     // TTL is re-checked here, not only while a message waits: a consumer
     // that claims a message and then hangs for half an hour must not be
     // able to resurrect it past its deadline (AR9, the stale-doorbell case).
-    if policy.is_past_ttl(delivery.published_at, now) {
+    if policy.is_past_ttl(delivery.ttl_from, now) {
         return expire(tx, delivery, now);
     }
     if attempts >= policy.max_attempts {
@@ -116,6 +118,38 @@ impl Cause {
             Self::Nack => "nacked on the last allowed attempt",
             Self::LeaseExpired => "the lease ran out on the last allowed attempt",
         }
+    }
+}
+
+/// Announces how a failed delivery ended, the same way for every path that
+/// settles one (lease expiry in the sweep, a consumer's nack): a dead letter
+/// becomes a `message.dead_lettered` event, an expiry is counted towards the
+/// next `message.expired` announcement. Returns the subscriptions of the
+/// events topic that gained a message.
+pub(super) fn announce(
+    tx: &rusqlite::Transaction,
+    ids: &mut MessageIds,
+    now: Millis,
+    delivery: &Overdue,
+    settled: Settled,
+) -> anyhow::Result<Vec<String>> {
+    match settled {
+        Settled::DeadLettered => events::emit(
+            tx,
+            ids,
+            now,
+            &Event::DeadLettered {
+                topic: delivery.topic.clone(),
+                subscription: delivery.subscription.clone(),
+                message_id: queries::message_id_of(tx, delivery.msg_seq)?,
+                attempts: delivery.attempts + 1,
+            },
+        ),
+        Settled::Expired => {
+            queries::note_expiry(tx, delivery.sub_id, 1)?;
+            Ok(Vec::new())
+        }
+        Settled::Redelivered | Settled::Unchanged => Ok(Vec::new()),
     }
 }
 

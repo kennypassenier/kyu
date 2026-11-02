@@ -51,12 +51,7 @@ impl Engine {
         }
 
         let now = self.clock.now_ms();
-        let id = self
-            .ids
-            .lock()
-            .expect("the id lock is never poisoned")
-            .next(now)
-            .to_string();
+        let id = self.lock_ids().next(now).to_string();
 
         let message = NewMessage {
             id: &id,

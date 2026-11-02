@@ -17,7 +17,9 @@ pub struct Overdue {
     pub topic: String,
     pub subscription: String,
     pub attempts: i64,
-    pub published_at: Millis,
+    /// When the TTL clock started: the message's due time if it was delayed,
+    /// otherwise its publication time.
+    pub ttl_from: Millis,
     pub policy: StoredPolicy,
 }
 
@@ -26,7 +28,7 @@ pub struct Overdue {
 pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec<Overdue>> {
     let mut statement = tx
         .prepare(
-            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, COALESCE(m.due_at, m.published_at),
                     s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
                     s.idle_flag_ms, s.idle_archive_ms
                FROM deliveries d
@@ -46,7 +48,7 @@ pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec
                 topic: row.get(2)?,
                 subscription: row.get(3)?,
                 attempts: row.get(4)?,
-                published_at: row.get(5)?,
+                ttl_from: row.get(5)?,
                 policy: policy_from_row(row, 6)?,
             })
         })
@@ -60,7 +62,7 @@ pub fn overdue_claims(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec
 pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<Vec<Overdue>> {
     let mut statement = tx
         .prepare(
-            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+            "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, COALESCE(m.due_at, m.published_at),
                     s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
                     s.idle_flag_ms, s.idle_archive_ms
                FROM deliveries d
@@ -69,7 +71,7 @@ pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<V
                JOIN messages m ON m.seq = d.msg_seq
               WHERE d.state = 'pending'
                 AND s.ttl_ms IS NOT NULL
-                AND m.published_at + s.ttl_ms <= ?1
+                AND COALESCE(m.due_at, m.published_at) + s.ttl_ms <= ?1
               ORDER BY d.msg_seq
               LIMIT ?2",
         )
@@ -82,7 +84,7 @@ pub fn pending_past_ttl(tx: &Transaction, now: Millis, limit: usize) -> Result<V
                 topic: row.get(2)?,
                 subscription: row.get(3)?,
                 attempts: row.get(4)?,
-                published_at: row.get(5)?,
+                ttl_from: row.get(5)?,
                 policy: policy_from_row(row, 6)?,
             })
         })

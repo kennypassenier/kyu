@@ -80,6 +80,11 @@ curl -X POST "http://hub.lan:8080/t/notify.kenny/ack/<id>?as=printer"
 Until you acknowledge, the message is yours on loan. Ack settles it for **your
 subscription only** — a sibling subscription still has its own copy waiting.
 
+Add `&attempt=<kyu-attempt>` (the header the message arrived with) to make a
+late ack safe: if your lease ran out and the message was handed out again, the
+ack is refused with 409 instead of settling the newer delivery. Without
+`attempt`, an ack settles whatever attempt is current. Nack accepts it too.
+
 **Proven by:** `l3_an_ack_settles_one_subscription_only`,
 `l2_an_acked_message_never_returns_after_a_restart`.
 

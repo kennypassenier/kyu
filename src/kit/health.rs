@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chassis::{Subsystem, SubsystemStatus};
 
 use crate::engine::Engine;
-use crate::sweeper::Heartbeat;
+use crate::sweeper::{FAILING_AFTER, Heartbeat};
 
 /// `store`: the last failed write plus the write probe. Two questions,
 /// because they fail differently: the probe takes the write lock, which
@@ -62,7 +62,23 @@ impl Subsystem for SweeperSubsystem {
     }
 
     fn check(&self) -> SubsystemStatus {
+        let failures = self.heartbeat.consecutive_failures();
+        if failures >= FAILING_AFTER {
+            let error = self.heartbeat.last_error().unwrap_or_default();
+            return SubsystemStatus::failing(format!(
+                "failing: the last {failures} sweeps failed, most recently with: {error}. \
+                 Expired leases are not returned and nothing is dead-lettered until a sweep \
+                 succeeds; check the hub's log for \"the sweep failed\""
+            ));
+        }
         let now = self.engine.now_ms();
+        if let Some(reason) = self.heartbeat.clock_skew(now) {
+            return SubsystemStatus::failing(format!(
+                "degraded: {reason}. Retention, history pruning and idle archiving are \
+                 skipped while the clock looks wrong, so nothing is deleted by mistake. \
+                 Check the host's clock (NTP); the hub resumes by itself once it is sane"
+            ));
+        }
         if self.heartbeat.is_alive(now) {
             return SubsystemStatus::ok("alive");
         }

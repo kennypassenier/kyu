@@ -154,8 +154,9 @@ pub async fn unarchive(
 
     let note = if changed {
         "this subscription receives messages published from now on; the backlog it \
-         held when it was archived was settled as lapsed. Poll with ?from=beginning \
-         to pick up what the topic still retains."
+         held when it was archived was settled as lapsed and is not revived. Polling \
+         with ?from=beginning only replays retained messages that have no delivery \
+         row for this subscription, so the lapsed ones stay lapsed."
     } else {
         "this subscription was not archived, so nothing changed and no event was \
          published."

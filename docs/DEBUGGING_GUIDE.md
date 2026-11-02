@@ -46,6 +46,18 @@ Payloads and tokens are in none of them except the dashboard, on purpose.
 
 **Proven by:** `l5_healthz_goes_unhealthy_when_the_sweeper_stops`.
 
+A sweeper that keeps failing reports `failing` after three failed sweeps, with
+the last error. A clock that jumped more than an hour forward since the
+previous sweep makes the sweeper skip retention, history pruning, dedup
+pruning, idle archiving and TTL expiry until kyu restarts, and `/healthz`
+reports the sweeper `degraded` meanwhile: set the host's clock right, then
+restart the service. A clock behind the newest published message skips the
+same steps until it catches up. Expired leases keep returning to the queue
+either way.
+
+**Proven by (clock):** `l4_a_clock_jump_holds_retention_off_until_restart_and_says_so`,
+`l4_a_clock_behind_the_newest_message_skips_retention`.
+
 ## Publishing is refused
 
 | Symptom | Likely cause | How you confirm | Fix |

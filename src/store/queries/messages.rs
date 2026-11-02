@@ -29,8 +29,11 @@ pub fn insert_message(
 ///
 /// A message still pending or claimed on an active or flagged subscription
 /// is never collected, however old: a consumer that has been offline for a
-/// fortnight comes back to a complete backlog. Bounded by `limit` (AR5);
-/// delivery rows follow through the foreign key's cascade.
+/// fortnight comes back to a complete backlog. Neither is a message with a
+/// dead letter: it stays until the dead letter is requeued, deleted or
+/// pruned, so the list never loses a payload behind the operator's back.
+/// Bounded by `limit` (AR5); delivery rows follow through the foreign key's
+/// cascade.
 pub fn collect_retained(
     tx: &Transaction,
     now: Millis,
@@ -53,12 +56,27 @@ pub fn collect_retained(
                               WHERE d.msg_seq = m.seq
                                 AND d.state IN ('pending', 'claimed')
                                 AND s.state IN ('active', 'flagged'))
+                       AND NOT EXISTS (
+                             SELECT 1 FROM deliveries d
+                              WHERE d.msg_seq = m.seq AND d.state = 'dead')
                      ORDER BY m.seq
                      LIMIT ?3)",
             (now, default_retention_ms, limit as i64),
         )
         .context("cannot collect retained messages")?;
     Ok(deleted)
+}
+
+/// The newest `published_at` among the most recent messages by insertion
+/// order (a bounded look, so the once-a-second sweep never scans the table).
+pub fn newest_published_at(tx: &Transaction) -> Result<Option<Millis>> {
+    tx.query_row(
+        "SELECT max(published_at)
+           FROM (SELECT published_at FROM messages ORDER BY seq DESC LIMIT 1000)",
+        [],
+        |row| row.get(0),
+    )
+    .context("cannot read the newest publication time")
 }
 
 pub fn message_id_of(tx: &Transaction, msg_seq: i64) -> Result<String> {
