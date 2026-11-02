@@ -33,6 +33,16 @@ pub fn import_app_tokens(
     use chassis::core::clients::{Client, ClientsFile};
     use chassis::shell::store::{ClientStore, EncryptedFile, FileClientStore};
 
+    // The kit keeps its clients in `kyu-kit.db` and reads `clients.json.enc`
+    // once, at the start that creates that database (then renames it
+    // `*.migrated`). Once the database exists a written file is never read
+    // again, and every start would leave a fresh JSON data file behind
+    // (Kenny, 2026-11-02: all data lives in databases). So the 2.x tokens
+    // go through the file only before the kit's first start on this state.
+    if state_dir.join("kyu-kit.db").exists() {
+        return Ok(0);
+    }
+    let file = state_dir.join("clients.json.enc");
     let apps: Vec<_> = engine
         .list_apps(key)?
         .into_iter()
@@ -41,7 +51,6 @@ pub fn import_app_tokens(
     if apps.is_empty() {
         return Ok(0);
     }
-    let file = state_dir.join("clients.json.enc");
     let kit_key = chassis::core::crypto::Key::parse_hex("KYU_SECRET_KEY", key_hex, key_hex)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let store = FileClientStore::open(EncryptedFile::new(file, kit_key, "clients"))

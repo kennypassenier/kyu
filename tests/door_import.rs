@@ -153,3 +153,17 @@ fn door_import_ignores_a_revoked_row_with_the_same_name() {
     assert_eq!(live.len(), 1, "exactly one live radarr row");
     assert_eq!(live[0].token.as_deref(), Some(radarr.token.as_str()));
 }
+
+#[test]
+fn door_import_writes_no_client_file_once_the_kit_keeps_its_clients_in_a_database() {
+    let f = fixture();
+    f.engine.register_app("ha", &f.key).expect("ha");
+    // The kit has started on this state before: its clients live in the
+    // database, and a `clients.json.enc` written now would never be read.
+    std::fs::write(f.dir.path().join("kyu-kit.db"), b"").expect("a kit database");
+    assert_eq!(f.import(), 0, "nothing goes into a file nobody reads");
+    assert!(
+        !f.dir.path().join("clients.json.enc").exists(),
+        "no JSON data file is left behind"
+    );
+}
