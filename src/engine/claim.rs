@@ -53,7 +53,14 @@ impl Engine {
             };
             let cap = self.defaults.max_subscriptions_per_topic;
             let (sub_id, created) = find_or_create(tx, topic_id, subscription, now, cap)?;
-            mark_polled(tx, sub_id, topic, subscription, now)?;
+            mark_polled(
+                tx,
+                sub_id,
+                topic,
+                subscription,
+                now,
+                self.due_to_touch(topic, subscription, now),
+            )?;
             let backfilled = if from_beginning {
                 backfill(tx, topic_id, sub_id, topic, subscription)?
             } else {
@@ -143,6 +150,7 @@ fn mark_polled(
     topic: &str,
     subscription: &str,
     now: Millis,
+    touch: bool,
 ) -> Result<()> {
     // An archived subscription is not quietly revived by a poll: its
     // backlog was lapsed when it was archived, and whoever comes back
@@ -158,7 +166,9 @@ fn mark_polled(
     if state == "flagged" {
         queries::set_subscription_state(tx, sub_id, "active")?;
     }
-    queries::touch_subscription_poll(tx, sub_id, now)?;
+    if touch {
+        queries::touch_subscription_poll(tx, sub_id, now)?;
+    }
     Ok(())
 }
 

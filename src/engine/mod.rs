@@ -19,6 +19,7 @@ mod error;
 pub mod ids;
 pub mod names;
 pub mod policy;
+mod poll;
 mod publish;
 mod settle;
 mod store_access;
@@ -132,6 +133,9 @@ pub struct Engine {
     clock: Arc<dyn Clock>,
     ids: Mutex<MessageIds>,
     defaults: Defaults,
+    /// When each subscription's poll time was last written, so a busy
+    /// poller costs one write per [`poll::TOUCH_INTERVAL_MS`], not one per poll.
+    poll_touched: Mutex<std::collections::HashMap<(String, String), Millis>>,
 }
 
 impl Engine {
@@ -145,6 +149,7 @@ impl Engine {
             clock,
             ids: Mutex::new(MessageIds::new()),
             defaults,
+            poll_touched: Mutex::default(),
         }
     }
 

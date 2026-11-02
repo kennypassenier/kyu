@@ -174,7 +174,7 @@ async fn claim(
     let topic = topic.to_string();
     let subscription = subscription.to_string();
     spawn_engine_write(move || {
-        engine.claim_next_as(&topic, &subscription, from_beginning, app.as_deref())
+        engine.poll_next_as(&topic, &subscription, from_beginning, app.as_deref())
     })
     .await
 }
