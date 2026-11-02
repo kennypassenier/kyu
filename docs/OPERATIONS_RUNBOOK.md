@@ -140,15 +140,13 @@ knowing what it does under the hood before you run it unattended.
    ```
    Release notes are the one part a human adds something to; automating
    them from commit subjects produces a list nobody reads.
-4. **Verify the image and the signed assets:**
+4. **Verify the signed assets** (no container image is published since
+   2026-10-04, so there is nothing to pull):
    ```bash
-   docker pull ghcr.io/kennypassenier/kyu:1.2.3
    gh release view v1.2.3 --repo kennypassenier/kyu
    ```
-   The package is linked to this repository and takes its visibility, so a
-   public repo yields a package the homelab host can pull anonymously. The
-   release should list all four assets before any host's `kyu update` picks
-   it up.
+   The release should list all four assets before any host's `kyu update`
+   picks it up.
 
 ## 2b · Upgrade a running hub
 

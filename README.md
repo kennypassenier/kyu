@@ -76,9 +76,9 @@ There is no environment variable for it.
 ## Running it
 
 Kenny runs kyu as a **native binary under systemd**, on its own Proxmox LXC
-(CT 109) — no Docker on that box at all. A container image is published on
-every release too (`ghcr.io/kennypassenier/kyu`), for anyone who wants
-Docker instead:
+(CT 109) — no Docker on that box at all. No container image is published
+since 2026-10-04 (none exists on `ghcr.io/kennypassenier/kyu`); the
+`Dockerfile` stays for anyone who builds one on purpose:
 
 ```bash
 docker compose up -d
