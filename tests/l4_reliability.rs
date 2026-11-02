@@ -716,3 +716,40 @@ fn l4_a_sweeper_that_keeps_failing_reports_failing_with_the_last_error() {
     heartbeat.beat(f.engine.now_ms());
     assert!(subsystem.check().ok, "a successful pass ends the streak");
 }
+
+// ─── TTL starts when the message is due, not when it was published ──────────
+
+#[test]
+fn l4_a_delayed_message_gets_its_full_ttl_from_the_moment_it_is_due() {
+    let f = fixture();
+    f.bootstrap("speak.kenny_pc", "tts");
+    f.engine
+        .set_policy(
+            "speak.kenny_pc",
+            "tts",
+            StoredPolicy {
+                ttl_ms: Some(600_000),
+                ..StoredPolicy::default()
+            },
+        )
+        .expect("the policy");
+    let hour = 3_600_000;
+    let id = f
+        .engine
+        .publish_due("speak.kenny_pc", b"{}", None, Some(START + hour))
+        .expect("a delayed publish")
+        .id;
+
+    // An hour after publication the message is due; counted from
+    // publication it would already be six times past its TTL.
+    f.clock.advance(hour + 599_999);
+    assert_eq!(f.engine.sweep(100).expect("a sweep").expired, 0);
+    assert_eq!(f.claim("speak.kenny_pc", "tts"), Some(id.clone()));
+
+    f.engine
+        .nack("speak.kenny_pc", "tts", &id, false)
+        .expect("the nack");
+    f.clock.advance(1);
+    assert_eq!(f.engine.sweep(100).expect("a sweep").expired, 1);
+    assert_eq!(f.state_of(&id, "tts"), "expired");
+}

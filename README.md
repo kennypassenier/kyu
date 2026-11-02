@@ -253,7 +253,7 @@ curl -X PUT -d '{"ttl_ms":600000}' \
 | `lease_ms` | 30000 | How long a claimed message stays claimed before it is offered again. |
 | `max_attempts` | 5 | Delivery attempts before the message is dead-lettered. |
 | `backoff_ms` | 1000 | Base retry delay; the schedule is linear (1s, 2s, 3s…). |
-| `ttl_ms` | none | Drop messages older than this — "relevant now or never". |
+| `ttl_ms` | none | Drop messages older than this — "relevant now or never". Counted from when the message is due: its delay (`delay`/`at`) does not eat into it. |
 | `idle_flag_ms` | hub default | This subscription's own flag threshold. |
 | `idle_archive_ms` | hub default | This subscription's own archive threshold. |
 

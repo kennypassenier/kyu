@@ -75,12 +75,13 @@ impl Policy {
         self.backoff_ms.saturating_mul(attempts.max(1))
     }
 
-    /// Whether a message published at `published_at` has outlived this
+    /// Whether a message whose TTL started at `ttl_from` (its due time when
+    /// it was delayed, else its publication time) has outlived this
     /// subscription's TTL by `now`.
-    pub fn is_past_ttl(&self, published_at: Millis, now: Millis) -> bool {
+    pub fn is_past_ttl(&self, ttl_from: Millis, now: Millis) -> bool {
         match self.ttl_ms {
             None => false,
-            Some(ttl) => published_at.saturating_add(ttl) <= now,
+            Some(ttl) => ttl_from.saturating_add(ttl) <= now,
         }
     }
 }
@@ -215,7 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn l4_ttl_is_measured_from_publication() {
+    fn l4_ttl_is_measured_from_where_it_starts() {
         let policy = Policy {
             ttl_ms: Some(600_000),
             ..Policy::default()

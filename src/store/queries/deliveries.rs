@@ -46,8 +46,9 @@ pub fn insert_pending_delivery(tx: &Transaction, msg_seq: i64, sub_id: i64) -> R
 /// because a clock that steps backwards after a power cut would otherwise
 /// reorder the queue (AR7).
 ///
-/// A message past its subscription's TTL, measured from `published_at` as
-/// the sweeper does, is never claimed, even before the sweeper expires it.
+/// A message past its subscription's TTL, measured from when it became due
+/// (`due_at`, else `published_at`) as the sweeper does, is never claimed,
+/// even before the sweeper expires it.
 pub fn claim_next(
     tx: &Transaction,
     sub_id: i64,
@@ -65,7 +66,7 @@ pub fn claim_next(
                       JOIN subscriptions s ON s.id = d.sub_id
                      WHERE d.sub_id = ?1
                        AND d.state = 'pending'
-                       AND (s.ttl_ms IS NULL OR m.published_at + s.ttl_ms > ?2)
+                       AND (s.ttl_ms IS NULL OR COALESCE(m.due_at, m.published_at) + s.ttl_ms > ?2)
                        AND (d.next_attempt_at IS NULL OR d.next_attempt_at <= ?2)
                        AND (m.due_at IS NULL OR m.due_at <= ?2)
                      ORDER BY d.msg_seq
@@ -176,7 +177,7 @@ pub fn nack_claimed(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<N
 /// The delivery row behind a message id, for a subscription.
 pub fn delivery_of(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Option<Overdue>> {
     tx.query_row(
-        "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, m.published_at,
+        "SELECT d.msg_seq, d.sub_id, t.name, s.name, d.attempts, COALESCE(m.due_at, m.published_at),
                 s.lease_ms, s.max_attempts, s.backoff_ms, s.ttl_ms,
                 s.idle_flag_ms, s.idle_archive_ms
            FROM deliveries d
@@ -192,7 +193,7 @@ pub fn delivery_of(tx: &Transaction, message_id: &str, sub_id: i64) -> Result<Op
                 topic: row.get(2)?,
                 subscription: row.get(3)?,
                 attempts: row.get(4)?,
-                published_at: row.get(5)?,
+                ttl_from: row.get(5)?,
                 policy: policy_from_row(row, 6)?,
             })
         },

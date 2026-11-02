@@ -31,7 +31,7 @@ pub(super) fn apply(
     // TTL is re-checked here, not only while a message waits: a consumer
     // that claims a message and then hangs for half an hour must not be
     // able to resurrect it past its deadline (AR9, the stale-doorbell case).
-    if policy.is_past_ttl(delivery.published_at, now) {
+    if policy.is_past_ttl(delivery.ttl_from, now) {
         return expire(tx, delivery, now);
     }
     if attempts >= policy.max_attempts {
