@@ -1,6 +1,7 @@
 //! The HTTP surface (AR2). Routes translate HTTP into engine calls and
 //! back; business logic stays in [`crate::engine`].
 
+pub mod access;
 pub mod dedup;
 pub mod error;
 pub mod handlers;
@@ -11,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::Router;
+use axum::middleware;
 use axum::routing::{get, post};
 
 use crate::config::{Auth, Config};
@@ -91,16 +93,10 @@ impl AppState {
 /// the kit's store, or the login token for scripts run by Kenny). No layer
 /// here: the in-process tests mount it open, the binary mounts it closed.
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    // Management: the login token only. Consuming: a bearer header only.
+    // Publishing and a subscription's policy stay open to app tokens.
+    let manage = Router::new()
         .route("/api/backup", post(handlers::backup))
-        .route("/t/{topic}", post(handlers::publish))
-        .route("/t/{topic}/next", get(handlers::receive))
-        .route("/t/{topic}/ack/{id}", post(handlers::ack))
-        .route("/t/{topic}/nack/{id}", post(handlers::nack))
-        .route(
-            "/api/t/{topic}/subs/{subscription}/policy",
-            get(handlers::get_policy).put(handlers::put_policy),
-        )
         .route(
             "/api/t/{topic}/subs/{subscription}/dead",
             get(handlers::list_dead),
@@ -121,6 +117,20 @@ pub fn router(state: AppState) -> Router {
             "/api/t/{topic}/retention",
             get(handlers::get_retention).put(handlers::put_retention),
         )
+        .route_layer(middleware::from_fn(access::require_admin));
+    let consume = Router::new()
+        .route("/t/{topic}/next", get(handlers::receive))
+        .route("/t/{topic}/ack/{id}", post(handlers::ack))
+        .route("/t/{topic}/nack/{id}", post(handlers::nack))
+        .route_layer(middleware::from_fn(access::require_bearer));
+    Router::new()
+        .route("/t/{topic}", post(handlers::publish))
+        .route(
+            "/api/t/{topic}/subs/{subscription}/policy",
+            get(handlers::get_policy).put(handlers::put_policy),
+        )
+        .merge(manage)
+        .merge(consume)
         .with_state(state)
 }
 

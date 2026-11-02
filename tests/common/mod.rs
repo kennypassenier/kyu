@@ -106,6 +106,16 @@ impl KitHub {
         self.app.token()
     }
 
+    /// A request carrying the admin session cookie and no bearer header.
+    pub fn session_request(&self, method: reqwest::Method, path: &str) -> reqwest::RequestBuilder {
+        self.app.request(method, path)
+    }
+
+    /// A registered app (the kit's client) and its token.
+    pub async fn issue_app(&self, name: &str) -> String {
+        self.app.issue_client(name, &[]).await.token
+    }
+
     /// The admin session cookie (`name=value`), for a request built by hand
     /// instead of through `get`/`form` (a cross-origin CSRF probe, say).
     pub fn session_cookie(&self) -> &str {
