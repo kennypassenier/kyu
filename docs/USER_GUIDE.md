@@ -166,9 +166,14 @@ that an active or flagged subscription is still waiting for. A consumer
 offline for a fortnight comes back to a complete backlog.
 
 ```bash
-curl -X PUT -H 'content-type: application/json' -d '{"retention_ms":"never"}' \
+curl -X PUT -H 'content-type: application/json' -d '{"keep_forever":true}' \
      "http://hub.lan:8080/api/t/notify.kenny/retention"
 ```
+
+`{"retention_ms": 604800000}` sets a window (a week here) and `{}` falls back
+to the hub default. `"never"` is **not** a valid `retention_ms` in the body
+(the field is a number); it exists only as the value of the `KYU_RETENTION_MS`
+environment variable, which sets the hub-wide default.
 
 Replay pulls what the topic still retains into a subscription:
 
@@ -223,8 +228,12 @@ nor releases it early.
 
 ### K10 · The dashboard
 
-`http://hub.lan:8080/` lists every topic; each topic has a page with its
-subscriptions, backlogs, dead letters and recent messages.
+`http://hub.lan:8080/` is the kit's status page; its Topics section counts the
+topics, the backlog and the dead letters and links to `http://hub.lan:8080/topics`,
+which lists every topic. Each topic has a page with its subscriptions,
+backlogs, dead letters and recent messages. These are pages behind the admin
+login, for people; a script should call the API (`/t/...` and `/api/...`,
+with a bearer token), not parse the HTML.
 
 The part that matters for coming back after three months: the topic page
 prints the four commands **filled in with your own topic, your own last
@@ -235,9 +244,10 @@ way a browser shows it, pulls the printed command off it, and runs it.
 There is also a box to publish a test message (W9), and a Requeue button per
 dead letter.
 
-**Proven by:** `l7_the_snippets_the_dashboard_prints_actually_work`,
-`l7_the_topic_page_shows_subscriptions_backlogs_and_policy`,
-`l7_the_test_publish_form_puts_a_real_message_on_the_topic`.
+**Proven by:** `k2_the_snippets_the_dashboard_prints_actually_work`,
+`k2_the_topic_page_shows_subscriptions_backlogs_and_policy`,
+`k2_the_test_publish_form_puts_a_real_message_on_the_topic`
+(all in `tests/k2_dashboard.rs`; the earlier `l7_*` names no longer exist).
 
 ### W6 · Health · W1 · Metrics
 
@@ -246,13 +256,18 @@ curl http://hub.lan:8080/healthz
 curl http://hub.lan:8080/metrics
 ```
 
-`/healthz` answers `200` with `{"status":"ok","store":"writable","sweeper":"alive"}`,
-or `503` with an `error` and a `remedy` when the store cannot be written or the
-sweeper has stopped. Both endpoints stay open even on a hub with a token, so
-Uptime Kuma and Grafana keep working unchanged.
+`/healthz` is the kit's report: a JSON object with `status`, `version` and a
+`subsystems` object holding one entry per check, each `{"ok": …, "detail": …}`.
+kyu registers two subsystems, `store` (detail `writable` when healthy) and
+`sweeper` (detail `alive` when healthy). `status` is `ok` with HTTP `200` when
+every subsystem is ok, otherwise `degraded` with HTTP `503`, and the failing
+subsystem's `detail` carries the reason and the remedy. Both endpoints stay
+open even on a hub with a token, so Uptime Kuma and Grafana keep working
+unchanged.
 
 `/metrics` exposes `kyu_topics`, `kyu_subscriptions`, `kyu_messages`,
-`kyu_deliveries` (by state), `kyu_store_bytes` and
+`kyu_store_bytes`, `kyu_deliveries` (labels `topic`, `subscription`,
+`state`), `kyu_dedup_keys`, `kyu_duplicates_suppressed` (label `topic`) and
 `kyu_sweeper_age_ms`. The last one is the alertable series: a stalled
 sweeper makes messages *hang* rather than fail, which is otherwise invisible.
 

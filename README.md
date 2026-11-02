@@ -5,21 +5,21 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 3.1.0.** Every frozen feature is built and under test (183
-> tests, gated on every commit and again before every release). The version is a promise about the HTTP
-> contract — the three verbs, their parameters and response shapes, and the
-> environment variables. The dashboard's HTML and the on-disk schema are not
-> part of it.
+> **Status: 6.0.0.** Every frozen feature is built and under test (229
+> tests, gated on every commit and again before every release). The version
+> is a promise about the HTTP contract — the three verbs, their parameters
+> and response shapes, and the environment variables. The dashboard's HTML
+> and the on-disk schema are not part of it.
 >
 > 3.0.0 moved the hub onto
 > [chassis-rs](https://github.com/kennypassenier/chassis-rs): the kit now
 > owns the command line, transport knobs, logging, health, metrics, graceful
 > shutdown, signed self-update, the door and the dashboard shell. The hub
 > itself — topics, subscriptions, leases, the SQLite store — is unchanged.
-> 3.1.0 followed with chassis-rs 1.8.0 and kp-themes 5.0.0. See
-> CHANGELOG.md for the full migration notes, including the 1.0.1→2.0.0
-> rename from `mailbox`. Runs on LXC 109 as a native binary under systemd,
-> backed up nightly and watched by Uptime Kuma.
+> 6.0.0 runs on chassis-rs 4.0.0 with kp-themes 12 (`Cargo.toml`,
+> `.chassis.toml`). See CHANGELOG.md for the full migration notes, including
+> the 1.0.1→2.0.0 rename from `mailbox`. Runs on LXC 109 as a native binary
+> under systemd, backed up nightly and watched by Uptime Kuma.
 
 ## The idea
 
@@ -76,9 +76,9 @@ There is no environment variable for it.
 ## Running it
 
 Kenny runs kyu as a **native binary under systemd**, on its own Proxmox LXC
-(CT 109) — no Docker on that box at all. A container image is published on
-every release too (`ghcr.io/kennypassenier/kyu`), for anyone who wants
-Docker instead:
+(CT 109) — no Docker on that box at all. No container image is published
+since 2026-10-04 (none exists on `ghcr.io/kennypassenier/kyu`); the
+`Dockerfile` stays for anyone who builds one on purpose:
 
 ```bash
 docker compose up -d
@@ -128,8 +128,11 @@ difference bites exactly once:
 
 - Rotating **`KYU_TOKEN`** is safe. App tokens keep working; you just log
   in with a new value.
-- Rotating **`KYU_SECRET_KEY`** makes every stored app token unreadable.
-  The apps page will show them as `unreadable`; revoke and re-issue.
+- Rotating **`KYU_SECRET_KEY`** without re-sealing leaves the stored app
+  tokens unreadable: the kit says `cannot be decrypted with the current secret
+  key`. With the previous key, `kyu rekey` re-seals them; without it, they must
+  be re-issued (OPERATIONS_RUNBOOK §5 and §5b, which also lists where copies
+  of the key are).
 
 That is precisely why the key is a separate variable rather than derived from
 the token: so that rotating a leaked password does not silently take every
@@ -142,14 +145,14 @@ GitHub Actions (Kenny, 2026-09-29; needs the `chassis` CLI of chassis-rs
 3.0.0 or later):
 
 ```bash
-chassis release 4.0.2             # gate, bump, tag, build, publish, sign, upload
-chassis release 4.0.2 --dry-run   # gate and build everything, publish nothing
+chassis release <version>       # gate, bump, tag, build, publish, sign, upload
+chassis release <version> --dry-run   # gate and build everything, publish nothing
 ```
 
 It runs the full gate first (fmt, clippy, the suite, the project gates including the container smoke, cargo-deny, the image smoke), bumps
 `Cargo.toml`'s version and `CHANGELOG.md` in one commit and tags it, then
 builds the static musl binary, writes `SHA256SUMS` and builds the Docker
-image (`ghcr.io/kennypassenier/kyu:v4.0.2` and `:latest`). Only then does
+image (`ghcr.io/kennypassenier/kyu:v<version>` and `:latest`). Only then does
 it push `main`, the tag and the image, create the GitHub release with
 `kyu` + `SHA256SUMS`, and sign from Kenny's own machine — the signing key
 never leaves it — uploading `SHA256SUMS.minisig` and `VERSION`. The
@@ -230,14 +233,16 @@ consumer is an environment variable.
 | `KYU_MAX_BODY_BYTES` | `1048576` | Largest accepted payload; bigger ones are refused with 413, never trimmed. |
 | `KYU_LOG` | `info` | Log filter (`tracing` syntax). |
 | `KYU_LOG_FORMAT` | human | Set to `json` for one JSON object per line. |
-| `KYU_TOKEN` | *(none)* | The token you log in with and that scripts send. Unset means no door at all. |
-| `KYU_SECRET_KEY` | *(none)* | 64 hex characters. Encrypts per-app tokens. Required whenever `KYU_TOKEN` is set. |
+| `KYU_TOKEN` | *(none)* | The token you log in with and that scripts send (16+ characters). Required: the kit refuses to start without it. |
+| `KYU_SECRET_KEY` | *(none)* | 64 hex characters. Seals the app tokens and sessions on disk. Required together with `KYU_TOKEN`. |
 | `KYU_RETENTION_MS` | `604800000` (7 days) | Default retention. `never` keeps messages indefinitely. |
 | `KYU_IDLE_FLAG_MS` | `604800000` (7 days) | Unpolled for this long → flagged on the dashboard. |
 | `KYU_IDLE_ARCHIVE_MS` | `2592000000` (30 days) | Unpolled for this long → archived; outstanding messages are settled as `lapsed`. |
 | `KYU_EXPIRED_EVENT_WINDOW_MS` | `86400000` (1 day) | One `message.expired` event per subscription per window, carrying the count since the previous one; the first after a quiet spell goes out at once. `never` is refused. |
-| `KYU_STORAGE_BUDGET_MB` / `KYU_STORAGE_WARN_MB` | `50` / `40` | Chassis 3.11.0: the size the store may reach before the status page and `/metrics` warn (it never refuses a write); also settable on the Storage page unless the variable fixes it. The Storage page lists kyu's tables (messages, delivery attempts, hourly statistics, backlog samples) with sizes and a preview plus typed-confirm delete. |
-| `KYU_TRUSTED_ADMINS` | *(empty)* | Chassis 3.13.0: comma-separated exact IP addresses whose requests are the admin without a login (only the TCP peer counts, never a forwarded header; a bearer, when sent, still decides). A range, `0.0.0.0` and a trusted proxy address refuse to start. |
+| `KYU_STORAGE_BUDGET_MB` / `KYU_STORAGE_WARN_MB` | `50` / `40` | Kit: the size both database files may take together before the status page and `/metrics` warn (it never refuses a write); also settable on the Storage page unless the variable fixes it. The Storage page lists kyu's tables (messages, delivery attempts, hourly statistics, backlog samples) with sizes and a preview plus typed-confirm delete. |
+| `KYU_TRUSTED_ADMINS` | *(empty)* | Kit: comma-separated IP addresses whose requests are the admin without a login: the TCP peer, or behind a trusted proxy the last `X-Forwarded-For` hop that proxy appended, never a trusted proxy itself (`docs/KIT.md`; CHANGELOG 6.0.0). A range, `0.0.0.0` and a trusted proxy address refuse to start. |
+| `KYU_TRUSTED_PROXIES` | *(empty)* | Kit: comma-separated IP addresses (e.g. Traefik's) whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are believed. Empty behind a reverse proxy means every client looks like the proxy's address. |
+| `KYU_SHUTDOWN_TIMEOUT_MS` | `10000` | Kit: milliseconds allowed for draining in-flight requests and for each flush hook at stop; `0` is refused. Keep the unit's `TimeoutStopSec` above it. |
 
 The two idle thresholds are **defaults, not laws** — see below.
 

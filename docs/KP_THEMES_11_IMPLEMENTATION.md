@@ -53,7 +53,10 @@ Schema 7 adds, with a migration that keeps the store's existing data:
 - `attempts`: one row per delivery attempt (topic, subscription, message
   id, attempt number, claimed_at, ended_at, outcome, app name, reason),
   written where a claim, ack, nack, lease expiry and dead-lettering already
-  happen; pruned with the message it belongs to.
+  happen; pruned with the message it belongs to (the cascade) and also by
+  age: the sweeper drops rows older than `ATTEMPTS_KEPT_MS` (30 days,
+  `src/store/queries/attempts.rs`), so a topic kept forever cannot grow it
+  without bound.
 - `stats_hourly` (topic, hour, published, dead) and `stats_daily` (topic,
   subscription, day, delivered, dead): counters bumped on publish, ack and
   dead-lettering; hourly kept 30 days, daily 400 days, pruned by the sweeper.
@@ -74,6 +77,12 @@ Every growing table has its cap from the start.
   `stats_daily` is not a kind: its `day` is a day number the kit cannot
   compare. Cost to know: two openers share the file (WAL handles it) and the
   kit adds `chassis_meta` and `chassis_prefs` outside the numbered schema.
+  *Amended 2026-11-02:* this is the 3.11.0 picture. Since the kit owns the
+  handle (`AppDb`, see `src/storage.rs`) it opens and migrates `kyu.db`
+  itself, and since 5.0.0 (CHANGELOG) the kit's own data (clients, sessions,
+  passkeys) lives in a separate file, `kyu-kit.db`; the kit adds only two
+  small tables of its own to `kyu.db`. `/api/backup` still copies `kyu.db`
+  alone.
 - **Preferences (3.12.0)**: `App::sync_browser_keys` declares the prefix
   `kp-remember:` (every `data-kp-remember` choice, the tour-done flag
   included). The theme key stays in the browser (read before login).

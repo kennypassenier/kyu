@@ -89,6 +89,11 @@ Served by the same binary: all topics; per topic its subscriptions
 (backlog, last ack, alive/idle/⚠), recent messages with payloads, dead
 letters, and per-topic copy-paste curl examples rendered with a real
 recent payload. English UI, no login (W2 is Later).
+*Amended 2026-11-02:* the door shipped (W2, built after the Phase 7 gate and
+moved onto the kit's login in 3.0.0): the dashboard pages sit behind the
+admin login, the machine API behind a client token, and the hub refuses to
+start without `KYU_TOKEN` and `KYU_SECRET_KEY`. The original "no login" line
+above is the K10 spec as frozen, not what runs today.
 **Proven by:** route/render auto-tests with seeded data; S1 re-entry
 walkthrough as scripted manual test (Phase 8).
 *Amended 2026-09-06 (K2-2):* the pages live inside the kit's dashboard.
@@ -255,7 +260,7 @@ something once something already decides who may in. What changed is the
 **page**: on an unprotected hub it now explains that, and hands over a
 freshly generated `KYU_TOKEN`/`KYU_SECRET_KEY` pair — the same way the CLI
 already prints one when refusing to start on a token without a key — ready
-to paste into the compose file. Proven in `tests/p7_auth.rs`, shown red
+to paste into the compose file. Proven in `tests/p7_auth.rs` (that suite was removed in 3.0.0, when the kit took over the door; today `tests/k2_dashboard.rs` proves the hub's side), shown red
 against the pre-fix code before being trusted.
 
 
@@ -299,7 +304,7 @@ only one of four without it, and the only one with a database.
   escape hatch stays systemd's `TimeoutStopSec`, set above kyu's own
   budget.
 
-Proven by `tests/w12_shutdown.rs` (5 tests, real signals against the
+Proven by `tests/w12_shutdown.rs` (4 tests, real signals against the
 real binary): a clean exit code, a truncated log, the backlog intact
 across the stop, three SIGTERMs in a row still exiting 0, and an
 in-flight long poll answered rather than dropped.
@@ -447,7 +452,7 @@ answered question, and it would only catch someone editing a vendored copy.
 The risk a copy actually runs is staleness, and contrast says nothing about
 that — the gate above guards the risk that is there.
 
-Proven by `tests/w13_themes.rs`: the picker offers exactly the themes the
+Proven by `tests/w13_themes.rs` (removed 2026-09-06, see the amendment under W13): the picker offers exactly the themes the
 vendored registry defines and no others, the contract attributes are
 present, the storage contract is read from the served registry rather than
 from a literal, the whole ES module chain is reachable while the traversal
@@ -513,8 +518,8 @@ The button sits beside Requeue, wired through the same DI10 arm-then-act
 pattern as Revoke on the apps page (`data-kp-destructive`,
 `data-kp-confirm`) rather than a native `confirm()` dialog.
 
-Proven by `tests/p7_hardening.rs`'s
-`p7_w15_the_dead_letter_delete_button_removes_only_this_subscriptions_copy`:
+Proven by `tests/k2_dashboard.rs`'s
+`k2_the_dead_letter_delete_button_removes_only_this_subscriptions_copy`:
 two subscriptions on one topic, one message, delete one subscription's
 dead-lettered copy through the dashboard form and confirm the other
 subscription's copy of the identical message survives; a second delete of
@@ -538,8 +543,8 @@ aside in the same mini-round as V3 below — the payload belongs to the
 message, not to a delivery, so "editing" one here would silently rewrite
 what every other subscription sees for it.
 
-Proven by `tests/p7_hardening.rs`'s
-`p7_w16_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest`:
+Proven by `tests/k2_dashboard.rs`'s
+`k2_a_subscription_page_lists_its_own_backlog_and_deleting_spares_the_rest`:
 the topic page links to the subscription page, the pending item's id and
 payload show, an unpolled subscription name answers 404 rather than an
 empty page, and deleting one subscription's pending copy leaves the

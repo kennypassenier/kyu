@@ -10,49 +10,82 @@ actually there, so you can navigate the code without reading all of it.
 
 ```
 HTTP (axum)                 src/http/
-  ├── auth.rs               the door: bearer header or session cookie
-  ├── csrf.rs               refuse cross-origin state changes
-  ├── handlers.rs           verbs, dashboard pages, apps, login, static
+  ├── mod.rs                three routers: router() (machine API),
+  │                         pages() (dashboard), assets() (open files)
+  ├── handlers/             one module per area: publish, receive, settle,
+  │   │                     policy, dead, retention, backup, assets, wire,
+  │   │                     engine_call
+  │   └── dashboard/        the pages, their form actions and the JSON
+  │                         their scripts fetch (topics, topic,
+  │                         subscription, bulk, history, stats, ...)
+  ├── dedup.rs              Kyu-Dedup-Key / Kyu-Dedup-Window on publish
+  ├── notify.rs             long-poll wakeups
+  ├── page_modules.rs       the ES modules the page scripts import
   └── error.rs              every failure becomes {error, remedy}
         │
 Engine                      src/engine/
-  ├── mod.rs                publish / receive / ack / nack / policy / apps
-  ├── clock.rs              injected time, so leases are testable
-  ├── ids.rs                ULIDs that never go backwards
-  ├── names.rs              what a topic or subscription may be called
-  └── policy.rs             lease, attempts, backoff, ttl — resolved
+  ├── mod.rs                the Engine and its defaults
+  ├── publish.rs            publish, scheduled delivery, replay, damping
+  ├── claim.rs              claim (poll) and ack
+  ├── settle.rs, dead.rs    nack, backoff, dead-lettering, dead-letter list
+  ├── subscriptions.rs      lifecycle, retention, policy
+  ├── sweep.rs              the background pass
+  ├── dedup.rs, apps.rs     damping rules; the 2.x apps table
+  ├── clock.rs, ids.rs      injected time; ULIDs that never go backwards
+  ├── names.rs, days.rs     what a topic may be called; Brussels days
+  ├── policy.rs             lease, attempts, backoff, ttl: resolved
+  └── error.rs, store_access.rs
         │
 Store                       src/store/
-  ├── mod.rs                one writer + a 4-connection reader pool
-  ├── migrations.rs         forward-only, snapshot before migrating
-  └── queries.rs            every SQL statement in the project
+  ├── mod.rs                file name, reader count, pre-migration copies
+  ├── migrations/           the schema as a list, one entry per version
+  ├── queries/              every SQL statement, one file per concern
+  └── dedup.rs              the SQL behind publish damping
         │
-SQLite (bundled, WAL, synchronous=FULL)
+SQLite (the kit's AppDb: WAL, synchronous=FULL), opened by the kit
+  (src/storage.rs declares the schema, pool shape and Storage-page kinds)
 
 Background                  src/sweeper.rs    leases, TTL, retention, idle
 Self-reporting              src/events.rs     kyu.events
-Presentation                src/dashboard.rs + templates/ + static/
+Kit glue                    src/kit/          /healthz subsystems, /metrics
+                                              series, status-page section,
+                                              2.x token import
+Configuration               src/config/       KYU_* environment, the door
+                                              pair, the retired KYU_DATA_DIR
+Presentation                src/dashboard/ (view models) + templates/ +
+                            static/ (page scripts and stylesheets)
+Binary                      src/main.rs       assembles all of it on chassis
 ```
 
-**The rule that keeps it navigable:** SQL lives only in `store/queries.rs`,
-business logic only in `engine/`, HTTP shape only in `http/`. A handler that
-starts reasoning about delivery is in the wrong file.
+**The rule that keeps it navigable:** SQL lives only under `store/`
+(`queries/` and `dedup.rs`), business logic only in `engine/`, HTTP shape only
+in `http/`. A handler that starts reasoning about delivery is in the wrong
+file. No file of code is over 250 lines (CHANGELOG 6.0.0).
 
 ---
 
 ## The data model
 
-Four tables plus one for apps. Times are integer milliseconds since the Unix
-epoch. `STRICT` throughout, so SQLite enforces column types instead of
-coercing them.
+Four core tables, one for apps, and the history and damping tables. Times
+are integer milliseconds since the Unix epoch (`stats_daily.day` is a
+Europe/Brussels day number). `STRICT` throughout, so SQLite enforces column
+types instead of coercing them. The schema is the list in
+`src/store/migrations/schema.rs`, currently eight versions.
 
 | Table | Holds | Notes |
 |---|---|---|
-| `topics` | name, retention override, created_at | created on first publish |
-| `subscriptions` | name, state, policy overrides, last_poll_at | unique per (topic, name) |
-| `messages` | `seq` (rowid), public ULID `id`, payload blob, content type, due_at | **`seq` is the ordering**, never the id |
-| `deliveries` | (msg_seq, sub_id), state, attempts, lease/next-attempt/dead/expired stamps | one row per fan-out target |
-| `apps` | name, **encrypted** token, created_at, revoked_at | unique index over live rows only |
+| `topics` | name, retention override, created_at | created on first publish; `kyu.events` exists from migration 2 |
+| `subscriptions` | name, state, policy overrides, idle thresholds, last_poll_at, expiry-announcement state | unique per (topic, name) |
+| `messages` | `seq` (rowid), public ULID `id`, payload blob, content type, published_at, due_at | **`seq` is the ordering**, never the id |
+| `deliveries` | (msg_seq, sub_id), state, attempts, lease/next-attempt/dead/expired stamps | one row per fan-out target; a dashboard delete leaves a `removed` row so a replay does not bring it back (migration 6) |
+| `apps` | name, **encrypted** token, created_at, revoked_at | the 2.x registry, kept as history; the kit's client store now owns the tokens (see The door) |
+| `attempts` | one row per claim: attempt number, outcome, app, reason | migration 7; follows its message, and the sweeper drops rows older than 30 days |
+| `stats_hourly`, `stats_daily`, `stats_samples` | published/dead/deduplicated counters per hour, delivered/dead per day, totals sampled every 5 minutes | migration 7 (and 8 for `deduplicated`); kept 30 days, 400 days and 48 hours |
+| `dedup_keys` | (topic, key), message id, window end | migration 8; capped at 10,000 rows, pruned by the sweeper |
+
+The kit adds two small tables of its own to `kyu.db` (`chassis_meta`,
+`chassis_prefs`); its own data (clients, sessions) is a separate file,
+`kyu-kit.db`, beside it (CHANGELOG 5.0.0; `src/storage.rs`).
 
 **Fan-out is materialized.** Publishing writes one `deliveries` row per active
 subscription, inside the same transaction as the message. Fan-out is therefore
@@ -132,10 +165,12 @@ WAL journaling with `synchronous=FULL`, both set explicitly at every open and
 asserted by test — build defaults vary, and the promise cannot rest on how
 SQLite happened to be compiled.
 
-Migrations are forward-only, keyed on `PRAGMA user_version`. A populated store
-is snapshotted with `VACUUM INTO` before migrating, so a bad upgrade is
-reversible. A schema newer than the binary is refused with a remedy rather
-than guessed at.
+Migrations are forward-only, keyed on `PRAGMA user_version`, and applied by
+the kit's runner (`src/store/migrations/mod.rs`). A populated store is copied
+to `kyu.pre-v<N>.db` before migrating (the newest two are kept,
+`SNAPSHOTS_KEPT` in `src/store/mod.rs`), so a bad upgrade is reversible. A
+schema newer than the binary is refused with a remedy rather than guessed at,
+and `--check` reports the state without migrating.
 
 **Proven by:** `l1_pragmas_are_set_explicitly_not_assumed`, the `l5_s4_*`
 crash suite (SIGKILL under traffic, both a short outage where leases outlive
@@ -145,45 +180,66 @@ the downtime and a long one where they do not), `p7_g2_a_hard_kill_at_startup_le
 
 ## The door (W2)
 
-Two credentials reach the same check: an `Authorization: Bearer` header, or a
-`kyu_session` cookie for browsers. The bootstrap token comes from the
-environment; app tokens live in the store, **encrypted** with
-ChaCha20-Poly1305 under `KYU_SECRET_KEY`.
+Since 3.0.0 (step 2, 2026-09-06) the kit owns the door; kyu only says which
+routes sit behind which half of it (`src/kit/mod.rs`, `src/http/mod.rs`):
+
+- `router()` is handed to `App::api_routes`: the machine API (the three
+  verbs, policy, dead letters, retention, backup) needs
+  `Authorization: Bearer <client token>`, or the login token for Kenny's own
+  scripts.
+- `pages()` is handed to `App::dashboard_routes`: the dashboard pages sit
+  behind the admin login, and the kit refuses cross-origin form posts.
+- `assets()` (`/assets/{file}`) is open; `/healthz` and `/metrics` are the
+  kit's own routes. `KYU_TRUSTED_ADMINS` names addresses that are the admin
+  without a login (kit knob, `docs/KIT.md`).
+
+Login, the session cookie, the Apps page and revocation are the kit's; this
+repository no longer contains a cookie, a login handler or a CSRF layer.
+Client tokens and sessions live sealed in `kyu-kit.db` under
+`KYU_SECRET_KEY`. The 2.x `apps` table in `kyu.db` stays as history, and
+every start copies the apps whose name the kit's client store lacks into that
+store (`src/kit/import.rs`, `tests/door_import.rs`).
 
 Encrypted rather than hashed, deliberately: a hash cannot be turned back into
 a working command, and printing a working command is what the dashboard is
-for. The trade is stated in AR11's amendment — store file alone is useless,
-store file plus compose file is total compromise, which on a single-admin LAN
-hub changes nothing an attacker with the compose file did not already have.
+for. The trade is stated in AR11's amendment: store file alone is useless,
+store file plus the environment file is total compromise, which on a
+single-admin LAN hub changes nothing an attacker with the environment file
+did not already have. `src/crypto.rs` is kyu's own seal for the 2.x table;
+the kit seals its stores with the same key in its own format.
 
-**Fail-closed by construction.** The router is split in two: an open router
-(`/healthz`, `/metrics`, `/static/*`, `/login`, `/logout`) and a protected one
-carrying the auth layer. A route added to the protected half is guarded
-whether or not anyone remembered to think about it.
-
-No caching of accepted tokens, so revocation is immediate.
-
----
+**Fail-closed by construction.** The binary hands the kit only closed
+routers, plus the open `/assets`; a route added to `router()` or `pages()` is
+guarded whether or not anyone remembered to think about it. The kit refuses
+to start without `KYU_TOKEN` and `KYU_SECRET_KEY`.
 
 ## Presentation
 
-minijinja templates and Bootstrap 5.3.3, both compiled into the binary, so the
-container stays one artifact with nothing mounted beside it. Asset URLs carry
-an FNV-1a fingerprint of their contents, which is what lets the cache header
-be a year and mean it.
+The pages are templates in `templates/` (a page plus partials, expanded in
+`src/http/handlers/dashboard/page.rs`) rendered inside the kit's layout, with
+the dashboard's CSS and JavaScript from kp-themes (one bundle,
+`/static/kp/dist/kp-themes.min.js`, served by the kit). kyu's own page
+scripts and stylesheets in `static/` are compiled into the binary and served
+from memory on `/assets/{file}`: the entry files and stylesheets carry a
+`?v=<fingerprint>` and a year-long `immutable` cache header, while the page
+scripts' part modules (ES modules imported without a fingerprint) are served
+`no-cache` with an `ETag`, so a browser revalidates them and gets a 304 when
+nothing changed (`src/http/handlers/assets.rs`, CHANGELOG 6.0.0). The
+fingerprint is an FNV-1a hash of the embedded files.
 
 Payloads are untrusted wherever rendered: autoescape on, payloads as text
 only, binary announced with its size rather than mangled, truncation always
 saying how much is hidden. A script tag in a payload renders inert.
 
 htmx was chosen in T4 and never actually wired up — the tag pointed at a file
-that did not exist. It is gone; the reveal and copy controls are one small
-first-party script.
+that did not exist. It is gone; the pages' behaviour (reveal and copy, tables,
+charts) is first-party ES-module scripts in `static/`, one entry per page.
 
-**Proven by:** `l7_a_payload_cannot_script_the_dashboard`,
-`l7_binary_and_oversized_payloads_are_marked_not_mangled`,
-`p7_g10_the_awkward_dashboard_states_all_render` (the compensation owed for
-choosing runtime templates: every page rendered with seeded state).
+**Proven by:** `k2_a_payload_cannot_script_the_dashboard`,
+`k2_binary_and_oversized_payloads_are_marked_not_mangled`,
+`k2_the_awkward_dashboard_states_all_render` (the compensation owed for
+choosing runtime templates: every page rendered with seeded state), all in
+`tests/k2_dashboard.rs`, and `k2_the_hub_assets_are_served_open_and_fingerprinted`.
 
 ---
 
