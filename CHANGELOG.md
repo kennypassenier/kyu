@@ -11,6 +11,58 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Breaking
+
+- Management routes need the login token: an app token gets 403 on
+  `POST /api/backup`, the dead-letter list, requeue, delivery delete,
+  unarchive and retention. Publishing, receiving, ack, nack and a
+  subscription's policy stay open to app tokens.
+- `GET /t/{topic}/next`, `/ack` and `/nack` need an `Authorization` header;
+  the dashboard's login cookie is refused there (a cross-site page could
+  otherwise claim messages for a logged-in admin).
+- Ack and nack take an optional `attempt=N` (the `kyu-attempt` header of the
+  claim); a different attempt than the one in flight answers 409, so a
+  consumer whose lease passed to another poll cannot settle that poll's try.
+- Caps with generous defaults answer 429 above them: `KYU_MAX_TOPICS` (1000),
+  `KYU_MAX_SUBSCRIPTIONS_PER_TOPIC` (100), `KYU_MAX_CONCURRENT_POLLS` (50 per
+  app).
+
+### Changed
+
+- TTL counts from when a message is due (after `delay`/`at`), not from
+  publication; a message past its TTL can no longer be claimed.
+- Retention keeps a message while it is still a dead letter.
+- A clock that jumps more than an hour forward stops every deletion and expiry
+  by age until kyu restarts; a clock behind the newest message skips them
+  until it catches up. `/healthz` reports the sweeper degraded meanwhile.
+- A waiting long poll answers 204 as soon as the service starts to stop
+  (chassis `App::shutdown_signal`), so a restart no longer waits out pollers.
+- Long polls look on a reader first; "last read" is written at most every
+  30 s per subscription.
+- The store runs on the kit's database layer; `/healthz` reports a failed
+  write with its age; the kit folds the write-ahead log at stop.
+- The Topic page no longer carries the login token: Reveal and Copy with
+  token fetch it when clicked; dashboard pages are sent `no-store`.
+- `POST /api/backup` keeps the newest `KYU_BACKUP_KEEP` (7) backups and
+  removes a backup file that failed half-way.
+- Raw payloads are shown inline only for inert types; everything else
+  downloads. Publish snippets use `--data-raw`.
+- Dashboard: the kit's one refresh control on Topics and Topic; row menus
+  for dead letters and the backlog; policy values change in place; many
+  smaller fixes (focus kept across refreshes, counts and plurals, Replay
+  guarded against double sends).
+- chassis-rs 4.4.0, kp-themes 12.2.0.
+
+### Fixed
+
+- A nack that dead-letters or expires a message is announced on
+  `kyu.events` like the sweeper's own.
+- The sweeper reports failing after three failed passes, survives a
+  panicking pass and a poisoned lock, and no longer spins on unchanged rows.
+- The waiter map no longer grows with every new name a poll uses.
+- The 2.x token import no longer writes `clients.json.enc` once the kit keeps
+  its clients in `kyu-kit.db`.
+
 ## [6.0.0] - 2026-10-31
 
 ### Migration
