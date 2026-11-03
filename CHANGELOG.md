@@ -11,6 +11,11 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- chassis-rs 4.5.0 (kp-themes 12.3.0): the kit keeps its own state in its
+  database instead of JSON files.
+
 ## [7.0.0] - 2026-11-03
 
 ### Breaking
