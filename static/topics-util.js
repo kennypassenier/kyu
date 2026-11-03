@@ -13,7 +13,9 @@ export function h(tag, attrs = {}, ...kids) {
     const el = document.createElement(tag);
     for (const [name, value] of Object.entries(attrs)) {
         if (value === undefined || value === false) continue;
-        el.setAttribute(name, value === true ? '' : value);
+        // CSP style-src is 'self': a style attribute is refused, the CSSOM is not.
+        if (name === 'style') el.style.cssText = String(value);
+        else el.setAttribute(name, value === true ? '' : value);
     }
     el.append(...kids);
     return el;

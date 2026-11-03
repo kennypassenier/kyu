@@ -77,6 +77,11 @@
     min-block-size: var(--kt-stage-min, 0);
 }
 
+/* The recent-messages stage keeps room for its list and detail pane (no inline style: CSP style-src is 'self'). */
+[data-kt-stage="recent"] {
+    --kt-stage-min: 26rem;
+}
+
 .kt-stage > [data-kt-plate] {
     position: absolute;
     inset: 0;
