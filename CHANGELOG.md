@@ -11,6 +11,8 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-11-03
+
 ### Breaking
 
 - Management routes need the login token: an app token gets 403 on
