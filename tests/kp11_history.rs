@@ -34,7 +34,13 @@ struct Fixture {
 fn fixture() -> Fixture {
     let store = kyu::storage::open_in_memory().expect("an in-memory store");
     let clock = Arc::new(MockClock::new(START));
-    let engine = Engine::with_defaults(store.clone(), clock.clone(), Defaults::default());
+    // The mock clock moves hours at a time between sweeps; the clock-jump
+    // guard (l4_reliability) would hold the pruning these tests check.
+    let defaults = Defaults {
+        clock_jump_limit_ms: kyu::engine::clock::Millis::MAX,
+        ..Defaults::default()
+    };
+    let engine = Engine::with_defaults(store.clone(), clock.clone(), defaults);
     Fixture {
         engine,
         clock,

@@ -167,6 +167,12 @@ async fn bootstrap(hub: &Hub, topic: &str, subscription: &str) {
 }
 
 fn fixture(defaults: Defaults) -> (Engine, Arc<MockClock>, AppDb) {
+    // These tests move the mock clock days at a time between sweeps; the
+    // clock-jump guard (l4_reliability) would hold every deletion by age.
+    let defaults = Defaults {
+        clock_jump_limit_ms: kyu::engine::clock::Millis::MAX,
+        ..defaults
+    };
     let store = kyu::storage::open_in_memory().expect("a store");
     let clock = Arc::new(MockClock::new(START));
     let engine = Engine::with_defaults(store.clone(), clock.clone(), defaults);

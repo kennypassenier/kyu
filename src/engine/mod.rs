@@ -116,6 +116,11 @@ pub struct Defaults {
     /// The most subscriptions one topic will hold; a poll that would create
     /// one more is refused (`KYU_MAX_SUBSCRIPTIONS_PER_TOPIC`).
     pub max_subscriptions_per_topic: usize,
+    /// The largest forward step of the clock between two sweeps that is
+    /// still believed ([`CLOCK_JUMP_LIMIT_MS`] by default); a bigger one
+    /// holds every deletion by age until restart. Tests that model days
+    /// passing in one step raise it.
+    pub clock_jump_limit_ms: Millis,
 }
 
 impl Default for Defaults {
@@ -127,6 +132,7 @@ impl Default for Defaults {
             expired_event_window_ms: 24 * 60 * 60 * 1_000,
             max_topics: 1_000,
             max_subscriptions_per_topic: 100,
+            clock_jump_limit_ms: CLOCK_JUMP_LIMIT_MS,
         }
     }
 }

@@ -5,7 +5,6 @@ use crate::store::dedup as store_dedup;
 use crate::store::queries::{self, Overdue};
 
 use super::clock::Millis;
-use super::clockguard::CLOCK_JUMP_LIMIT_MS;
 use super::ids::MessageIds;
 use super::settle::{Cause, Settled, announce, apply};
 use super::{Defaults, Engine, Result, SweepReport};
@@ -28,7 +27,7 @@ impl Engine {
             let mut ids = self.lock_ids();
             let skew = self.clock_guard.inspect(
                 now,
-                CLOCK_JUMP_LIMIT_MS,
+                self.defaults.clock_jump_limit_ms,
                 queries::newest_published_at(tx)?,
             );
             let mut pass = Pass {

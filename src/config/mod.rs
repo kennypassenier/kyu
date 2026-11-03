@@ -99,6 +99,9 @@ impl Config {
                 "KYU_MAX_SUBSCRIPTIONS_PER_TOPIC",
                 defaults.max_subscriptions_per_topic,
             )?,
+            // Not an environment knob: an operator who wants a different
+            // limit is better served by fixing the clock.
+            clock_jump_limit_ms: defaults.clock_jump_limit_ms,
         };
         Ok(Self {
             data_dir: state_dir.to_path_buf(),

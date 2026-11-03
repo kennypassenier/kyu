@@ -90,7 +90,7 @@ async fn k2_the_kit_owns_the_door() {
         assert!(
             header(&response, "location")
                 .unwrap_or_default()
-                .ends_with("/login"),
+                .starts_with("/login"),
             "{path} redirects to /login"
         );
     }
@@ -157,8 +157,8 @@ async fn k2_the_kit_says_app_not_client_everywhere_not_only_the_heading() {
         "the page's own prose says app, not client: {clients}"
     );
     assert!(
-        clients.contains("No apps yet"),
-        "the empty state says app, not client: {clients}"
+        clients.contains("What an app is"),
+        "the explanation card says app, not client: {clients}"
     );
     // The URL and the nav link stay "/clients" on purpose (E1: code and URL
     // are stable, only what a person reads changes) — checked against the
