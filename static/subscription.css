@@ -173,3 +173,20 @@
     align-content: start;
     min-inline-size: 0;
 }
+
+/* Touch: the breadcrumb back to the topic and the "N dead" badge link keep their look and get a 44 px hit area,
+   the same pattern kp-themes uses for the bar's brand (an ::after over the box, not a bigger box). */
+@media (pointer: coarse) {
+    .ky-sub-crumb,
+    .ky-sub-dead {
+        position: relative;
+    }
+
+    .ky-sub-crumb::after,
+    .ky-sub-dead::after {
+        content: '';
+        position: absolute;
+        inset-block: min(0px, calc((100% - var(--kp-touch-target, 2.75rem)) / 2 - 0.5px));
+        inset-inline: min(0px, calc((100% - var(--kp-touch-target, 2.75rem)) / 2 - 0.5px));
+    }
+}

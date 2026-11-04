@@ -12,7 +12,7 @@
 
 <header class="kp-page-header ky-sub">
   <nav class="ky-crumbs" aria-label="Breadcrumb">
-    <a href="/t/{{ topic_name }}/dashboard" class="kp-link"><span class="kp-idmark kp-idmark--xs" data-kp-idmark="{{ topic_name }}" data-ky-mark-topic aria-hidden="true"></span> {{ topic_name }}</a>
+    <a href="/t/{{ topic_name }}/dashboard" class="kp-link ky-sub-crumb"><span class="kp-idmark kp-idmark--xs" data-kp-idmark="{{ topic_name }}" data-ky-mark-topic aria-hidden="true"></span> {{ topic_name }}</a>
     <span aria-hidden="true">/</span>
     <span>Subscriptions</span>
   </nav>
@@ -36,7 +36,7 @@
       <p class="ky-counts">
         <span class="kp-text-muted">backlog <b class="kp-numeric" data-ky-count="pending">{{ subscription.backlog }}</b></span>
         <span class="kp-text-muted">in flight <b class="kp-numeric" data-ky-count="claimed">{{ subscription.claimed }}</b></span>
-        {% if subscription.dead > 0 %}<a class="kp-badge kp-badge--destructive" href="/t/{{ topic_name }}/dashboard">{{ subscription.dead }} dead</a>{% endif %}
+        {% if subscription.dead > 0 %}<a class="kp-badge kp-badge--destructive ky-sub-dead" href="/t/{{ topic_name }}/dashboard">{{ subscription.dead }} dead</a>{% endif %}
       </p>
     </div>
   </div>
