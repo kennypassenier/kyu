@@ -64,7 +64,7 @@ A server-rendered set of pages behind the admin login:
 | project pages | Whatever kyu adds under its own navigation entries. |
 
 The layout, the navigation and the **theme picker** (kp-themes
-12.4.0) come from the kit; a chosen theme is remembered by the
+12.6.0) come from the kit; a chosen theme is remembered by the
 browser.
 
 ## Health and metrics
