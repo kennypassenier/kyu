@@ -187,7 +187,12 @@ curl "http://hub.lan:8080/t/notify.kenny/next?as=printer&from=beginning"
 ```
 
 It is idempotent, runs in bounded batches, and cannot race the retention
-sweep — both run on the single writer, so they are serialised.
+sweep — both run on the single writer, so they are serialised. It belongs on
+the first read; sending it on every read is harmless: it only adds messages
+the subscription has no delivery for yet, so a message it already received
+(acknowledged, dead or removed) never comes back. A reader that sees its
+events twice is reading under a new subscription name, or against a store
+that was reset.
 
 **Proven by:** `l6_retention_never_collects_a_backlog_an_active_subscription_still_needs`,
 `l6_replay_is_idempotent`, `l6_replay_sees_exactly_what_retention_kept`.
