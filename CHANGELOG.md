@@ -13,8 +13,18 @@ at the Phase 9 gate: that interface is settled, and breaking it means 2.0.0.
 
 ### Changed
 
-- chassis-rs 4.5.0 (kp-themes 12.3.0): the kit keeps its own state in its
-  database instead of JSON files.
+- chassis-rs 4.8.0 (kp-themes 12.7.0): the kit keeps its own state in its
+  database instead of JSON files, and pages load kp-themes once through the
+  kit's import map (2 kp-themes requests per page, was up to 331 on 4.6.0).
+- The pages carry no inline style any more (CSP `style-src 'self'`): the two
+  style attributes moved to CSS and the Topics page builder sets styles
+  through the CSSOM.
+- kyu no longer loads the kp-themes bundle with its own script tag, which
+  started a second copy of kp-themes on four pages.
+- On a touch screen the subscription page's breadcrumb and its "N dead"
+  badge link have a 44 px hit area.
+- The user guide says that `from=beginning` belongs on the first read and
+  never replays a message the subscription already received.
 
 ## [7.0.0] - 2026-11-03
 
