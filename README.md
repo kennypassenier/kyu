@@ -5,21 +5,21 @@ send with one `curl`, any worker can receive and acknowledge with two,
 nothing is silently lost, and the dashboard doubles as the
 documentation.
 
-> **Status: 6.0.0.** Every frozen feature is built and under test (229
-> tests, gated on every commit and again before every release). The version
-> is a promise about the HTTP contract — the three verbs, their parameters
-> and response shapes, and the environment variables. The dashboard's HTML
-> and the on-disk schema are not part of it.
+> **Status.** Every frozen feature is built and under test (gated on every
+> commit and again before every release). The version is a promise about the
+> HTTP contract: the three verbs, their parameters and response shapes, and
+> the environment variables. The dashboard's HTML and the on-disk schema are
+> not part of it. The current version is `version` in `Cargo.toml`.
 >
 > 3.0.0 moved the hub onto
 > [chassis-rs](https://github.com/kennypassenier/chassis-rs): the kit now
 > owns the command line, transport knobs, logging, health, metrics, graceful
 > shutdown, signed self-update, the door and the dashboard shell. The hub
-> itself — topics, subscriptions, leases, the SQLite store — is unchanged.
-> 6.0.0 runs on chassis-rs 4.0.0 with kp-themes 12 (`Cargo.toml`,
-> `.chassis.toml`). See CHANGELOG.md for the full migration notes, including
-> the 1.0.1→2.0.0 rename from `mailbox`. Runs on LXC 109 as a native binary
-> under systemd, backed up nightly and watched by Uptime Kuma.
+> itself (topics, subscriptions, leases, the SQLite store) is unchanged. The
+> kit and kp-themes versions in use are in `Cargo.toml` and `.chassis.toml`.
+> See CHANGELOG.md for the full migration notes, including the 1.0.1→2.0.0
+> rename from `mailbox`. Runs on LXC 109 as a native binary under systemd,
+> backed up nightly and watched by Uptime Kuma.
 
 ## The idea
 

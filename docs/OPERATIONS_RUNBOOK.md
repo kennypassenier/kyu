@@ -74,6 +74,15 @@ call.
    `Failed to set up mount namespacing`. That is measured, not guessed.
 4. `systemctl enable --now kyu`, then `curl -sf http://<host>:8080/healthz`.
 
+**How clients reach CT 109.** Besides the hub's own port (`10.10.10.9:8080`),
+the stack file `stacks/kyu/kyu-tls.service` runs `socat` on `:8443`, which
+terminates TLS with a self-signed certificate that `kyu-tls-cert` keeps in
+`/appdata/kyu/kyu-config/tls` and forwards to `127.0.0.1:8080`. The route
+`kyu.kp-soft.dev` goes through Traefik (`10.10.10.4`, entry points `web` and
+`websecure`, `stacks/kyu/routes/manual-kyu.yml`) to `10.10.10.9:8080`. The
+live unit sets `KYU_TRUSTED_PROXIES=10.10.10.4` and
+`KYU_TRUSTED_ADMINS=10.10.10.10` (`stacks/kyu/kyu/kyu.service`).
+
 **Standalone with Docker:**
 
 ```bash
@@ -88,13 +97,13 @@ directory. That refusal was reproduced on 2026-08-28, not theorised.
 
 ---
 
-## 2 · Cut a release (how a new image comes into existence)
+## 2 · Cut a release (how a new signed binary comes into existence)
 
 Kenny asked for this written down rather than remembered. One command does
 the whole thing — from a clean, checked-out `main`, on this machine; GitHub
 Actions builds nothing since 2026-09-29 (it needs the `chassis` CLI of
-chassis-rs 3.0.0 or later, docker logged in to `ghcr.io` with a token that
-has `write:packages`, `cargo-deny`, `gh` and `minisign`) — but it is worth
+chassis-rs 3.0.0 or later, `cargo-deny`, `gh` and `minisign`; docker only if
+the project builds an image, which it does not, see below) — but it is worth
 knowing what it does under the hood before you run it unattended.
 
 1. **Decide the version.** Semver over the HTTP contract — the three verbs,
@@ -106,8 +115,7 @@ knowing what it does under the hood before you run it unattended.
    - runs the full gate first, the one CI used to run: fmt, clippy
      `-D warnings`, the suite, `.claude/hooks/gates.project.sh` (with
      `CHASSIS_RELEASE_GATE=1`, so it also runs the container smoke),
-     `--version`, `cargo deny check all`, the image build with its
-     `--version` and closed-port `--healthcheck` smoke, and coverage when
+     `--version`, `cargo deny check all`, and coverage when
      `cargo-llvm-cov` is installed (information only) — a red gate stops
      everything before a commit exists;
    - bumps `Cargo.toml`'s `version` and writes a dated `<version>` section
@@ -116,10 +124,11 @@ knowing what it does under the hood before you run it unattended.
      locally;
    - builds the release here: the static musl binary in
      `rust:1.97-slim-trixie` (refused if `ldd` finds a dynamic link),
-     `dist/kyu` + `dist/SHA256SUMS`, and the image
-     `ghcr.io/kennypassenier/kyu:v<version>` + `:latest`, checked to answer
-     `--version` with the new version;
-   - only then pushes `main` and the tag, pushes the image, and creates the
+     `dist/kyu` + `dist/SHA256SUMS`. No image: `deploy/service.yml` names a
+     binary, so `chassis release` prints `container image: no` (chassis-cli
+     `release/publish.rs`, `wants_image`; `image = true` in `.chassis.toml`
+     would bring it back);
+   - only then pushes `main` and the tag, and creates the
      GitHub Release with `kyu` + `SHA256SUMS` attached, not yet `latest`;
    - then calls `scripts/sign-release.sh <tag>` from this machine: it
      downloads that `SHA256SUMS`, signs it with the ecosystem's minisign
@@ -150,7 +159,8 @@ knowing what it does under the hood before you run it unattended.
 
 ## 2b · Upgrade a running hub
 
-1. Cut the release as in §2, so the new image exists.
+1. Cut the release as in §2, so the new binary exists (a Docker route needs
+   an image you build yourself; none is published).
 2. **Deployed via the homelab:** nothing to do. The nightly run updates it and
    rolls back on a failed health check (`com.homelab.update.policy=auto`).
    Immediate instead: `homelab update-native kyu`.
