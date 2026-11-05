@@ -75,7 +75,7 @@ call.
 4. `systemctl enable --now kyu`, then `curl -sf http://<host>:8080/healthz`.
 
 **How clients reach CT 109.** Besides the hub's own port (`10.10.10.9:8080`),
-the stack file `stacks/kyu/kyu-tls.service` runs `socat` on `:8443`, which
+the stack file `stacks/kyu/rootfs/etc/systemd/system/kyu-tls.service` runs `socat` on `:8443`, which
 terminates TLS with a self-signed certificate that `kyu-tls-cert` keeps in
 `/appdata/kyu/kyu-config/tls` and forwards to `127.0.0.1:8080`. The route
 `kyu.kp-soft.dev` goes through Traefik (`10.10.10.4`, entry points `web` and
